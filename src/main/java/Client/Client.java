@@ -25,12 +25,14 @@ public class Client implements Runnable {
 		while (true) {
 			try {
 				String message = socket.in.readLine();
-				IO.println("Received message from server: " + message);
-				incomingMessageQueue.put(message);
-
-			} catch (SocketTimeoutException _) {
+				if (message != null) {
+					System.out.println("Received message from server: " + message);
+					incomingMessageQueue.put(message);
+				}
+			} catch (SocketTimeoutException ignored) {
 			} catch (IOException e) {
-				IO.println("Failed to read line from server:\n" + e);
+				System.out.println("Failed to read line from server:\n" + e);
+				break;
 			} catch (InterruptedException e) {
 				throw new RuntimeException(e);
 			}
@@ -40,10 +42,10 @@ public class Client implements Runnable {
 				try {
 					socket.out.write(message + '\n');
 					socket.out.flush();
-					IO.println("Sent message to server");
+					System.out.println("Sent message to server");
 
 				} catch (IOException e) {
-					IO.println("Failed to send message to server:\n" + e);
+					System.out.println("Failed to send message to server:\n" + e);
 					break;
 				}
 			}

@@ -27,7 +27,7 @@ public class MessageBroker implements Runnable {
 						client.out.flush();
 
 					} catch (IOException e) {
-						IO.println("Failed to send message to client:\n" + e);
+						System.out.println("Failed to send message to client:\n" + e);
 					}
 				}
 
