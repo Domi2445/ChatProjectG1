@@ -19,11 +19,11 @@ public class ClientHandler implements Runnable {
 		while (true) {
 			try {
 				String message = client.in.readLine();
-				IO.println("Received message from client: " + message);
+				System.out.println("Received message from client: " + message);
 				messageBrokerQueue.put(message);
 
 			} catch (IOException e) {
-				IO.println("Failed to read line:\n" + e);
+				System.out.println("Failed to read line:\n" + e);
 				break;
 
 			} catch (InterruptedException e) {

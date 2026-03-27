@@ -31,14 +31,14 @@ public class Server implements Runnable {
 			try {
 				Socket socket = server.accept();
 				SocketProxy client = new SocketProxy(socket);
-				IO.println("Accepted connection");
+				System.out.println("Accepted connection");
 
 				clients.add(client);
 
 				new Thread(new ClientHandler(client, messageBrokerQueue)).start();
 
 			} catch (IOException e) {
-				IO.println("Failed to accept connection:\n" + e);
+				System.out.println("Failed to accept connection:\n" + e);
 				break;
 			}
 		}
