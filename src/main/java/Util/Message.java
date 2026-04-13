@@ -13,5 +13,7 @@ public abstract class Message implements Serializable {
 
     public abstract String getContent();
 
+    public abstract String getDisplayText();
+
     public abstract void send();
 }
