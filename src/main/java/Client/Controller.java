@@ -86,6 +86,7 @@ public class Controller {
 
 	private void sendFile() {
 		FileChooser fileChooser = new FileChooser();
+		fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("PNGs", "*.png"));
 		File selectedFile = fileChooser.showOpenDialog(view.getStage());
 
 		if (selectedFile == null) { return; }
