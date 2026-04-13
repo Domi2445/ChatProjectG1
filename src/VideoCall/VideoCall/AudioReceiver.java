@@ -18,16 +18,13 @@ import java.net.*;
         System.out.println("Warte auf Audio...");
 
 
-        DatagramSocket socket = new DatagramSocket(7000);
-        byte[] buffer = new byte[1024];
-
-        while (true) {
-
-            DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
-            socket.receive(packet);
+    UDPReciever  receiver = new UDPReciever(7000);
 
 
-            speakers.write(packet.getData(), 0, packet.getLength());
+        while (true)
+        {
+                byte[] data = receiver.receiver();
+                speakers.write(data,0 , data.length);
         }
     }
 }
