@@ -10,7 +10,6 @@ public class SocketProxy {
 
 	public SocketProxy(Socket socket) throws IOException {
 		this.socket = socket;
-		// out MUSS zuerst erstellt werden, sonst deadlock beim gegenseitigen Verbinden!
 		this.out = new ObjectOutputStream(socket.getOutputStream());
 		this.out.flush();
 		this.in  = new ObjectInputStream(socket.getInputStream());
