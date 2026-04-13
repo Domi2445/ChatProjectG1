@@ -12,7 +12,7 @@ import javafx.scene.text.Font;
 import javafx.stage.Stage;
 
 public class View {
-	private final ListView<String> messageListView;
+	private final ListView<Message> messageListView;
 	private final TextField messageTextField;
 	private final Button sendButton;
 	private final Button uploadButton;
@@ -26,7 +26,7 @@ public class View {
 		stage.setTitle("Socket Chat");
 
 		// --- Message area ---
-		messageListView = new ListView<>();
+		messageListView = new ListView<Message>();
 		messageListView.setCellFactory(lv -> new MessageCell());
 		messageListView.setStyle("-fx-background-color: #1e1e2e; -fx-control-inner-background: #1e1e2e;");
 		VBox.setVgrow(messageListView, Priority.ALWAYS);
@@ -95,6 +95,7 @@ public class View {
 		stage.show();
 	}
 
+	public Stage getStage() { return stage; }
 	public ListView<Message> getMessageListView() { return messageListView; }
 	public ObservableList<Message> getMessages() { return messageListView.getItems(); }
 	public TextField getMessageTextField() { return messageTextField; }
