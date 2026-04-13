@@ -25,7 +25,7 @@ public class Client implements Runnable {
 		while (true) {
 			try {
 				Message message = (Message) socket.in.readObject();
-				System.out.println("Empfangen: " + message.getContent());
+				System.out.println("Nachricht empfangen");
 				incomingMessageQueue.put(message);
 			} catch (SocketTimeoutException ignored) {
 			} catch (IOException e) {

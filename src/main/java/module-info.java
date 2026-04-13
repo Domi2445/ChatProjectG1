@@ -2,13 +2,10 @@ module com.chatproject {
     requires javafx.controls;
     requires javafx.graphics;
     requires javafx.base;
-    requires jakarta.persistence;
-    requires org.hibernate.orm.core;
-    requires java.net.http;
+	requires java.desktop;
 
-    opens Client to javafx.graphics, javafx.base;
+	opens Client to javafx.graphics, javafx.base;
     exports Client;
-    exports DBUtil;
     exports Server;
     exports Util;
 }

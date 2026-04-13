@@ -20,7 +20,7 @@ public class ClientHandler implements Runnable {
 		while (true) {
 			try {
 				Message message = (Message) client.in.readObject();
-				System.out.println("Empfangen von " + message.getSender().getIdentifier() + ": " + message.getContent());
+				System.out.println("Nachricht von " + message.getSender().getIdentifier());
 				messageBrokerQueue.put(message);
 			} catch (IOException e) {
 				System.out.println("Verbindung getrennt:\n" + e);
