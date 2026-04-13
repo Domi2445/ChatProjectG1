@@ -1,11 +1,14 @@
 package Client;
 
 import javafx.application.Platform;
+import javafx.scene.control.Alert;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
+import javax.imageio.ImageIO;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 
@@ -79,6 +82,19 @@ public class Controller {
 
 		if (selectedFile != null) {
 			System.out.println(selectedFile.getName());
+
+			byte[] bytes;
+
+			try {
+				bytes = Files.readAllBytes(selectedFile.toPath());
+			} catch (IOException e) {
+				Alert alert = new Alert(Alert.AlertType.ERROR);
+				alert.setHeaderText("Datei konnte nicht geöffnet werden");
+				alert.setContentText(e.toString());
+				alert.show();
+			}
+
+			// todo
 		}
 	}
 }
