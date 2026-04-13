@@ -4,6 +4,7 @@ module com.chatproject {
     requires javafx.base;
     requires jakarta.persistence;
     requires org.hibernate.orm.core;
+    requires java.net.http;
 
     opens Client to javafx.graphics, javafx.base;
     exports Client;
