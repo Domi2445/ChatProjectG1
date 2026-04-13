@@ -1,8 +1,10 @@
 package Client;
 
 import javafx.application.Platform;
+import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -24,12 +26,15 @@ public class Controller {
 
 		view.getSendButton().setOnAction(e -> sendMessage());
 		view.getMessageTextField().setOnAction(e -> sendMessage());
+		view.getUploadButton().setOnAction(e -> sendFile());
 	}
 
 	public void connectAndRun(String ip, int port) {
 		try {
 			client = new Client(ip, port, outgoingMessageQueue, incomingMessageQueue);
-			new Thread(client, "ClientThread").start();
+			Thread clientThread = new Thread(client, "ClientThread");
+			clientThread.setDaemon(true);
+			clientThread.start();
 
 			Thread listener = new Thread(() -> {
 				while (true) {
@@ -65,6 +70,15 @@ public class Controller {
 			} catch (InterruptedException ex) {
 				throw new RuntimeException(ex);
 			}
+		}
+	}
+
+	private void sendFile() {
+		FileChooser fileChooser = new FileChooser();
+		File selectedFile = fileChooser.showOpenDialog(view.getStage());
+
+		if (selectedFile != null) {
+			System.out.println(selectedFile.getName());
 		}
 	}
 }

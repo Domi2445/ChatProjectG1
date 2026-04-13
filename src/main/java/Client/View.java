@@ -11,14 +11,17 @@ import javafx.scene.text.Font;
 import javafx.stage.Stage;
 
 public class View {
-
 	private final ListView<String> messageListView;
 	private final TextField messageTextField;
 	private final Button sendButton;
 	private final Button uploadButton;
 	private final Button videoCallButton;
 
+	// Verwendet für FileChooser in Controller.java
+	private final Stage stage;
+
 	public View(Stage stage) {
+		this.stage = stage;
 		stage.setTitle("Socket Chat");
 
 		// --- Message area ---
@@ -89,6 +92,10 @@ public class View {
 		stage.setMinWidth(350);
 		stage.setMinHeight(400);
 		stage.show();
+	}
+
+	public Stage getStage() {
+		return stage;
 	}
 
 	public ListView<String> getMessageListView() {
