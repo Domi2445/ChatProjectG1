@@ -1,6 +1,8 @@
 package Client;
 
 import Util.Message;
+import Util.TextMessage;
+import Util.User;
 import javafx.application.Platform;
 import javafx.stage.Stage;
 
@@ -49,19 +51,17 @@ public class Controller {
 
 		} catch (IOException e) {
 			Platform.runLater(() ->
-					view.getMessages().add(new Message("System", "Verbindung fehlgeschlagen: " + e.getMessage()))
+					view.getMessages().add(new TextMessage(new User("System"), "Verbindung fehlgeschlagen: " + e.getMessage()))
 			);
 		}
 	}
 
-	// Controller.java - sendMessage()
 	private void sendMessage() {
 		String text = view.getMessageTextField().getText().trim();
 		if (!text.isEmpty()) {
 			try {
-				Message message = new Message("Du", text);
+				Message message = new TextMessage(new User("Du"), text);
 				outgoingMessageQueue.put(message);
-				// view.getMessages().add(message);  ← diese Zeile löschen!
 				view.getMessageListView().scrollTo(view.getMessages().size() - 1);
 				view.getMessageTextField().clear();
 			} catch (InterruptedException ex) {

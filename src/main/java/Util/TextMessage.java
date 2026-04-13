@@ -1,15 +1,20 @@
 package Util;
 
-public class TextMessage extends Message
-{
-    public String content;
+public class TextMessage extends Message {
+    private final String content;
 
-    public TextMessage(User sender) {
+    public TextMessage(User sender, String content) {
         super(sender);
+        this.content = content;
     }
 
     @Override
-    public void send() {
+    public String getContent() {
+        return content;
+    }
 
+    @Override
+    public String serialize() {
+        return "TEXT|" + getSender().getIdentifier() + "|" + content;
     }
 }

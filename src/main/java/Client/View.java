@@ -106,7 +106,7 @@ public class View {
 			bubble.setMaxWidth(300);
 			bubble.setFont(Font.font(13));
 
-			boolean isOwn = item.getSender().equals("Du");
+			boolean isOwn = item.getSender().getIdentifier().equals("Du");
 
 			if (isOwn) {
 				bubble.setStyle(
