@@ -1,15 +1,24 @@
 package Client;
 
+import Util.ImageMessage;
 import Util.Message;
+import Util.TextMessage;
+import Util.User;
+import javafx.beans.binding.Bindings;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.stage.Stage;
+
+import java.io.ByteArrayInputStream;
 
 public class View {
 	private final ListView<Message> messageListView;
@@ -20,9 +29,12 @@ public class View {
 
 	// Verwendet für FileChooser in Controller.java
 	private final Stage stage;
+	private final User localUser;
 
-	public View(Stage stage) {
+	public View(Stage stage, User user) {
 		this.stage = stage;
+		this.localUser = user;
+
 		stage.setTitle("Socket Chat");
 
 		// --- Message area ---
@@ -103,7 +115,7 @@ public class View {
 	public Button getUploadButton() { return uploadButton; }
 	public Button getVideoCallButton() { return videoCallButton; }
 
-	private static class MessageCell extends ListCell<Message> {
+	private class MessageCell extends ListCell<Message> {
 		@Override
 		protected void updateItem(Message item, boolean empty) {
 			super.updateItem(item, empty);
@@ -113,22 +125,41 @@ public class View {
 				return;
 			}
 
-			Label bubble = new Label(item.getContent());
-			bubble.setWrapText(true);
-			bubble.setMaxWidth(300);
-			bubble.setFont(Font.font(13));
+			Node bubble;
 
-			boolean isOwn = item.getSender().getIdentifier().equals("Du");
+			switch (item) {
+				case TextMessage textMessage -> {
+					Label label = new Label(textMessage.getContent());
+					label.setWrapText(true);
+					label.setMaxWidth(300);
+					label.setFont(Font.font(13));
+					bubble = label;
+				}
+				case ImageMessage imageMessage -> {
+					// todo
+					Image image = new Image(new ByteArrayInputStream(imageMessage.getContent()));
+					ImageView imageView = new ImageView(image);
+					imageView.setPreserveRatio(true);
+					imageView.fitWidthProperty().bind(Bindings.createDoubleBinding(
+						() -> Math.min(Math.max(getScene().getWidth() - 32, 100.0), image.getWidth()),
+						getScene().widthProperty()
+					));
+					bubble = imageView;
+				}
+				default -> throw new IllegalStateException("Unexpected value: " + item);
+			}
+
+			boolean isOwn = item.getSender().getIdentifier().equals(localUser.getIdentifier());
 
 			if (isOwn) {
 				bubble.setStyle(
-						"-fx-background-color: #89b4fa; -fx-text-fill: #1e1e2e; "
-								+ "-fx-padding: 8 12; -fx-background-radius: 14 14 4 14;"
+					"-fx-background-color: #89b4fa; -fx-text-fill: #1e1e2e; "
+					+ "-fx-padding: 8 12; -fx-background-radius: 14 14 4 14;"
 				);
 			} else {
 				bubble.setStyle(
-						"-fx-background-color: #313244; -fx-text-fill: #cdd6f4; "
-								+ "-fx-padding: 8 12; -fx-background-radius: 14 14 14 4;"
+					"-fx-background-color: #313244; -fx-text-fill: #cdd6f4; "
+					+ "-fx-padding: 8 12; -fx-background-radius: 14 14 14 4;"
 				);
 			}
 
