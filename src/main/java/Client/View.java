@@ -1,5 +1,6 @@
 package Client;
 
+import Util.Message;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -94,38 +95,16 @@ public class View {
 		stage.show();
 	}
 
-	public Stage getStage() {
-		return stage;
-	}
+	public ListView<Message> getMessageListView() { return messageListView; }
+	public ObservableList<Message> getMessages() { return messageListView.getItems(); }
+	public TextField getMessageTextField() { return messageTextField; }
+	public Button getSendButton() { return sendButton; }
+	public Button getUploadButton() { return uploadButton; }
+	public Button getVideoCallButton() { return videoCallButton; }
 
-	public ListView<String> getMessageListView() {
-		return messageListView;
-	}
-
-	public ObservableList<String> getMessages() {
-		return messageListView.getItems();
-	}
-
-	public TextField getMessageTextField() {
-		return messageTextField;
-	}
-
-	public Button getSendButton() {
-		return sendButton;
-	}
-
-	public Button getUploadButton() {
-		return uploadButton;
-	}
-
-	public Button getVideoCallButton() {
-		return videoCallButton;
-	}
-
-	// --- Custom cell for chat bubbles ---
-	private static class MessageCell extends ListCell<String> {
+	private static class MessageCell extends ListCell<Message> {
 		@Override
-		protected void updateItem(String item, boolean empty) {
+		protected void updateItem(Message item, boolean empty) {
 			super.updateItem(item, empty);
 			if (empty || item == null) {
 				setGraphic(null);
@@ -133,22 +112,22 @@ public class View {
 				return;
 			}
 
-			Label bubble = new Label(item);
+			Label bubble = new Label(item.getContent());
 			bubble.setWrapText(true);
 			bubble.setMaxWidth(300);
 			bubble.setFont(Font.font(13));
 
-			boolean isOwn = item.startsWith("Du: ");
+			boolean isOwn = item.getSender().getIdentifier().equals("Du");
 
 			if (isOwn) {
 				bubble.setStyle(
 						"-fx-background-color: #89b4fa; -fx-text-fill: #1e1e2e; "
-						+ "-fx-padding: 8 12; -fx-background-radius: 14 14 4 14;"
+								+ "-fx-padding: 8 12; -fx-background-radius: 14 14 4 14;"
 				);
 			} else {
 				bubble.setStyle(
 						"-fx-background-color: #313244; -fx-text-fill: #cdd6f4; "
-						+ "-fx-padding: 8 12; -fx-background-radius: 14 14 14 4;"
+								+ "-fx-padding: 8 12; -fx-background-radius: 14 14 14 4;"
 				);
 			}
 
