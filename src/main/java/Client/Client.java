@@ -1,5 +1,6 @@
 package Client;
 
+import Util.Message;
 import Util.SocketProxy;
 
 import java.io.IOException;
@@ -8,14 +9,13 @@ import java.net.SocketTimeoutException;
 import java.util.concurrent.BlockingQueue;
 
 public class Client implements Runnable {
-	private final BlockingQueue<String> outgoingMessageQueue;
-	private final BlockingQueue<String> incomingMessageQueue;
+	private final BlockingQueue<Message> outgoingMessageQueue;
+	private final BlockingQueue<Message> incomingMessageQueue;
 	private final SocketProxy socket;
 
-	public Client(String ip, int port, BlockingQueue<String> outgoingMessageQueue, BlockingQueue<String> incomingMessageQueue) throws IOException {
+	public Client(String ip, int port, BlockingQueue<Message> outgoingMessageQueue, BlockingQueue<Message> incomingMessageQueue) throws IOException {
 		this.socket = new SocketProxy(new Socket(ip, port));
 		this.socket.socket.setSoTimeout(100);
-
 		this.outgoingMessageQueue = outgoingMessageQueue;
 		this.incomingMessageQueue = incomingMessageQueue;
 	}
@@ -24,28 +24,25 @@ public class Client implements Runnable {
 	public void run() {
 		while (true) {
 			try {
-				String message = socket.in.readLine();
-				if (message != null) {
-					System.out.println("Received message from server: " + message);
-					incomingMessageQueue.put(message);
-				}
+				Message message = (Message) socket.in.readObject();
+				System.out.println("Empfangen: " + message.getContent());
+				incomingMessageQueue.put(message);
 			} catch (SocketTimeoutException ignored) {
 			} catch (IOException e) {
-				System.out.println("Failed to read line from server:\n" + e);
+				System.out.println("Verbindung zum Server getrennt:\n" + e);
 				break;
-			} catch (InterruptedException e) {
+			} catch (ClassNotFoundException | InterruptedException e) {
 				throw new RuntimeException(e);
 			}
 
-			String message = outgoingMessageQueue.poll();
+			Message message = outgoingMessageQueue.poll();
 			if (message != null) {
 				try {
-					socket.out.write(message + '\n');
+					socket.out.writeObject(message);
 					socket.out.flush();
-					System.out.println("Sent message to server");
-
+					System.out.println("Nachricht gesendet");
 				} catch (IOException e) {
-					System.out.println("Failed to send message to server:\n" + e);
+					System.out.println("Fehler beim Senden:\n" + e);
 					break;
 				}
 			}

@@ -1,5 +1,8 @@
 package Client;
 
+import Util.Message;
+import Util.TextMessage;
+import Util.User;
 import javafx.application.Platform;
 import javafx.stage.Stage;
 
@@ -8,8 +11,8 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 
 public class Controller {
-	private final BlockingQueue<String> outgoingMessageQueue;
-	private final BlockingQueue<String> incomingMessageQueue;
+	private final BlockingQueue<Message> outgoingMessageQueue;
+	private final BlockingQueue<Message> incomingMessageQueue;
 
 	private View view;
 	private Client client;
@@ -21,7 +24,6 @@ public class Controller {
 
 	public void initView(Stage stage) {
 		view = new View(stage);
-
 		view.getSendButton().setOnAction(e -> sendMessage());
 		view.getMessageTextField().setOnAction(e -> sendMessage());
 	}
@@ -34,7 +36,7 @@ public class Controller {
 			Thread listener = new Thread(() -> {
 				while (true) {
 					try {
-						String message = incomingMessageQueue.take();
+						Message message = incomingMessageQueue.take();
 						Platform.runLater(() -> {
 							view.getMessages().add(message);
 							view.getMessageListView().scrollTo(view.getMessages().size() - 1);
@@ -49,7 +51,7 @@ public class Controller {
 
 		} catch (IOException e) {
 			Platform.runLater(() ->
-				view.getMessages().add("Verbindung fehlgeschlagen: " + e.getMessage())
+					view.getMessages().add(new TextMessage(new User("System"), "Verbindung fehlgeschlagen: " + e.getMessage()))
 			);
 		}
 	}
@@ -58,8 +60,8 @@ public class Controller {
 		String text = view.getMessageTextField().getText().trim();
 		if (!text.isEmpty()) {
 			try {
-				outgoingMessageQueue.put(text);
-				view.getMessages().add("Du: " + text);
+				Message message = new TextMessage(new User("Du"), text);
+				outgoingMessageQueue.put(message);
 				view.getMessageListView().scrollTo(view.getMessages().size() - 1);
 				view.getMessageTextField().clear();
 			} catch (InterruptedException ex) {
