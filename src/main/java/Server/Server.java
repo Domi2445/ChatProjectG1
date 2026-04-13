@@ -1,5 +1,6 @@
 package Server;
 
+import Util.Message;
 import Util.SocketProxy;
 
 import java.io.IOException;
@@ -14,7 +15,7 @@ import java.util.concurrent.BlockingQueue;
 public class Server implements Runnable {
 	private final ServerSocket server;
 
-	private final BlockingQueue<String> messageBrokerQueue;
+	private final BlockingQueue<Message> messageBrokerQueue;
 	private final List<SocketProxy> clients;
 
 	public Server(int port) throws IOException {
@@ -31,14 +32,14 @@ public class Server implements Runnable {
 			try {
 				Socket socket = server.accept();
 				SocketProxy client = new SocketProxy(socket);
-				System.out.println("Accepted connection");
+				System.out.println("Verbindung akzeptiert");
 
 				clients.add(client);
 
 				new Thread(new ClientHandler(client, messageBrokerQueue)).start();
 
 			} catch (IOException e) {
-				System.out.println("Failed to accept connection:\n" + e);
+				System.out.println("Fehler beim Verbindungsaufbau:\n" + e);
 				break;
 			}
 		}
