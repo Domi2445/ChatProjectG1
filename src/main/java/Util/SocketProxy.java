@@ -5,12 +5,14 @@ import java.net.Socket;
 
 public class SocketProxy {
 	public final Socket socket;
-	public final BufferedReader in;
-	public final BufferedWriter out;
+	public final ObjectInputStream in;
+	public final ObjectOutputStream out;
 
 	public SocketProxy(Socket socket) throws IOException {
 		this.socket = socket;
-		this.in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-		this.out = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
+		// out MUSS zuerst erstellt werden, sonst deadlock beim gegenseitigen Verbinden!
+		this.out = new ObjectOutputStream(socket.getOutputStream());
+		this.out.flush();
+		this.in  = new ObjectInputStream(socket.getInputStream());
 	}
 }

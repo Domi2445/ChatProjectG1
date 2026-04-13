@@ -24,7 +24,7 @@ public class MessageBroker implements Runnable {
 
 				for (SocketProxy client : clients) {
 					try {
-						client.out.write(message.toString() + '\n');
+						client.out.writeObject(message);
 						client.out.flush();
 					} catch (IOException e) {
 						System.out.println("Fehler beim Senden:\n" + e);

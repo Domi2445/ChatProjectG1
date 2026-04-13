@@ -2,14 +2,20 @@ package Util;
 
 public class ImageMessage extends  Message
 {
-    private byte[] content;
-    public ImageMessage(User sender, byte[] content) {
-        super(sender);
-        this.content = content;
-    }
+        private final byte[] content;
 
-    public byte[] getContent() {
-        return content;
+        public ImageMessage(User sender, byte[] content) {
+            super(sender);
+            this.content = content;
+        }
+
+        public byte[] getBytes() {
+            return content;
+        }
+
+    @Override
+    public String getContent() {
+        return "";
     }
 
     @Override

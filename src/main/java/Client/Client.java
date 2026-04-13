@@ -24,24 +24,21 @@ public class Client implements Runnable {
 	public void run() {
 		while (true) {
 			try {
-				String raw = socket.in.readLine();
-				if (raw != null) {
-					Message message = Message.fromString(raw);
-					System.out.println("Empfangen: " + message.getContent());
-					incomingMessageQueue.put(message);
-				}
+				Message message = (Message) socket.in.readObject();
+				System.out.println("Empfangen: " + message.getContent());
+				incomingMessageQueue.put(message);
 			} catch (SocketTimeoutException ignored) {
 			} catch (IOException e) {
 				System.out.println("Verbindung zum Server getrennt:\n" + e);
 				break;
-			} catch (InterruptedException e) {
+			} catch (ClassNotFoundException | InterruptedException e) {
 				throw new RuntimeException(e);
 			}
 
 			Message message = outgoingMessageQueue.poll();
 			if (message != null) {
 				try {
-					socket.out.write(message.toString() + '\n');
+					socket.out.writeObject(message);
 					socket.out.flush();
 					System.out.println("Nachricht gesendet");
 				} catch (IOException e) {

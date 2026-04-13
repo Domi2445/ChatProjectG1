@@ -19,16 +19,13 @@ public class ClientHandler implements Runnable {
 	public void run() {
 		while (true) {
 			try {
-				String raw = client.in.readLine();
-				if (raw == null) break;
-				Message message = Message.fromString(raw);
-				System.out.println("Empfangen von " + message.getSender() + ": " + message.getContent());
+				Message message = (Message) client.in.readObject();
+				System.out.println("Empfangen von " + message.getSender().getIdentifier() + ": " + message.getContent());
 				messageBrokerQueue.put(message);
-
 			} catch (IOException e) {
 				System.out.println("Verbindung getrennt:\n" + e);
 				break;
-			} catch (InterruptedException e) {
+			} catch (ClassNotFoundException | InterruptedException e) {
 				break;
 			}
 		}

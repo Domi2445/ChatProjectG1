@@ -1,7 +1,6 @@
 package Util;
 
-public class TextMessage extends Message
-{
+public class TextMessage extends Message {
     private final String content;
 
     public TextMessage(User sender, String content) {
@@ -9,13 +8,13 @@ public class TextMessage extends Message
         this.content = content;
     }
 
+    @Override
     public String getContent() {
         return content;
     }
 
     @Override
-    public void send()
-    {
-        System.out.println(getSender().getUsername() + " sendet: " + content);
+    public void send() {
+
     }
 }
