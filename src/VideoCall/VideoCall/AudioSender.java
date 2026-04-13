@@ -16,18 +16,18 @@ public class AudioSender {
         System.out.println("Mikrofon aktiv, sende Audio...");
 
 
-        DatagramSocket socket = new DatagramSocket();
-        InetAddress address = InetAddress.getByName("127.0.0.1");
-
-        byte[] buffer = new byte[1024];
+      UDPSender sender = new UDPSender("localhost",7000);
+      byte[] buffer = new byte[1024];
 
         while (true) {
 
             int bytesRead = microphone.read(buffer, 0, buffer.length);
 
+            byte[] data = new byte[bytesRead];
+            System.arraycopy(buffer,0,data,0 ,bytesRead);
 
-            DatagramPacket packet = new DatagramPacket(buffer, bytesRead, address, 7000);
-            socket.send(packet);
+
+          sender.send(data);
         }
     }
 }
