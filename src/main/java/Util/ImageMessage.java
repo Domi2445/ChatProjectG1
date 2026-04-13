@@ -11,4 +11,14 @@ public class ImageMessage extends Message {
     public byte[] getContent() {
         return content;
     }
+
+    @Override
+    public String getDisplayText() {
+        return "";
+    }
+
+    @Override
+    public void send() {
+
+    }
 }
