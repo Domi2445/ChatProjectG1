@@ -7,6 +7,10 @@ public class User implements Sender {
         this.username = username;
     }
 
+    public String getUsername() {
+        return username;
+    }
+
     @Override
     public String getIdentifier() {
         return username;
