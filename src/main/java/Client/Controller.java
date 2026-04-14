@@ -1,11 +1,26 @@
 package Client;
 
 import Util.*;
+import javafx.beans.binding.Bindings;
 import javafx.application.Platform;
+import javafx.collections.ObservableList;
+import javafx.fxml.FXML;
+import javafx.geometry.Insets;
+import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.control.Alert;
+import javafx.scene.control.Button;
+import javafx.scene.control.Label;
+import javafx.scene.control.ListCell;
+import javafx.scene.control.ListView;
+import javafx.scene.control.TextField;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
+import javafx.scene.layout.HBox;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -18,21 +33,38 @@ public class Controller {
 	private final BlockingQueue<Message> outgoingMessageQueue;
 	private final BlockingQueue<Message> incomingMessageQueue;
 
-	private View view;
 	private Client client;
 	private User localUser;
+	private Stage stage;
+
+	@FXML
+	private ListView<Message> messageListView;
+
+	@FXML
+	private TextField messageTextField;
+
+	@FXML
+	private Button sendButton;
+
+	@FXML
+	private Button uploadButton;
 
 	public Controller() {
 		this.outgoingMessageQueue = new ArrayBlockingQueue<>(4);
 		this.incomingMessageQueue = new ArrayBlockingQueue<>(4);
 	}
 
-	public void initView(Stage stage, User user) {
+	@FXML
+	private void initialize() {
+		messageListView.setCellFactory(lv -> new MessageCell());
+		sendButton.setOnAction(e -> sendMessage());
+		messageTextField.setOnAction(e -> sendMessage());
+		uploadButton.setOnAction(e -> sendFile());
+	}
+
+	public void configure(Stage stage, User user) {
+		this.stage = stage;
 		this.localUser = user;
-		view = new View(stage, localUser);
-		view.getSendButton().setOnAction(e -> sendMessage());
-		view.getMessageTextField().setOnAction(e -> sendMessage());
-		view.getUploadButton().setOnAction(e -> sendFile());
 	}
 
 	public void connectAndRun(String ip, int port) {
@@ -47,8 +79,8 @@ public class Controller {
 					try {
 						Message message = incomingMessageQueue.take();
 						Platform.runLater(() -> {
-							view.getMessages().add(message);
-							view.getMessageListView().scrollTo(view.getMessages().size() - 1);
+							getMessages().add(message);
+							messageListView.scrollTo(getMessages().size() - 1);
 						});
 					} catch (InterruptedException e) {
 						break;
@@ -60,13 +92,17 @@ public class Controller {
 
 		} catch (IOException e) {
 			Platform.runLater(() ->
-				view.getMessages().add(new TextMessage(new User("System"), "Verbindung fehlgeschlagen: " + e.getMessage()))
+				getMessages().add(new TextMessage(new User("System"), "Verbindung fehlgeschlagen: " + e.getMessage()))
 			);
 		}
 	}
 
+	private ObservableList<Message> getMessages() {
+		return messageListView.getItems();
+	}
+
 	private void sendMessage() {
-		String text = view.getMessageTextField().getText().trim();
+		String text = messageTextField.getText().trim();
 		if (!text.isEmpty()) {
 			Message message = new TextMessage(localUser, text);
 
@@ -76,14 +112,14 @@ public class Controller {
 				throw new RuntimeException(ex);
 			}
 
-			view.getMessageListView().scrollTo(view.getMessages().size() - 1);
-			view.getMessageTextField().clear();
+			messageListView.scrollTo(getMessages().size() - 1);
+			messageTextField.clear();
 		}
 	}
 
 	private void sendFile() {
 		FileChooser fileChooser = new FileChooser();
-		File selectedFile = fileChooser.showOpenDialog(view.getStage());
+		File selectedFile = fileChooser.showOpenDialog(stage);
 
 		if (selectedFile == null || !selectedFile.isFile()) { return; }
 
@@ -124,7 +160,72 @@ public class Controller {
 			throw new RuntimeException(e);
 		}
 
-		view.getMessageListView().scrollTo(view.getMessages().size() - 1);
-		view.getMessageTextField().clear();
+		messageListView.scrollTo(getMessages().size() - 1);
+		messageTextField.clear();
+	}
+
+	private class MessageCell extends ListCell<Message> {
+		@Override
+		protected void updateItem(Message item, boolean empty) {
+			super.updateItem(item, empty);
+			if (empty || item == null) {
+				setGraphic(null);
+				setStyle("-fx-background-color: transparent;");
+				return;
+			}
+
+			Node node;
+
+			switch (item) {
+				case TextMessage textMessage -> {
+					Label label = new Label(textMessage.getContent());
+					label.setWrapText(true);
+					label.setMaxWidth(300);
+					node = label;
+				}
+				case FileMessage fileMessage -> {
+					FileMessage.FileType fileType = fileMessage.getFileType();
+					switch (fileType) {
+						case FILE -> {
+							Label label = new Label("Datei: " + fileMessage.getFileName());
+							node = label;
+						}
+						case IMAGE -> {
+							Image image = new Image(new ByteArrayInputStream(fileMessage.getContent()));
+							ImageView imageView = new ImageView(image);
+							imageView.setPreserveRatio(true);
+							imageView.fitWidthProperty().bind(Bindings.createDoubleBinding(
+								() -> Math.min(Math.max(getScene().getWidth() - 32, 100.0), image.getWidth()),
+								getScene().widthProperty()
+							));
+							node = imageView;
+						}
+						default -> throw new IllegalStateException("Unbekannter Dateityp: " + fileType);
+					}
+				}
+				default -> throw new IllegalStateException("Unexpected value: " + item);
+			}
+
+			boolean isOwn = localUser != null && item.getSender().getIdentifier().equals(localUser.getIdentifier());
+
+			if (isOwn) {
+				node.setStyle(
+					"-fx-background-color: #89b4fa; -fx-text-fill: #1e1e2e; "
+						+ "-fx-padding: 8 12; -fx-background-radius: 14 14 4 14;"
+				);
+			} else {
+				node.setStyle(
+					"-fx-background-color: #313244; -fx-text-fill: #cdd6f4; "
+						+ "-fx-padding: 8 12; -fx-background-radius: 14 14 14 4;"
+				);
+			}
+
+			HBox container = new HBox(node);
+			container.setPadding(new Insets(2, 10, 2, 10));
+			container.setAlignment(isOwn ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT);
+
+			setGraphic(container);
+			setStyle("-fx-background-color: transparent; -fx-padding: 0;");
+		}
 	}
 }
