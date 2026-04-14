@@ -1,28 +1,44 @@
 package Client;
 
+import Util.FileMessage;
+import Util.Message;
+import Util.TextMessage;
+import Util.User;
+import javafx.beans.binding.Bindings;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.stage.Stage;
 
-public class View {
+import java.io.ByteArrayInputStream;
 
-	private final ListView<String> messageListView;
+public class View {
+	private final ListView<Message> messageListView;
 	private final TextField messageTextField;
 	private final Button sendButton;
 	private final Button uploadButton;
 	private final Button videoCallButton;
 
-	public View(Stage stage) {
+	// Verwendet für FileChooser in Controller.java
+	private final Stage stage;
+	private final User localUser;
+
+	public View(Stage stage, User user) {
+		this.stage = stage;
+		this.localUser = user;
+
 		stage.setTitle("Socket Chat");
 
 		// --- Message area ---
-		messageListView = new ListView<>();
+		messageListView = new ListView<Message>();
 		messageListView.setCellFactory(lv -> new MessageCell());
 		messageListView.setStyle("-fx-background-color: #1e1e2e; -fx-control-inner-background: #1e1e2e;");
 		VBox.setVgrow(messageListView, Priority.ALWAYS);
@@ -91,34 +107,17 @@ public class View {
 		stage.show();
 	}
 
-	public ListView<String> getMessageListView() {
-		return messageListView;
-	}
+	public Stage getStage() { return stage; }
+	public ListView<Message> getMessageListView() { return messageListView; }
+	public ObservableList<Message> getMessages() { return messageListView.getItems(); }
+	public TextField getMessageTextField() { return messageTextField; }
+	public Button getSendButton() { return sendButton; }
+	public Button getUploadButton() { return uploadButton; }
+	public Button getVideoCallButton() { return videoCallButton; }
 
-	public ObservableList<String> getMessages() {
-		return messageListView.getItems();
-	}
-
-	public TextField getMessageTextField() {
-		return messageTextField;
-	}
-
-	public Button getSendButton() {
-		return sendButton;
-	}
-
-	public Button getUploadButton() {
-		return uploadButton;
-	}
-
-	public Button getVideoCallButton() {
-		return videoCallButton;
-	}
-
-	// --- Custom cell for chat bubbles ---
-	private static class MessageCell extends ListCell<String> {
+	private class MessageCell extends ListCell<Message> {
 		@Override
-		protected void updateItem(String item, boolean empty) {
+		protected void updateItem(Message item, boolean empty) {
 			super.updateItem(item, empty);
 			if (empty || item == null) {
 				setGraphic(null);
@@ -126,26 +125,55 @@ public class View {
 				return;
 			}
 
-			Label bubble = new Label(item);
-			bubble.setWrapText(true);
-			bubble.setMaxWidth(300);
-			bubble.setFont(Font.font(13));
+			Node node;
 
-			boolean isOwn = item.startsWith("Du: ");
+			switch (item) {
+				case TextMessage textMessage -> {
+					Label label = new Label(textMessage.getContent());
+					label.setWrapText(true);
+					label.setMaxWidth(300);
+					label.setFont(Font.font(13));
+					node = label;
+				}
+				case FileMessage fileMessage -> {
+					FileMessage.FileType fileType = fileMessage.getFileType();
+					switch (fileType) {
+						case FILE -> {
+							Label label = new Label("Datei: " + fileMessage.getFileName());
+							// todo: download
+							node = label;
+						}
+						case IMAGE -> {
+							Image image = new Image(new ByteArrayInputStream(fileMessage.getContent()));
+							ImageView imageView = new ImageView(image);
+							imageView.setPreserveRatio(true);
+							imageView.fitWidthProperty().bind(Bindings.createDoubleBinding(
+								() -> Math.min(Math.max(getScene().getWidth() - 32, 100.0), image.getWidth()),
+								getScene().widthProperty()
+							));
+							node = imageView;
+						}
+						default -> throw new IllegalStateException("Unbekannter Dateityp: " + fileType);
+					}
+				}
+				default -> throw new IllegalStateException("Unexpected value: " + item);
+			}
+
+			boolean isOwn = item.getSender().getIdentifier().equals(localUser.getIdentifier());
 
 			if (isOwn) {
-				bubble.setStyle(
-						"-fx-background-color: #89b4fa; -fx-text-fill: #1e1e2e; "
-						+ "-fx-padding: 8 12; -fx-background-radius: 14 14 4 14;"
+				node.setStyle(
+					"-fx-background-color: #89b4fa; -fx-text-fill: #1e1e2e; "
+					+ "-fx-padding: 8 12; -fx-background-radius: 14 14 4 14;"
 				);
 			} else {
-				bubble.setStyle(
-						"-fx-background-color: #313244; -fx-text-fill: #cdd6f4; "
-						+ "-fx-padding: 8 12; -fx-background-radius: 14 14 14 4;"
+				node.setStyle(
+					"-fx-background-color: #313244; -fx-text-fill: #cdd6f4; "
+					+ "-fx-padding: 8 12; -fx-background-radius: 14 14 14 4;"
 				);
 			}
 
-			HBox container = new HBox(bubble);
+			HBox container = new HBox(node);
 			container.setPadding(new Insets(2, 10, 2, 10));
 			container.setAlignment(isOwn ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT);
 
