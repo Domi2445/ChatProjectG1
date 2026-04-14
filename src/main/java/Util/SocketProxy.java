@@ -1,6 +1,8 @@
 package Util;
 
-import java.io.*;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.net.Socket;
 
 public class SocketProxy {
@@ -12,6 +14,6 @@ public class SocketProxy {
 		this.socket = socket;
 		this.out = new ObjectOutputStream(socket.getOutputStream());
 		this.out.flush();
-		this.in  = new ObjectInputStream(socket.getInputStream());
+		this.in = new ObjectInputStream(socket.getInputStream());
 	}
 }
