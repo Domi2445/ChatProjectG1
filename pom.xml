@@ -13,12 +13,9 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <maven.compiler.release>21</maven.compiler.release>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
         <javafx.version>21.0.2</javafx.version>
-        <hibernate.version>6.4.10.Final</hibernate.version>
-        <jakarta.persistence.version>3.1.0</jakarta.persistence.version>
-        <oracle.jdbc.version>23.3.0.23.09</oracle.jdbc.version>
-        <slf4j.version>2.0.13</slf4j.version>
     </properties>
 
     <dependencies>
@@ -38,33 +35,10 @@
             <artifactId>javafx-base</artifactId>
             <version>${javafx.version}</version>
         </dependency>
-
-        <!-- Hibernate / JPA -->
         <dependency>
-            <groupId>org.hibernate.orm</groupId>
-            <artifactId>hibernate-core</artifactId>
-            <version>${hibernate.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>jakarta.persistence</groupId>
-            <artifactId>jakarta.persistence-api</artifactId>
-            <version>${jakarta.persistence.version}</version>
-        </dependency>
-
-        <!-- Oracle JDBC Treiber (z. B. für FreeSQL) -->
-        <dependency>
-            <groupId>com.oracle.database.jdbc</groupId>
-            <artifactId>ojdbc11</artifactId>
-            <version>${oracle.jdbc.version}</version>
-            <scope>runtime</scope>
-        </dependency>
-
-        <!-- Einfache Logging-Ausgabe für Hibernate in Entwicklung -->
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-simple</artifactId>
-            <version>${slf4j.version}</version>
-            <scope>runtime</scope>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-fxml</artifactId>
+            <version>${javafx.version}</version>
         </dependency>
     </dependencies>
 
@@ -76,7 +50,8 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.13.0</version>
                 <configuration>
-                    <release>${maven.compiler.release}</release>
+                    <source>21</source>
+                    <target>21</target>
                 </configuration>
             </plugin>
 
