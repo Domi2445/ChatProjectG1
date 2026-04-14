@@ -1,9 +1,6 @@
 package Client;
 
-import Util.ImageMessage;
-import Util.Message;
-import Util.TextMessage;
-import Util.User;
+import Util.*;
 import javafx.application.Platform;
 import javafx.scene.control.Alert;
 import javafx.stage.FileChooser;
@@ -88,7 +85,7 @@ public class Controller {
 		FileChooser fileChooser = new FileChooser();
 		File selectedFile = fileChooser.showOpenDialog(view.getStage());
 
-		if (selectedFile == null) { return; }
+		if (selectedFile == null || !selectedFile.isFile()) { return; }
 
 		if (selectedFile.length() > MAX_FILE_SIZE) {
 			Alert alert = new Alert(Alert.AlertType.ERROR);
@@ -110,7 +107,16 @@ public class Controller {
 			return;
 		}
 
-		Message message = new ImageMessage(localUser, bytes);
+		FileMessage.FileType fileType;
+		String fileName = selectedFile.getName();
+
+		if (fileName.endsWith(".png") || fileName.endsWith(".jpg") || fileName.endsWith(".gif") || fileName.endsWith(".bmp")) {
+			fileType = FileMessage.FileType.IMAGE;
+		} else {
+			fileType = FileMessage.FileType.FILE;
+		}
+
+		Message message = new FileMessage(localUser, bytes, fileName, fileType);
 
 		try {
 			outgoingMessageQueue.put(message);

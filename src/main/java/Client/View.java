@@ -1,6 +1,6 @@
 package Client;
 
-import Util.ImageMessage;
+import Util.FileMessage;
 import Util.Message;
 import Util.TextMessage;
 import Util.User;
@@ -125,7 +125,7 @@ public class View {
 				return;
 			}
 
-			Node bubble;
+			Node node;
 
 			switch (item) {
 				case TextMessage textMessage -> {
@@ -133,18 +133,28 @@ public class View {
 					label.setWrapText(true);
 					label.setMaxWidth(300);
 					label.setFont(Font.font(13));
-					bubble = label;
+					node = label;
 				}
-				case ImageMessage imageMessage -> {
-					// todo
-					Image image = new Image(new ByteArrayInputStream(imageMessage.getContent()));
-					ImageView imageView = new ImageView(image);
-					imageView.setPreserveRatio(true);
-					imageView.fitWidthProperty().bind(Bindings.createDoubleBinding(
-						() -> Math.min(Math.max(getScene().getWidth() - 32, 100.0), image.getWidth()),
-						getScene().widthProperty()
-					));
-					bubble = imageView;
+				case FileMessage fileMessage -> {
+					FileMessage.FileType fileType = fileMessage.getFileType();
+					switch (fileType) {
+						case FILE -> {
+							Label label = new Label("Datei: " + fileMessage.getFileName());
+							// todo: download
+							node = label;
+						}
+						case IMAGE -> {
+							Image image = new Image(new ByteArrayInputStream(fileMessage.getContent()));
+							ImageView imageView = new ImageView(image);
+							imageView.setPreserveRatio(true);
+							imageView.fitWidthProperty().bind(Bindings.createDoubleBinding(
+								() -> Math.min(Math.max(getScene().getWidth() - 32, 100.0), image.getWidth()),
+								getScene().widthProperty()
+							));
+							node = imageView;
+						}
+						default -> throw new IllegalStateException("Unbekannter Dateityp: " + fileType);
+					}
 				}
 				default -> throw new IllegalStateException("Unexpected value: " + item);
 			}
@@ -152,18 +162,18 @@ public class View {
 			boolean isOwn = item.getSender().getIdentifier().equals(localUser.getIdentifier());
 
 			if (isOwn) {
-				bubble.setStyle(
+				node.setStyle(
 					"-fx-background-color: #89b4fa; -fx-text-fill: #1e1e2e; "
 					+ "-fx-padding: 8 12; -fx-background-radius: 14 14 4 14;"
 				);
 			} else {
-				bubble.setStyle(
+				node.setStyle(
 					"-fx-background-color: #313244; -fx-text-fill: #cdd6f4; "
 					+ "-fx-padding: 8 12; -fx-background-radius: 14 14 14 4;"
 				);
 			}
 
-			HBox container = new HBox(bubble);
+			HBox container = new HBox(node);
 			container.setPadding(new Insets(2, 10, 2, 10));
 			container.setAlignment(isOwn ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT);
 
