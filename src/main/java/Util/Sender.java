@@ -1,6 +1,5 @@
 package Util;
 
-public interface Sender
-{
-    String getIdentifier();
+public interface Sender {
+	String getIdentifier();
 }
