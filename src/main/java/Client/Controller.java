@@ -186,9 +186,9 @@ public class Controller {
 		}
 	}
 
-	private class MessageCell extends ListCell<Message> {
+	private class MessageCell extends ListCell<Packet> {
 		@Override
-		protected void updateItem(Message item, boolean empty) {
+		protected void updateItem(Packet item, boolean empty) {
 			super.updateItem(item, empty);
 			if (empty || item == null) {
 				setGraphic(null);
@@ -197,55 +197,69 @@ public class Controller {
 			}
 
 			Node node;
+			HBox container;
 
 			switch (item) {
-				case TextMessage textMessage -> {
-					Label label = new Label(textMessage.getContent());
-					label.setWrapText(true);
-					label.setMaxWidth(300);
-					node = label;
-				}
-				case FileMessage fileMessage -> {
-					FileMessage.FileType fileType = fileMessage.getFileType();
-					switch (fileType) {
-						case FILE -> {
-							Label label = new Label("Datei: " + fileMessage.getFileName());
-							// todo(team-view): Datei herunterladen Button
+				case Message message -> {
+					switch (message) {
+						case TextMessage textMessage -> {
+							Label label = new Label(textMessage.getContent());
+							label.setWrapText(true);
+							label.setMaxWidth(300);
 							node = label;
 						}
-						case IMAGE -> {
-							Image image = new Image(new ByteArrayInputStream(fileMessage.getContent()));
-							ImageView imageView = new ImageView(image);
-							imageView.setPreserveRatio(true);
-							imageView.fitWidthProperty().bind(Bindings.createDoubleBinding(
-								() -> Math.min(Math.max(getScene().getWidth() - 32, 100.0), image.getWidth()),
-								getScene().widthProperty()
-							));
-							node = imageView;
+						case FileMessage fileMessage -> {
+							FileMessage.FileType fileType = fileMessage.getFileType();
+							switch (fileType) {
+								case FILE -> {
+									Label label = new Label("Datei: " + fileMessage.getFileName());
+									// todo(team-view): Datei herunterladen Button
+									node = label;
+								}
+								case IMAGE -> {
+									Image image = new Image(new ByteArrayInputStream(fileMessage.getContent()));
+									ImageView imageView = new ImageView(image);
+									imageView.setPreserveRatio(true);
+									imageView.fitWidthProperty().bind(Bindings.createDoubleBinding(
+										() -> Math.min(Math.max(getScene().getWidth() - 32, 100.0), image.getWidth()),
+										getScene().widthProperty()
+									));
+									node = imageView;
+								}
+								default -> throw new IllegalStateException("Unbekannter Dateityp: " + fileType);
+							}
 						}
-						default -> throw new IllegalStateException("Unbekannter Dateityp: " + fileType);
+						case null, default -> throw new IllegalStateException("Unerwarteter Wert: " + message);
+					}
+
+					boolean isOwn = localUser != null && message.getSender().getIdentifier().equals(localUser.getIdentifier());
+
+					if (isOwn) {
+						node.setStyle(
+							"-fx-background-color: #89b4fa; -fx-text-fill: #1e1e2e; "
+								+ "-fx-padding: 8 12; -fx-background-radius: 14 14 4 14;"
+						);
+					} else {
+						node.setStyle(
+							"-fx-background-color: #313244; -fx-text-fill: #cdd6f4; "
+								+ "-fx-padding: 8 12; -fx-background-radius: 14 14 14 4;"
+						);
+					}
+
+					container = new HBox(node);
+					container.setPadding(new Insets(2, 10, 2, 10));
+					container.setAlignment(isOwn ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT);
+				}
+				case Notification notification -> {
+					switch (notification) {
+						case JoinNotification join -> {
+
+						}
+						case null, default -> throw new IllegalStateException("Unerwarteter Wert: " + notification);
 					}
 				}
-				default -> throw new IllegalStateException("Unexpected value: " + item);
+				default -> throw new IllegalStateException("Unbekannte Servernachricht: " + item);
 			}
-
-			boolean isOwn = localUser != null && item.getSender().getIdentifier().equals(localUser.getIdentifier());
-
-			if (isOwn) {
-				node.setStyle(
-					"-fx-background-color: #89b4fa; -fx-text-fill: #1e1e2e; "
-						+ "-fx-padding: 8 12; -fx-background-radius: 14 14 4 14;"
-				);
-			} else {
-				node.setStyle(
-					"-fx-background-color: #313244; -fx-text-fill: #cdd6f4; "
-						+ "-fx-padding: 8 12; -fx-background-radius: 14 14 14 4;"
-				);
-			}
-
-			HBox container = new HBox(node);
-			container.setPadding(new Insets(2, 10, 2, 10));
-			container.setAlignment(isOwn ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT);
 
 			setGraphic(container);
 			setStyle("-fx-background-color: transparent; -fx-padding: 0;");
