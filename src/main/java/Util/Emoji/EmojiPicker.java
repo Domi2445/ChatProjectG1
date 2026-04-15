@@ -1,7 +1,5 @@
 package Util.Emoji;
 
-
-
 import Client.View;
 import Util.User;
 import javafx.scene.Scene;
@@ -22,14 +20,14 @@ public class EmojiPicker {
         root.setHgap(10);
         root.setVgap(10);
 
-        List<String> emojis = EmojiService.loadEmojis();
+        List<Emoji> emojis = EmojiService.loadEmojis();
 
-        for (String emoji : emojis) {
-            Button btn = new Button(emoji);
+        for (Emoji emoji : emojis) {
+            Button btn = new Button(emoji.getCharacter());
             btn.setStyle("-fx-font-size: 20;");
 
             btn.setOnAction(e -> {
-                view.getMessages().add(new EmojiMessage(user, emoji));
+                view.getMessages().add(new EmojiMessage(user, emoji.getCharacter()));
                 stage.close();
             });
 

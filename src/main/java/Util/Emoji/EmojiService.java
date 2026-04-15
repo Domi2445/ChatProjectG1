@@ -2,16 +2,18 @@ package Util.Emoji;
 
 import java.io.IOException;
 import java.net.URI;
-import java.net.http.*;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.ArrayList;
 import java.util.List;
 
 public class EmojiService {
 
-    private static final String API_KEY = "3GL42ShUhjxk0Uxp0dzOkGnBp1KoEM9g5UIAEQEA";
+    private static final String API_KEY = "DEIN_API_KEY_HIER";
 
-    public static List<String> loadEmojis() {
-        List<String> emojis = new ArrayList<>();
+    public static List<Emoji> loadEmojis() {
+        List<Emoji> emojis = new ArrayList<>();
 
         try {
             HttpClient client = HttpClient.newHttpClient();
@@ -26,12 +28,18 @@ public class EmojiService {
 
             String body = response.body();
 
-            // 🔥 QUICK & DIRTY Parsing (für Demo)
             String[] parts = body.split("\"character\":\"");
 
             for (int i = 1; i < parts.length; i++) {
-                String emoji = parts[i].substring(0, 2); // Emoji rausziehen
+                String character = parts[i].substring(0, 2);
+
+                String namePart = parts[i].split("\"name\":\"")[1];
+                String name = namePart.substring(0, namePart.indexOf("\""));
+
+                Emoji emoji = new Emoji(i, name, character);
                 emojis.add(emoji);
+
+               
             }
 
         } catch (IOException | InterruptedException e) {
