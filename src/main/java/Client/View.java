@@ -107,6 +107,77 @@ public class View {
 		stage.show();
 	}
 
+
+
+
+
+
+
+
+
+
+
+
+	// Dialog anzeigen und IP/Ports zurückgeben
+	public String[] showCallDialog() {
+		Dialog<ButtonType> dialog = new Dialog<>();
+		dialog.setTitle("Anruf starten");
+
+		TextField ipField = new TextField("127.0.0.1");
+		TextField sendPortField = new TextField("7000");
+		TextField receivePortField = new TextField("7001");
+
+		VBox content = new VBox(6,
+				new Label("IP-Adresse:"), ipField,
+				new Label("Send-Port:"), sendPortField,
+				new Label("Receive-Port:"), receivePortField
+		);
+		content.setPadding(new Insets(10));
+		dialog.getDialogPane().setContent(content);
+		dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+		ButtonType result = dialog.showAndWait().orElse(ButtonType.CANCEL);
+		if (result == ButtonType.OK) {
+			return new String[]{ ipField.getText(), sendPortField.getText(), receivePortField.getText() };
+		}
+		return null;
+	}
+
+	// Button-Style umschalten
+	public void setCallActive(boolean active) {
+		if (active) {
+			videoCallButton.setStyle(
+					"-fx-background-color: #f38ba8; -fx-text-fill: #1e1e2e; -fx-font-size: 16; "
+							+ "-fx-background-radius: 20; -fx-min-width: 40; -fx-min-height: 40; -fx-cursor: hand;"
+			);
+		} else {
+			videoCallButton.setStyle(
+					"-fx-background-color: #45475a; -fx-text-fill: #cdd6f4; -fx-font-size: 16; "
+							+ "-fx-background-radius: 20; -fx-min-width: 40; -fx-min-height: 40; -fx-cursor: hand;"
+			);
+		}
+	}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 	public Stage getStage() { return stage; }
 	public ListView<Message> getMessageListView() { return messageListView; }
 	public ObservableList<Message> getMessages() { return messageListView.getItems(); }

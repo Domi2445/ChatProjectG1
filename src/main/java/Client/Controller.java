@@ -4,6 +4,7 @@ import Util.ImageMessage;
 import Util.Message;
 import Util.TextMessage;
 import Util.User;
+import VideoCall.AudioCall;
 import javafx.application.Platform;
 import javafx.scene.control.Alert;
 import javafx.stage.FileChooser;
@@ -25,6 +26,44 @@ public class Controller {
 	private Client client;
 	private User localUser;
 
+
+	private AudioCall audioCall = new AudioCall();
+	private boolean inCall = false ;
+
+	private void  handleCallButton()
+	{
+		if (!inCall)
+		{
+			String[] params = view.showCallDialog();
+			if(params == null)
+			{
+				return;
+			}
+
+			try
+			{
+					audioCall.start(params[0] ,Integer.parseInt(params[1]), Integer.parseInt(params[2]));
+
+					inCall = true;
+					view.setCallActive(true);
+			}
+			catch(Exception ex)
+			{
+				view.getMessages().add(new TextMessage(new User("System"), "Anruf fehlgeschlagen: " + ex.getMessage()));
+
+			}
+		}
+		else {
+		audioCall.stop();
+		audioCall = new AudioCall();
+		inCall = false;
+		view.setCallActive(false);
+	}
+	}
+
+
+
+
 	public Controller() {
 		this.outgoingMessageQueue = new ArrayBlockingQueue<>(4);
 		this.incomingMessageQueue = new ArrayBlockingQueue<>(4);
@@ -36,6 +75,7 @@ public class Controller {
 		view.getSendButton().setOnAction(e -> sendMessage());
 		view.getMessageTextField().setOnAction(e -> sendMessage());
 		view.getUploadButton().setOnAction(e -> sendFile());
+		view.getVideoCallButton().setOnAction(e -> handleCallButton());
 	}
 
 	public void connectAndRun(String ip, int port) {
