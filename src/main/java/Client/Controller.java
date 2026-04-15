@@ -1,19 +1,21 @@
 package Client;
 
-import Util.*;
-import javafx.beans.binding.Bindings;
+import Util.Network.Messages.FileMessage;
+import Util.Network.Messages.Message;
+import Util.Network.Messages.TextMessage;
+import Util.Network.Notifications.JoinNotification;
+import Util.Network.Notifications.LeaveNotification;
+import Util.Network.Notifications.Notification;
+import Util.Network.Packet;
+import Util.User;
 import javafx.application.Platform;
+import javafx.beans.binding.Bindings;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
-import javafx.scene.control.Alert;
-import javafx.scene.control.Button;
-import javafx.scene.control.Label;
-import javafx.scene.control.ListCell;
-import javafx.scene.control.ListView;
-import javafx.scene.control.TextField;
+import javafx.scene.control.*;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.HBox;
@@ -30,8 +32,8 @@ import java.util.concurrent.BlockingQueue;
 public class Controller {
 	public static final int MAX_FILE_SIZE = 1_000_000;
 
-	private final BlockingQueue<Message> outgoingMessageQueue;
-	private final BlockingQueue<Message> incomingMessageQueue;
+	private final BlockingQueue<Packet> outPacketQueue;
+	private final BlockingQueue<Packet> inPacketQueue;
 
 	private Client client;
 	private User localUser;
@@ -50,8 +52,8 @@ public class Controller {
 	private Button uploadButton;
 
 	public Controller() {
-		this.outgoingMessageQueue = new ArrayBlockingQueue<>(4);
-		this.incomingMessageQueue = new ArrayBlockingQueue<>(4);
+		this.outPacketQueue = new ArrayBlockingQueue<>(4);
+		this.inPacketQueue = new ArrayBlockingQueue<>(4);
 	}
 
 	@FXML
@@ -69,7 +71,7 @@ public class Controller {
 
 	public void connectAndRun(String ip, int port) {
 		try {
-			client = new Client(ip, port, outgoingMessageQueue, incomingMessageQueue);
+			client = new Client(ip, port, outPacketQueue, inPacketQueue);
 			Thread clientThread = new Thread(client, "ClientThread");
 			clientThread.setDaemon(true);
 			clientThread.start();
@@ -77,11 +79,19 @@ public class Controller {
 			Thread listener = new Thread(() -> {
 				while (true) {
 					try {
-						Message message = incomingMessageQueue.take();
-						Platform.runLater(() -> {
-							getMessages().add(message);
-							messageListView.scrollTo(getMessages().size() - 1);
-						});
+						Packet packet = inPacketQueue.take();
+                        switch (packet) {
+                            case Message message -> Platform.runLater(() -> {
+                                getMessages().add(message);
+                                messageListView.scrollTo(getMessages().size() - 1);
+                            });
+                            case Notification notification -> Platform.runLater(() -> {
+								handleNotification(notification);
+                            });
+                            case null, default -> throw new IllegalStateException("Unbekanntes Paket empfangen");
+                        }
+
+
 					} catch (InterruptedException e) {
 						break;
 					}
@@ -107,7 +117,7 @@ public class Controller {
 			Message message = new TextMessage(localUser, text);
 
 			try {
-				outgoingMessageQueue.put(message);
+				outPacketQueue.put(message);
 			} catch (InterruptedException ex) {
 				throw new RuntimeException(ex);
 			}
@@ -155,13 +165,27 @@ public class Controller {
 		Message message = new FileMessage(localUser, bytes, fileName, fileType);
 
 		try {
-			outgoingMessageQueue.put(message);
+			outPacketQueue.put(message);
 		} catch (InterruptedException e) {
 			throw new RuntimeException(e);
 		}
 
 		messageListView.scrollTo(getMessages().size() - 1);
 		messageTextField.clear();
+	}
+
+	private void handleNotification(Notification notification) {
+		switch (notification) {
+			case JoinNotification join -> {
+				System.out.println(join.getUser() + " ist beigetreten");
+				// todo(team-view): in der View einen neuen Nutzer anzeigen (z. B. In Seitenleiste oder direkt im Chat)
+			}
+			case LeaveNotification leave -> {
+				System.out.println(leave.getUser() + " hat verlassen");
+				// todo(team-view): in der View den Benutzer entfernen
+			}
+			case null, default -> throw new IllegalStateException("Unbekannte Systemnachricht");
+		}
 	}
 
 	private class MessageCell extends ListCell<Message> {
@@ -188,6 +212,7 @@ public class Controller {
 					switch (fileType) {
 						case FILE -> {
 							Label label = new Label("Datei: " + fileMessage.getFileName());
+							// todo(team-view): Datei herunterladen Button
 							node = label;
 						}
 						case IMAGE -> {

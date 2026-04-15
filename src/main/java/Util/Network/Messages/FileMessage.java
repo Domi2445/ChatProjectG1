@@ -1,7 +1,15 @@
-package Util;
+package Util.Network.Messages;
 
-public class FileMessage extends Message {
-    private final byte[] content;
+import Util.User;
+
+import java.io.Serial;
+import java.io.Serializable;
+
+public class FileMessage extends Message implements Serializable {
+	@Serial
+	private static final long serialVersionUID = 1L;
+
+	private final byte[] content;
     private final String fileName;
     private final FileType fileType;
 

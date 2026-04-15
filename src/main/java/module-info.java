@@ -9,4 +9,6 @@ module com.chatproject {
     exports Client;
     exports Server;
     exports Util;
+	exports Util.Network;
+	exports Util.Network.Messages;
 }

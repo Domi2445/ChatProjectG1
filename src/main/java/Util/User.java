@@ -13,4 +13,9 @@ public class User implements Sender, Serializable {
     public String getIdentifier() {
         return username;
     }
+
+	@Override
+	public String toString() {
+		return getIdentifier();
+	}
 }
