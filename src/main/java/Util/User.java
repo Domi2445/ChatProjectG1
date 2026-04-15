@@ -9,6 +9,11 @@ public class User implements Sender, Serializable {
         this.username = username;
     }
 
+    public String getUsername()
+    {
+        return username;
+    }
+
     @Override
     public String getIdentifier() {
         return username;
