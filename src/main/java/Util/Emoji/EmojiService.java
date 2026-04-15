@@ -1,4 +1,4 @@
-package Util;
+package Util.Emoji;
 
 import java.io.IOException;
 import java.net.URI;

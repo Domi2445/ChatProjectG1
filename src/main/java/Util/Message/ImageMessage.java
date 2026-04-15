@@ -1,6 +1,8 @@
-package Util;
+package Util.Message;
 
-public class ImageMessage extends  Message
+import Util.User;
+
+public class ImageMessage extends Message
 {
         private final byte[] content;
 
@@ -15,6 +17,11 @@ public class ImageMessage extends  Message
 
     @Override
     public String getContent() {
+        return "";
+    }
+
+    @Override
+    public String getDisplayText() {
         return "";
     }
 

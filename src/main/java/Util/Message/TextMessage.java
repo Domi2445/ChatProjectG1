@@ -1,4 +1,6 @@
-package Util;
+package Util.Message;
+
+import Util.User;
 
 public class TextMessage extends Message {
     private final String content;
@@ -11,6 +13,11 @@ public class TextMessage extends Message {
     @Override
     public String getContent() {
         return content;
+    }
+
+    @Override
+    public String getDisplayText() {
+        return "";
     }
 
     @Override

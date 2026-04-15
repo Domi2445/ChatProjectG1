@@ -1,9 +1,8 @@
-package Util;
+package Util.Emoji;
 
 
 
 import Client.View;
-import Util.EmojiMessage;
 import Util.User;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;

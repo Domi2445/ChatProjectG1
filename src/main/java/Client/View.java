@@ -1,6 +1,6 @@
 package Client;
 
-import Util.Message;
+import Util.Message.Message;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;

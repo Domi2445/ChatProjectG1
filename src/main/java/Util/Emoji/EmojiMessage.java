@@ -1,4 +1,7 @@
-package Util;
+package Util.Emoji;
+
+import Util.Message.Message;
+import Util.User;
 
 public class EmojiMessage extends Message {
 

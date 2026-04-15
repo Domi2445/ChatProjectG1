@@ -1,7 +1,7 @@
 package Client;
 
-import Util.Message;
-import Util.TextMessage;
+import Util.Message.Message;
+import Util.Message.TextMessage;
 import Util.User;
 import javafx.application.Platform;
 import javafx.stage.Stage;
