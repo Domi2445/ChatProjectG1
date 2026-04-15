@@ -4,6 +4,7 @@ import Util.Network.Packet;
 import Util.SocketProxy;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 
@@ -20,6 +21,8 @@ public class PacketBroker implements Runnable {
 	@Override
 	public void run() {
 		while (true) {
+			ArrayList<SocketProxy> clientsToRemove = new ArrayList<>();
+
 			try {
 				Packet packet = packetBrokerQueue.take();
 
@@ -30,13 +33,19 @@ public class PacketBroker implements Runnable {
 							client.out.flush();
 						} catch (IOException e) {
 							System.out.println("Fehler beim Senden:\n" + e);
+							try { client.close(); } catch (IOException ignored) {}
+							clientsToRemove.add(client);
 						}
 					}
+
+					clients.removeAll(clientsToRemove);
 				}
 
 			} catch (InterruptedException e) {
 				break;
 			}
+
+			clientsToRemove.clear();
 		}
 	}
 }

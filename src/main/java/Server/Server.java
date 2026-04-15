@@ -43,7 +43,7 @@ public class Server implements Runnable {
 				new Thread(new ClientHandler(client, packetBrokerQueue)).start();
 
 			} catch (IOException e) {
-				System.out.println("Fehler beim Verbindungsaufbau:\n" + e);
+				System.out.println("Fehler beim Verbindungsaufbau: " + e);
 				break;
 			} catch (InterruptedException e) {
 				throw new RuntimeException(e);

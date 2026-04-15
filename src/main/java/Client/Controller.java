@@ -40,7 +40,7 @@ public class Controller {
 	private Stage stage;
 
 	@FXML
-	private ListView<Message> messageListView;
+	private ListView<Packet> messageListView;
 
 	@FXML
 	private TextField messageTextField;
@@ -85,7 +85,11 @@ public class Controller {
                                 getMessages().add(message);
                                 messageListView.scrollTo(getMessages().size() - 1);
                             });
-                            case Notification notification -> Platform.runLater(() -> handleNotification(notification));
+													case Notification notification -> Platform.runLater(() -> {
+										getMessages().add(notification);
+										messageListView.scrollTo(getMessages().size() - 1);
+										handleNotification(notification);
+									  });
                             case null, default -> throw new IllegalStateException("Unbekanntes Paket empfangen");
                         }
 
@@ -105,7 +109,7 @@ public class Controller {
 		}
 	}
 
-	private ObservableList<Message> getMessages() {
+	private ObservableList<Packet> getMessages() {
 		return messageListView.getItems();
 	}
 
@@ -190,79 +194,94 @@ public class Controller {
 		@Override
 		protected void updateItem(Packet item, boolean empty) {
 			super.updateItem(item, empty);
+
+			setText(null);
+			setGraphic(null);
+			setStyle("-fx-background-color: transparent; -fx-padding: 0;");
+
 			if (empty || item == null) {
-				setGraphic(null);
-				setStyle("-fx-background-color: transparent;");
 				return;
 			}
 
-			Node node;
-			HBox container;
-
 			switch (item) {
-				case Message message -> {
-					switch (message) {
-						case TextMessage textMessage -> {
-							Label label = new Label(textMessage.getContent());
-							label.setWrapText(true);
-							label.setMaxWidth(300);
-							node = label;
-						}
-						case FileMessage fileMessage -> {
-							FileMessage.FileType fileType = fileMessage.getFileType();
-							switch (fileType) {
-								case FILE -> {
-									Label label = new Label("Datei: " + fileMessage.getFileName());
-									// todo(team-view): Datei herunterladen Button
-									node = label;
-								}
-								case IMAGE -> {
-									Image image = new Image(new ByteArrayInputStream(fileMessage.getContent()));
-									ImageView imageView = new ImageView(image);
-									imageView.setPreserveRatio(true);
-									imageView.fitWidthProperty().bind(Bindings.createDoubleBinding(
-										() -> Math.min(Math.max(getScene().getWidth() - 32, 100.0), image.getWidth()),
-										getScene().widthProperty()
-									));
-									node = imageView;
-								}
-								default -> throw new IllegalStateException("Unbekannter Dateityp: " + fileType);
-							}
-						}
-						case null, default -> throw new IllegalStateException("Unerwarteter Wert: " + message);
-					}
-
-					boolean isOwn = localUser != null && message.getSender().getIdentifier().equals(localUser.getIdentifier());
-
-					if (isOwn) {
-						node.setStyle(
-							"-fx-background-color: #89b4fa; -fx-text-fill: #1e1e2e; "
-								+ "-fx-padding: 8 12; -fx-background-radius: 14 14 4 14;"
-						);
-					} else {
-						node.setStyle(
-							"-fx-background-color: #313244; -fx-text-fill: #cdd6f4; "
-								+ "-fx-padding: 8 12; -fx-background-radius: 14 14 14 4;"
-						);
-					}
-
-					container = new HBox(node);
-					container.setPadding(new Insets(2, 10, 2, 10));
-					container.setAlignment(isOwn ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT);
-				}
-				case Notification notification -> {
-					switch (notification) {
-						case JoinNotification join -> {
-
-						}
-						case null, default -> throw new IllegalStateException("Unerwarteter Wert: " + notification);
-					}
-				}
+				case Message message -> setGraphic(renderMessageBubble(message));
+				case Notification notification -> renderNotificationLine(notification);
 				default -> throw new IllegalStateException("Unbekannte Servernachricht: " + item);
 			}
+		}
 
-			setGraphic(container);
-			setStyle("-fx-background-color: transparent; -fx-padding: 0;");
+		private HBox renderMessageBubble(Message message) {
+			Node node;
+
+			switch (message) {
+				case TextMessage textMessage -> {
+					Label label = new Label(textMessage.getContent());
+					label.setWrapText(true);
+					label.setMaxWidth(300);
+					node = label;
+				}
+				case FileMessage fileMessage -> node = createFileNode(fileMessage);
+				case null, default -> throw new IllegalStateException("Unerwarteter Wert: " + message);
+			}
+
+			boolean isOwn = localUser != null && message.getSender().getUsername().equals(localUser.getUsername());
+			node.setStyle(getBubbleStyle(isOwn));
+
+			HBox container = new HBox(node);
+			container.setAlignment(isOwn ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT);
+			container.setPadding(new Insets(2, 10, 2, 10));
+			return container;
+		}
+
+		private Node createFileNode(FileMessage fileMessage) {
+			return switch (fileMessage.getFileType()) {
+				case FILE -> {
+					Label label = new Label("Datei: " + fileMessage.getFileName());
+					// todo(team-view): Datei herunterladen Button
+					yield label;
+				}
+				case IMAGE -> {
+					Image image = new Image(new ByteArrayInputStream(fileMessage.getContent()));
+					ImageView imageView = new ImageView(image);
+					imageView.setPreserveRatio(true);
+					imageView.fitWidthProperty().bind(Bindings.createDoubleBinding(
+						() -> Math.clamp(getScene().getWidth() - 32, 100.0, image.getWidth()),
+						getScene().widthProperty()
+					));
+					yield imageView;
+				}
+			};
+		}
+
+		private String getBubbleStyle(boolean isOwn) {
+			if (isOwn) {
+				return "-fx-background-color: #89b4fa; -fx-text-fill: #1e1e2e; "
+					+ "-fx-padding: 8 12; -fx-background-radius: 14 14 4 14;";
+			}
+			return "-fx-background-color: #313244; -fx-text-fill: #cdd6f4; "
+				+ "-fx-padding: 8 12; -fx-background-radius: 14 14 14 4;";
+		}
+
+		private void renderNotificationLine(Notification notification) {
+			String text;
+			String color;
+
+			switch (notification) {
+				case JoinNotification join -> {
+					text = join.getUser().getUsername() + " ist beigetreten";
+					color = "#89b4fa";
+				}
+				case LeaveNotification leave -> {
+					text = leave.getUser().getUsername() + " hat verlassen";
+					color = "#f38ba8";
+				}
+				case null, default -> throw new IllegalStateException("Unerwarteter Wert: " + notification);
+			}
+
+			setText(text);
+			setAlignment(Pos.CENTER);
+			setStyle("-fx-background-color: transparent; -fx-padding: 4 0; "
+				+ "-fx-text-fill: " + color + "; -fx-font-style: italic;");
 		}
 	}
 }
