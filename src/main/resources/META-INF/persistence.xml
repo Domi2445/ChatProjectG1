@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <persistence xmlns="https://jakarta.ee/xml/ns/persistence"
              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-             xsi:schemaLocation="https://jakarta.ee/xml/ns/persistence https://jakarta.ee/xml/ns/persistence/persistence_3_1.xsd"
-             version="3.1">
+             xsi:schemaLocation="https://jakarta.ee/xml/ns/persistence https://jakarta.ee/xml/ns/persistence/persistence_3_0.xsd"
+             version="3.0">
 
     <persistence-unit name="chat-oracle" transaction-type="RESOURCE_LOCAL">
         <provider>org.hibernate.jpa.HibernatePersistenceProvider</provider>
@@ -10,8 +10,8 @@
         <properties>
             <property name="jakarta.persistence.jdbc.driver" value="oracle.jdbc.OracleDriver"/>
             <property name="jakarta.persistence.jdbc.url" value="jdbc:oracle:thin:@//db.freesql.com:1521/26ai_un3c1"/>
-            <property name="jakarta.persistence.jdbc.user" value="CHANGE_ME_USER"/>
-            <property name="jakarta.persistence.jdbc.password" value="CHANGE_ME_PASSWORD"/>
+            <property name="jakarta.persistence.jdbc.user" value="DOMINIK_AUST2007_SCHEMA_PANWK"/>
+            <property name="jakarta.persistence.jdbc.password" value="7!5GYOS8NC82Z73RN8ACKBCXRaD25S"/>
 
             <property name="hibernate.dialect" value="org.hibernate.dialect.OracleDialect"/>
             <property name="hibernate.hbm2ddl.auto" value="update"/>

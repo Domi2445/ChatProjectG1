@@ -1,6 +1,9 @@
 package User.Model;
 
+import jakarta.persistence.Id;
+
 public class User {
+    @Id
     private String username;
     private String displayname;
     private String passwordHash;
