@@ -28,6 +28,11 @@ public class PacketBroker implements Runnable {
 
 				synchronized (clients) {
 					for (SocketProxy client : clients) {
+						if (client.socket.isClosed()) {
+							clientsToRemove.add(client);
+							continue;
+						}
+
 						try {
 							client.out.writeObject(packet);
 							client.out.flush();
