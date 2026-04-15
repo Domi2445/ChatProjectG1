@@ -11,8 +11,15 @@ import java.util.List;
 
 public class EmojiPicker {
 
-    public static void open(User user, View view) {
+    private final User user;
+    private final View view;
 
+    public EmojiPicker(User user, View view) {
+        this.user = user;
+        this.view = view;
+    }
+
+    public void open() {
         Stage stage = new Stage();
         stage.setTitle("Emoji auswählen");
 
@@ -20,22 +27,26 @@ public class EmojiPicker {
         root.setHgap(10);
         root.setVgap(10);
 
-        List<Emoji> emojis = EmojiService.loadEmojis();
+        List<Emoji> emojis = new EmojiService().loadEmojis();
 
         for (Emoji emoji : emojis) {
-            Button btn = new Button(emoji.getCharacter());
-            btn.setStyle("-fx-font-size: 20;");
-
-            btn.setOnAction(e -> {
-                view.getMessages().add(new EmojiMessage(user, emoji.getCharacter()));
-                stage.close();
-            });
-
-            root.getChildren().add(btn);
+            root.getChildren().add(createEmojiButton(emoji, stage));
         }
 
         Scene scene = new Scene(root, 300, 200);
         stage.setScene(scene);
         stage.show();
+    }
+
+    private Button createEmojiButton(Emoji emoji, Stage stage) {
+        Button btn = new Button(emoji.getCharacter());
+        btn.setStyle("-fx-font-size: 20;");
+
+        btn.setOnAction(e -> {
+            view.getMessages().add(new EmojiMessage(user, emoji.getCharacter()));
+            stage.close();
+        });
+
+        return btn;
     }
 }
