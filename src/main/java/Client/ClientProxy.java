@@ -1,6 +1,6 @@
 package Client;
 
-import User.Model.*;
+import User.User;
 
 public class ClientProxy {
     private Client client;

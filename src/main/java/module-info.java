@@ -7,4 +7,5 @@ module com.chatproject {
     exports Client;
     exports Server;
     exports Util;
+    exports User.Login;
 }
