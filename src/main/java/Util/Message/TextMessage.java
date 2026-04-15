@@ -1,6 +1,4 @@
-package Util.Message;
-
-import Util.User;
+package Util;
 
 public class TextMessage extends Message {
     private final String content;
@@ -10,18 +8,5 @@ public class TextMessage extends Message {
         this.content = content;
     }
 
-    @Override
-    public String getContent() {
-        return content;
-    }
-
-    @Override
-    public String getDisplayText() {
-        return "";
-    }
-
-    @Override
-    public void send() {
-
-    }
+    public String getContent() { return content; }
 }

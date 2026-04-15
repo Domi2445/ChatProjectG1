@@ -1,6 +1,4 @@
-package Util.Message;
-
-import Util.User;
+package Util;
 
 import java.io.Serializable;
 
@@ -12,10 +10,4 @@ public abstract class Message implements Serializable {
     }
 
     public User getSender() { return sender; }
-
-    public abstract String getContent();
-
-    public abstract String getDisplayText();
-
-    public abstract void send();
 }
