@@ -1,15 +1,25 @@
 package User.Model;
 
-import jakarta.persistence.Id;
+import jakarta.persistence.*;
 
-public class User {
+@Entity
+@Table(name = "users")
+public class User
+{
+
     @Id
     private String username;
+    @Column
     private String displayname;
+    @Column
     private String passwordHash;
+    @Column
     private String statusMessage;
+    @Column
     private String profileDescription;
+    @Column
     private String profilePicturePath;
+    @Embedded
     private ContactData contactData;
 
     public User(String username, String displayname, String passwordHash, String statusMessage, String profileDescription, String profilePicturePath, ContactData contactData) {
@@ -20,6 +30,10 @@ public class User {
         this.profileDescription = profileDescription;
         this.profilePicturePath = profilePicturePath;
         this.contactData = contactData;
+    }
+
+    public User() {
+
     }
 
     public String getUsername() {

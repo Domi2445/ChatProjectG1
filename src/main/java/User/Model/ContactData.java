@@ -1,5 +1,8 @@
 package User.Model;
 
+import jakarta.persistence.Embeddable;
+
+@Embeddable
 public class ContactData {
     private String firstname;
     private String lastname;
@@ -13,6 +16,10 @@ public class ContactData {
         this.email = email;
         this.discordId = discordId;
         this.website = website;
+    }
+
+    public ContactData() {
+
     }
 
     public String getFirstname() {
