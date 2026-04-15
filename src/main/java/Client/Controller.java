@@ -133,7 +133,9 @@ public class Controller {
 		FileChooser fileChooser = new FileChooser();
 		File selectedFile = fileChooser.showOpenDialog(stage);
 
-		if (selectedFile == null || !selectedFile.isFile()) { return; }
+		if (selectedFile == null || !selectedFile.isFile()) {
+			return;
+		}
 
 		if (selectedFile.length() > MAX_FILE_SIZE) {
 			Alert alert = new Alert(Alert.AlertType.ERROR);
