@@ -1,6 +1,6 @@
 package Server;
 
-import Util.Message;
+import Util.Message.Message;
 import Util.SocketProxy;
 
 import java.io.IOException;
