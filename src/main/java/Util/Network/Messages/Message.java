@@ -5,7 +5,7 @@ import Util.User;
 
 import java.io.Serializable;
 
-// Oberklasse für alle Benutzernachrichten
+/// Oberklasse für alle Benutzernachrichten
 public abstract class Message extends Packet implements Serializable {
     private final User sender;
 

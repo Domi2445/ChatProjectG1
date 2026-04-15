@@ -1,5 +1,6 @@
 package Util.Emoji;
 
+import Util.Network.Messages.EmojiMessage;
 import Util.Network.Messages.Message;
 import Util.User;
 import javafx.collections.ObservableList;
