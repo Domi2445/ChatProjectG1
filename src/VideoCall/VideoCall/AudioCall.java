@@ -6,15 +6,27 @@ import java.net.*;
 public class AudioCall
 {
 
-    public static void start(String partnerIp) throws Exception
+    private volatile boolean running = false ;
+    private Thread senderThread;
+    private Thread recieverThread;
+
+
+    public  void start(String partnerIp,int sendProt , int recieverPort) throws Exception
     {
+        running = true ;
+
 
         // Tools for sending and receiving
-        UDPSender sender = new UDPSender(partnerIp, 7000);
-        UDPReciever receiver = new UDPReciever(7000);
+        UDPSender sender = new UDPSender(partnerIp, sendProt);
+        UDPReciever receiver = new UDPReciever(recieverPort);
+
+
+
+
+
 
         // Thread 1 - captures your mic and sends it to your partner
-        new Thread(() -> {
+        senderThread = new Thread(() -> {
             try
             {
                 AudioFormat format = new AudioFormat(16000, 16, 1, true, false);
@@ -25,22 +37,25 @@ public class AudioCall
                 System.out.println("Mic active, sending audio...");
 
                 byte[] buffer = new byte[1024];
-                while (true)
+                while (running)
                 {
                     int bytesRead = microphone.read(buffer, 0, buffer.length);
                     byte[] data = new byte[bytesRead];
                     System.arraycopy(buffer, 0, data, 0, bytesRead);
                     sender.send(data);
                 }
+                microphone.stop();
+                microphone.close();
+                sender.close();
             }
             catch (Exception e)
             {
                 e.printStackTrace();
             }
-        }).start();
+        });
 
         // Thread 2 - receives your partner's audio and plays it
-        new Thread(() -> {
+        recieverThread = new Thread(() -> {
             try
             {
                 AudioFormat format = new AudioFormat(16000, 16, 1, true, false);
@@ -50,18 +65,26 @@ public class AudioCall
                 speakers.start();
                 System.out.println("Waiting for audio...");
 
-                while (true)
+                while (running)
                 {
                     byte[] data = receiver.receiver();
                     speakers.write(data, 0, data.length);
                 }
+
+                speakers.stop();
+                speakers.close();
+                receiver.close();
+
             } catch (Exception e)
             {
                 e.printStackTrace();
             }
-        }).start();
+        });
+        senderThread.start();
+        recieverThread.start();
+
     }
-    public static void main(String[] args) throws Exception {
-        start("127.0.0.1");
+    public void stop() {
+        running = false;
     }
 }
