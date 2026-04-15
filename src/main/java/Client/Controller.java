@@ -85,9 +85,7 @@ public class Controller {
                                 getMessages().add(message);
                                 messageListView.scrollTo(getMessages().size() - 1);
                             });
-                            case Notification notification -> Platform.runLater(() -> {
-								handleNotification(notification);
-                            });
+                            case Notification notification -> Platform.runLater(() -> handleNotification(notification));
                             case null, default -> throw new IllegalStateException("Unbekanntes Paket empfangen");
                         }
 
@@ -182,7 +180,7 @@ public class Controller {
 			}
 			case LeaveNotification leave -> {
 				System.out.println(leave.getUser() + " hat verlassen");
-				// todo(team-view): in der View den Benutzer entfernen
+				// todo(team-view): in der View den angezeigten Benutzer entfernen
 			}
 			case null, default -> throw new IllegalStateException("Unbekannte Systemnachricht");
 		}
