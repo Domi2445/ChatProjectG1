@@ -31,6 +31,10 @@ public class PacketBroker implements Runnable {
 						if (client.socket.isClosed()) {
 							clientsToRemove.add(client);
 							continue;
+						} else if (client.getStopFlag()) {
+							clientsToRemove.add(client);
+							try { client.close(); } catch (IOException ignored) {}
+							continue;
 						}
 
 						try {

@@ -25,6 +25,7 @@ public class ClientHandler implements Runnable {
 				packetBrokerQueue.put(packet);
 			} catch (IOException e) {
 				System.out.println("Verbindung getrennt: " + e);
+				client.setStopFlag();
 
 				try {
 					// todo: Sobald es ein Loginsystem gibt, hier den Benutzernamen des verbindenden Clients übergeben
@@ -34,7 +35,9 @@ public class ClientHandler implements Runnable {
 				}
 
 				break;
-			} catch (ClassNotFoundException | InterruptedException e) {
+			} catch (ClassNotFoundException e) {
+				System.out.println("Ungültiges Paket empfangen: " + e);
+			} catch (InterruptedException e) {
 				break;
 			}
 		}
