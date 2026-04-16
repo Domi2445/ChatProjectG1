@@ -5,8 +5,9 @@ module com.chatproject {
 	requires javafx.fxml;
 	requires java.desktop;
 	requires jakarta.persistence;
+    requires java.net.http;
 
-	opens Client to javafx.fxml, javafx.graphics, javafx.base;
+    opens Client to javafx.fxml, javafx.graphics, javafx.base;
     opens User.Model to jakarta.persistence;
     exports Client;
     exports Server;
