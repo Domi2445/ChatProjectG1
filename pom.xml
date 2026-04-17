@@ -19,7 +19,7 @@
     </properties>
 
     <dependencies>
-        <!-- JavaFX â€“ wird automatisch von Maven heruntergeladen -->
+        <!-- JavaFX – wird automatisch von Maven heruntergeladen -->
 
         <dependency>
             <groupId>jakarta.enterprise</groupId>
