@@ -27,6 +27,7 @@ public class Server implements Runnable {
 	@Override
 	public void run() {
 		new Thread(new MessageBroker(messageBrokerQueue, clients)).start();
+		new Thread(new AudioRelayServer(9000)).start();
 
 		while (true) {
 			try {

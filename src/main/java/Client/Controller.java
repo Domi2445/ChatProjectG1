@@ -30,35 +30,32 @@ public class Controller {
 	private AudioCall audioCall = new AudioCall();
 	private boolean inCall = false ;
 
-	private void  handleCallButton()
+	private static final String RELAY_IP   = "127.0.0.1"; // Server IP
+	private static final int    RELAY_PORT = 9000;
+	private static final int    MY_PORT    = 7000;         // Unique port for each client
+
+	private void handleCallButton()
 	{
 		if (!inCall)
 		{
-			String[] params = view.showCallDialog();
-			if(params == null)
-			{
-				return;
-			}
-
 			try
 			{
-					audioCall.start(params[0] ,Integer.parseInt(params[1]), Integer.parseInt(params[2]));
-
-					inCall = true;
-					view.setCallActive(true);
-			}
-			catch(Exception ex)
-			{
-				view.getMessages().add(new TextMessage(new User("System"), "Anruf fehlgeschlagen: " + ex.getMessage()));
-
+				audioCall.start(RELAY_IP, RELAY_PORT, MY_PORT);
+				inCall = true;
+				view.setCallActive(true);
+			} catch (Exception ex) {
+				view.getMessages().add(
+						new TextMessage(new User("System"), "Call failed: " + ex.getMessage())
+				);
 			}
 		}
-		else {
-		audioCall.stop();
-		audioCall = new AudioCall();
-		inCall = false;
-		view.setCallActive(false);
-	}
+		else
+		{
+			audioCall.stop();
+			audioCall = new AudioCall();
+			inCall = false;
+			view.setCallActive(false);
+		}
 	}
 
 
