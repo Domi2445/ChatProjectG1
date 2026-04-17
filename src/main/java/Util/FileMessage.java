@@ -19,12 +19,16 @@ public class FileMessage extends Message {
 
     @Override
     public String getDisplayText() {
-        return "";
+        String name = (fileName == null || fileName.trim().isEmpty()) ? "(unbenannt)" : fileName;
+        return switch (fileType) {
+            case IMAGE -> "Bild: " + name;
+            case FILE -> "Datei: " + name;
+        };
     }
 
     @Override
     public void send() {
-
+        throw new UnsupportedOperationException("FileMessage.send() wird nicht direkt unterstützt.");
     }
 
     public String getFileName() {
