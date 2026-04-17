@@ -1,12 +1,12 @@
 package User.Login;
-import User.User;
-import User.Login.Status;
+import User.Model.User;
+
 public record LoginResult(Status status, String message, User user) {
     public static LoginResult success(User user){
         return new LoginResult(Status.SUCCESS, "", user);
     }
     public static LoginResult wrongCredentials(){
-        return new LoginResult(Status.WRONG_CREDENTIALS,"Username oder Passswort flasch",null);
+        return new LoginResult(Status.WRONG_CREDENTIALS,"Username oder Passswort falsch.",null);
     }
     public static LoginResult usernameTaken(){
         return new LoginResult(Status.USERNAME_TAKEN, "Dieser Username ist bereits vergeben", null);

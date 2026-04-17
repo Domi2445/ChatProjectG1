@@ -1,4 +1,4 @@
-package User;
+package User.Model;
 
 public class ContactData {
     private String firstname;
