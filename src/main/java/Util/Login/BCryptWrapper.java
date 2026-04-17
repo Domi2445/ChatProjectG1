@@ -1,4 +1,4 @@
-package Util;
+package Util.Login;
 
 import org.mindrot.jbcrypt.BCrypt;
 
