@@ -1,7 +1,7 @@
 module com.chatproject {
-    requires javafx.controls;
-    requires javafx.graphics;
-    requires javafx.base;
+	requires javafx.controls;
+	requires javafx.graphics;
+	requires javafx.base;
 	requires javafx.fxml;
 	requires java.desktop;
 	requires jakarta.persistence;
@@ -15,4 +15,5 @@ module com.chatproject {
     exports Client;
     exports Server;
     exports Util;
+
 }

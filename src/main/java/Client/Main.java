@@ -11,6 +11,10 @@ import java.io.IOException;
 
 public class Main extends Application {
 
+	public static void main(String[] args) {
+		launch(args);
+	}
+
 	@Override
 	public void start(Stage primaryStage) throws IOException {
 		FXMLLoader loader = new FXMLLoader(Main.class.getResource("/Client/chat-view.fxml"));
@@ -27,9 +31,5 @@ public class Main extends Application {
 		primaryStage.show();
 
 		controller.connectAndRun("127.0.0.1", 6969);
-	}
-
-	public static void main(String[] args) {
-		launch(args);
 	}
 }

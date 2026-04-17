@@ -1,23 +1,14 @@
 package Util;
 
 public class TextMessage extends Message {
-    private final String content;
+	private final String content;
 
-    public TextMessage(User sender, String content) {
-        super(sender);
-        this.content = content;
-    }
+	public TextMessage(User sender, String content) {
+		super(sender);
+		this.content = content;
+	}
 
-    @Override
-    public String getContent() { return content; }
-
-    @Override
-    public String getDisplayText() {
-        return "";
-    }
-
-    @Override
-    public void send() {
-
-    }
+	public String getContent() {
+		return content;
+	}
 }

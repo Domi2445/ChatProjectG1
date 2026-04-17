@@ -1,5 +1,7 @@
 package Util;
 
+import User.Model.User;
+
 import java.io.Serializable;
 
 public abstract class Message implements Serializable {
@@ -10,10 +12,4 @@ public abstract class Message implements Serializable {
     }
 
     public User getSender() { return sender; }
-
-    public abstract Object getContent();
-
-    public abstract String getDisplayText();
-
-    public abstract void send();
 }
