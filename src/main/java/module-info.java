@@ -6,10 +6,11 @@ module com.chatproject {
 	requires java.desktop;
     requires java.net.http;
 
-    opens Client to javafx.fxml, javafx.graphics, javafx.base;
+    opens Client to javafx.graphics, javafx.base;
     exports Client;
     exports Server;
     exports Util;
+    exports User.Login;
 	exports Util.Network;
 	exports Util.Network.Messages;
 	exports Util.Network.Notifications;
