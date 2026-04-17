@@ -10,4 +10,5 @@ module com.chatproject {
     exports Client;
     exports Server;
     exports Util;
+    exports Util.Message;
 }

@@ -1,6 +1,6 @@
-package Util;
+package Util.Message;
 
-import Util.Message;
+import Util.User;
 
 public class FileMessage extends Message {
     private final byte[] content;

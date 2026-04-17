@@ -17,7 +17,8 @@ public class Main extends Application {
 		Parent root = loader.load();
 
 		Controller controller = loader.getController();
-		controller.configure(primaryStage, new User("Benutzername"));
+		String defaultUsername = "Benutzer-" + System.currentTimeMillis();
+		controller.configure(primaryStage, new User(defaultUsername));
 
 		Scene scene = new Scene(root, 500, 650);
 		primaryStage.setTitle("Socket Chat");
