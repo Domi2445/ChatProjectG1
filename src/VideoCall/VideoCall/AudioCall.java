@@ -1,89 +1,67 @@
 package VideoCall;
 
 import javax.sound.sampled.*;
-import java.net.*;
 
-public class AudioCall
-{
+public class AudioCall {
+    private volatile boolean running = false;
 
-    private volatile boolean running = false ;
-    private Thread senderThread;
-    private Thread recieverThread;
+    // relayIp   = Server IP (e.g., 127.0.0.1)
+    // relayPort = 9000
+    // myPort    = Our local port for receiving data (e.g., 7000)
+    public void start(String relayIp, int relayPort, int myPort) throws Exception {
+        running = true;
 
+        UDPSender sender = new UDPSender(relayIp, relayPort); // Send to Relay
+        UDPReciever receiver = new UDPReciever(myPort);        // Receive from Relay
 
-    public  void start(String partnerIp,int sendProt , int recieverPort) throws Exception
-    {
-        running = true ;
-
-
-        // Tools for sending and receiving
-        UDPSender sender = new UDPSender(partnerIp, sendProt);
-        UDPReciever receiver = new UDPReciever(recieverPort);
-
-
-
-
-
-
-        // Thread 1 - captures your mic and sends it to your partner
-        senderThread = new Thread(() -> {
-            try
-            {
+        // Thread 1: Microphone → Relay
+        new Thread(() -> {
+            TargetDataLine microphone = null;
+            try {
                 AudioFormat format = new AudioFormat(16000, 16, 1, true, false);
-                DataLine.Info info = new DataLine.Info(TargetDataLine.class, format);
-                TargetDataLine microphone = (TargetDataLine) AudioSystem.getLine(info);
+                microphone = (TargetDataLine) AudioSystem.getLine(
+                        new DataLine.Info(TargetDataLine.class, format));
                 microphone.open(format);
                 microphone.start();
-                System.out.println("Mic active, sending audio...");
 
                 byte[] buffer = new byte[1024];
-                while (running)
-                {
+                while (running) {
                     int bytesRead = microphone.read(buffer, 0, buffer.length);
                     byte[] data = new byte[bytesRead];
                     System.arraycopy(buffer, 0, data, 0, bytesRead);
                     sender.send(data);
                 }
-                microphone.stop();
-                microphone.close();
+            } catch (Exception e) {
+                e.printStackTrace();
+            } finally {
+                if (microphone != null) { microphone.stop(); microphone.close(); }
                 sender.close();
             }
-            catch (Exception e)
-            {
-                e.printStackTrace();
-            }
-        });
+        }).start();
 
-        // Thread 2 - receives your partner's audio and plays it
-        recieverThread = new Thread(() -> {
-            try
-            {
+        // Thread 2: Relay → Speakers
+        new Thread(() -> {
+            SourceDataLine speakers = null;
+            try {
                 AudioFormat format = new AudioFormat(16000, 16, 1, true, false);
-                DataLine.Info info = new DataLine.Info(SourceDataLine.class, format);
-                SourceDataLine speakers = (SourceDataLine) AudioSystem.getLine(info);
+                speakers = (SourceDataLine) AudioSystem.getLine(
+                        new DataLine.Info(SourceDataLine.class, format));
                 speakers.open(format);
                 speakers.start();
-                System.out.println("Waiting for audio...");
 
-                while (running)
-                {
+                while (running) {
                     byte[] data = receiver.receiver();
                     speakers.write(data, 0, data.length);
                 }
-
-                speakers.stop();
-                speakers.close();
-                receiver.close();
-
-            } catch (Exception e)
-            {
+            } catch (Exception e) {
                 e.printStackTrace();
+            } finally {
+                if (speakers != null) { speakers.stop(); speakers.close(); }
+                receiver.close();
             }
-        });
-        senderThread.start();
-        recieverThread.start();
-
+        }).start();
     }
+
     public void stop() {
         running = false;
     }
