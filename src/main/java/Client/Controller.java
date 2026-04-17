@@ -80,18 +80,18 @@ public class Controller {
 				while (true) {
 					try {
 						Packet packet = inPacketQueue.take();
-                        switch (packet) {
-                            case Message message -> Platform.runLater(() -> {
-                                getMessages().add(message);
-                                messageListView.scrollTo(getMessages().size() - 1);
-                            });
-													case Notification notification -> Platform.runLater(() -> {
-										getMessages().add(notification);
-										messageListView.scrollTo(getMessages().size() - 1);
-										handleNotification(notification);
-									  });
-                            case null, default -> throw new IllegalStateException("Unbekanntes Paket empfangen");
-                        }
+						switch (packet) {
+							case Message message -> Platform.runLater(() -> {
+								getMessages().add(message);
+								messageListView.scrollTo(getMessages().size() - 1);
+							});
+							case Notification notification -> Platform.runLater(() -> {
+								getMessages().add(notification);
+								messageListView.scrollTo(getMessages().size() - 1);
+								handleNotification(notification);
+							});
+							case null, default -> throw new IllegalStateException("Unbekanntes Paket empfangen");
+						}
 
 
 					} catch (InterruptedException e) {
