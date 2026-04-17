@@ -12,4 +12,5 @@ module com.chatproject {
     exports Util;
 	exports Util.Network;
 	exports Util.Network.Messages;
+	exports Util.Network.Notifications;
 }
