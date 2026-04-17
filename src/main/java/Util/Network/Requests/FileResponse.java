@@ -1,5 +1,7 @@
 package Util.Network.Requests;
 
+import Util.Network.Messages.FileMessage;
+
 import java.io.Serial;
 import java.util.UUID;
 
@@ -11,12 +13,14 @@ public class FileResponse extends Request {
 	private final String name;
 	private final byte[] data;
 	private final int size;
+	private final FileMessage.FileType type;
 
-	public FileResponse(UUID uuid, String name, byte[] data, int size) {
+	public FileResponse(UUID uuid, String name, byte[] data, int size, FileMessage.FileType type) {
 		this.uuid = uuid;
 		this.name = name;
 		this.data = data;
 		this.size = size;
+		this.type = type;
 	}
 
 	public UUID getUuid() {
@@ -33,5 +37,9 @@ public class FileResponse extends Request {
 
 	public int getSize() {
 		return size;
+	}
+
+	public FileMessage.FileType getType() {
+		return type;
 	}
 }
