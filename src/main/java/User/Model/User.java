@@ -1,21 +1,24 @@
 package User.Model;
 
+import java.util.Objects;
+import java.util.UUID;
+
 public class User {
     private String username;
     private String displayname;
     private String passwordHash;
     private String statusMessage;
     private String profileDescription;
-    private String profilePicturePath;
+    private UUID profilePictureUUID;
     private ContactData contactData;
 
-    public User(String username, String displayname, String passwordHash, String statusMessage, String profileDescription, String profilePicturePath, ContactData contactData) {
+    public User(String username, String displayname, String passwordHash, String statusMessage, String profileDescription, UUID profilePictureUUID, ContactData contactData) {
         this.username = username;
         this.displayname = displayname;
         this.passwordHash = passwordHash;
         this.statusMessage = statusMessage;
         this.profileDescription = profileDescription;
-        this.profilePicturePath = profilePicturePath;
+        this.profilePictureUUID = profilePictureUUID;
         this.contactData = contactData;
     }
 
@@ -59,12 +62,12 @@ public class User {
         this.profileDescription = profileDescription;
     }
 
-    public String getProfilePicturePath() {
-        return profilePicturePath;
+    public UUID getProfilePictureUUID() {
+        return profilePictureUUID;
     }
 
-    public void setProfilePicturePath(String profilePicturePath) {
-        this.profilePicturePath = profilePicturePath;
+    public void setProfilePictureUUI(UUID profilePictureUUID) {
+        this.profilePictureUUID = profilePictureUUID;
     }
 
     public ContactData getContactData() {
@@ -74,4 +77,30 @@ public class User {
     public void setContactData(ContactData contactData) {
         this.contactData = contactData;
     }
+
+	@Override
+	public String toString() {
+		return "User{" +
+			"username='" + username + '\'' +
+			", displayname='" + displayname + '\'' +
+			", passwordHash='" + passwordHash + '\'' +
+			", statusMessage='" + statusMessage + '\'' +
+			", profileDescription='" + profileDescription + '\'' +
+			", profilePictureUUID=" + profilePictureUUID +
+			", contactData=" + contactData +
+			'}';
+	}
+
+	@Override
+	public boolean equals(Object o) {
+		if (this == o) return true;
+		if (o == null || getClass() != o.getClass()) return false;
+		User user = (User) o;
+		return Objects.equals(username, user.username) && Objects.equals(displayname, user.displayname) && Objects.equals(passwordHash, user.passwordHash) && Objects.equals(statusMessage, user.statusMessage) && Objects.equals(profileDescription, user.profileDescription) && Objects.equals(profilePictureUUID, user.profilePictureUUID) && Objects.equals(contactData, user.contactData);
+	}
+
+	@Override
+	public int hashCode() {
+		return Objects.hash(username, displayname, passwordHash, statusMessage, profileDescription, profilePictureUUID, contactData);
+	}
 }
