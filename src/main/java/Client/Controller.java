@@ -1,9 +1,9 @@
 package Client;
 
+import User.Model.User;
 import Util.FileMessage;
 import Util.Message;
 import Util.TextMessage;
-import Util.User;
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
 import javafx.collections.ObservableList;
@@ -206,7 +206,7 @@ public class Controller {
 				default -> throw new IllegalStateException("Unexpected value: " + item);
 			}
 
-			boolean isOwn = localUser != null && item.getSender().getIdentifier().equals(localUser.getIdentifier());
+			boolean isOwn = localUser != null && item.getSender().getUsername().equals(localUser.getUsername());
 
 			if (isOwn) {
 				node.setStyle(

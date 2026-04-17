@@ -1,6 +1,6 @@
 package Client;
 
-import Util.User;
+import User.Model.User;
 import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
@@ -21,6 +21,7 @@ public class Main extends Application {
 		Parent root = loader.load();
 
 		Controller controller = loader.getController();
+		// todo: Sobald GUI da ist, veröndern
 		controller.configure(primaryStage, new User("Benutzername"));
 
 		Scene scene = new Scene(root, 500, 650);

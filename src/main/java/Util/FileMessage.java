@@ -18,16 +18,6 @@ public class FileMessage extends Message {
 		return content;
 	}
 
-    @Override
-    public String getDisplayText() {
-        return "";
-    }
-
-    @Override
-    public void send() {
-
-    }
-
     public String getFileName() {
 		return fileName;
 	}

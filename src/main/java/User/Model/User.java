@@ -36,8 +36,11 @@ public class User
     public User() {
 
     }
+	//TODO: Vorübergehend, da sonst fehler
+	public User(String benutzername) {
+	}
 
-    public String getUsername() {
+	public String getUsername() {
         return username;
     }
 

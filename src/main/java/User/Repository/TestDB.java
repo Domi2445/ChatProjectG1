@@ -29,13 +29,11 @@ public class TestDB {
                     );
 
             //  UPDATE
-            user1.setUsername("max"); // hier könntest du weitere Felder ändern
+            user1.setUsername("max");
             repo.updateUser(user1);
             System.out.println("User aktualisiert");
 
-            //  DELETE
-            repo.deleteUser("max");
-            System.out.println("User gelöscht");
+
 
             // CHECK AGAIN
             boolean existsAfter = repo.usernameExists("max");

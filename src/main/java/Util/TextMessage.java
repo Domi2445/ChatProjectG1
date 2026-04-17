@@ -1,5 +1,7 @@
 package Util;
 
+import User.Model.User;
+
 public class TextMessage extends Message {
 	private final String content;
 
