@@ -8,14 +8,7 @@
       <option name="environmentVariables" visible="false" />
     </selectedOptions>
     <option name="WORKING_DIRECTORY" value="$ContentRoot$" />
-    <method v="2">
-      <option name="Make" enabled="true" />
-    </method>
-  </configuration>
-  <configuration default="false" name="Client" type="Application" factoryName="Application" singleton="false">
-    <option name="MAIN_CLASS_NAME" value="Client.Main" />
-    <module name="SocketChat" />
-    <option name="VM_PARAMETERS" value="--enable-native-access=javafx.graphics" />
+	<option name="VM_PARAMETERS" value="--enable-native-access=javafx.graphics" />
     <method v="2">
       <option name="Make" enabled="true" />
     </method>
