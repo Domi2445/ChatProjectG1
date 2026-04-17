@@ -2,6 +2,8 @@ module com.chatproject {
     requires javafx.controls;
     requires javafx.graphics;
     requires javafx.base;
+	requires java.desktop;
+    requires java.net.http;
     requires java.desktop;
     requires java.net.http;
 
@@ -9,4 +11,8 @@ module com.chatproject {
     exports Client;
     exports Server;
     exports Util;
+    exports User.Login;
+	exports Util.Network;
+	exports Util.Network.Messages;
+	exports Util.Network.Notifications;
 }

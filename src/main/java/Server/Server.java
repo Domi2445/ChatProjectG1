@@ -2,6 +2,7 @@ package Server;
 
 import Util.Message;
 import Util.SocketProxy;
+import Util.User;
 
 import java.io.IOException;
 import java.net.ServerSocket;
@@ -14,21 +15,19 @@ import java.util.concurrent.BlockingQueue;
 
 public class Server implements Runnable {
 	private final ServerSocket server;
-
-	private final BlockingQueue<Message> messageBrokerQueue;
+	private final BlockingQueue<Packet> packetBrokerQueue;
 	private final List<SocketProxy> clients;
 
 	public Server(int port) throws IOException {
 		server = new ServerSocket(port);
-		messageBrokerQueue = new ArrayBlockingQueue<>(32);
+		packetBrokerQueue = new ArrayBlockingQueue<>(32);
 		clients = Collections.synchronizedList(new ArrayList<>());
 	}
 
 	@Override
 	public void run() {
 		new Thread(new MessageBroker(messageBrokerQueue, clients)).start();
-		new Thread(new AudioRelayServer(9000)).start();
-
+        new Thread(new AudioRelayServer(9000)).start();
 		while (true) {
 			try {
 				Socket socket = server.accept();
@@ -37,11 +36,16 @@ public class Server implements Runnable {
 
 				clients.add(client);
 
-				new Thread(new ClientHandler(client, messageBrokerQueue)).start();
+				// todo: Sobald es ein Loginsystem gibt, hier den Benutzernamen des verbindenden Clients übergeben
+				packetBrokerQueue.put(new JoinNotification(new User("Platzhalter")));
+
+				new Thread(new ClientHandler(client, packetBrokerQueue)).start();
 
 			} catch (IOException e) {
-				System.out.println("Fehler beim Verbindungsaufbau:\n" + e);
+				System.out.println("Fehler beim Verbindungsaufbau: " + e);
 				break;
+			} catch (InterruptedException e) {
+				throw new RuntimeException(e);
 			}
 		}
 	}
