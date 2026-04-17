@@ -16,14 +16,32 @@ public class SocketProxy implements AutoCloseable {
 		this.socket = socket;
 		this.out = new ObjectOutputStream(socket.getOutputStream());
 		this.out.flush();
-		this.in  = new ObjectInputStream(socket.getInputStream());
+		this.in = new ObjectInputStream(socket.getInputStream());
 	}
 
 	@Override
 	public void close() throws IOException {
-		in.close();
-		out.close();
-		socket.close();
+		IOException exception = null;
+
+		try {
+			if (socket != null) socket.close();
+		} catch (IOException e) {
+			exception = e;
+		}
+
+		try {
+			if (in != null) in.close();
+		} catch (IOException e) {
+			if (exception == null) exception = e;
+		}
+
+		try {
+			if (out != null) out.close();
+		} catch (IOException e) {
+			if (exception == null) exception = e;
+		}
+
+		if (exception != null) throw exception;
 	}
 
 	public void setStopFlag() {
