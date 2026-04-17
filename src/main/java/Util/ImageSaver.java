@@ -20,6 +20,14 @@ public class ImageSaver {
     }
 
     public Path saveImage(byte[] imageBytes, String originalFileName) throws IOException {
+        if (imageBytes == null || imageBytes.length == 0) {
+            throw new IllegalArgumentException("Image bytes cannot be null or empty.");
+        }
+
+        if (originalFileName == null || originalFileName.isBlank()) {
+            throw new IllegalArgumentException("File name cannot be null or blank.");
+        }
+
         String extension = getExtension(originalFileName);
         String uuid = UUID.randomUUID().toString();
         Path filePath = saveDirectory.resolve(uuid + extension);
