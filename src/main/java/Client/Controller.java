@@ -1,6 +1,11 @@
 package Client;
 
-import Util.*;
+import Util.Message;
+import Util.TextMessage;
+import Util.User;
+import Util.FileMessage;
+import Util.Emoji.EmojiMessage;
+import Util.Emoji.EmojiPicker;
 import javafx.beans.binding.Bindings;
 import javafx.application.Platform;
 import javafx.collections.ObservableList;
@@ -164,6 +169,16 @@ public class Controller {
 		messageTextField.clear();
 	}
 
+	public void sendEmojiMessage(User user, String emoji) {
+		Message message = new EmojiMessage(user, emoji);
+		try {
+			outgoingMessageQueue.put(message);
+		} catch (InterruptedException e) {
+			throw new RuntimeException(e);
+		}
+		messageListView.scrollTo(getMessages().size() - 1);
+	}
+
 	private class MessageCell extends ListCell<Message> {
 		@Override
 		protected void updateItem(Message item, boolean empty) {
@@ -195,8 +210,8 @@ public class Controller {
 							ImageView imageView = new ImageView(image);
 							imageView.setPreserveRatio(true);
 							imageView.fitWidthProperty().bind(Bindings.createDoubleBinding(
-								() -> Math.min(Math.max(getScene().getWidth() - 32, 100.0), image.getWidth()),
-								getScene().widthProperty()
+									() -> Math.min(Math.max(getScene().getWidth() - 32, 100.0), image.getWidth()),
+									getScene().widthProperty()
 							));
 							node = imageView;
 						}
@@ -210,13 +225,13 @@ public class Controller {
 
 			if (isOwn) {
 				node.setStyle(
-					"-fx-background-color: #89b4fa; -fx-text-fill: #1e1e2e; "
-						+ "-fx-padding: 8 12; -fx-background-radius: 14 14 4 14;"
+						"-fx-background-color: #89b4fa; -fx-text-fill: #1e1e2e; "
+								+ "-fx-padding: 8 12; -fx-background-radius: 14 14 4 14;"
 				);
 			} else {
 				node.setStyle(
-					"-fx-background-color: #313244; -fx-text-fill: #cdd6f4; "
-						+ "-fx-padding: 8 12; -fx-background-radius: 14 14 14 4;"
+						"-fx-background-color: #313244; -fx-text-fill: #cdd6f4; "
+								+ "-fx-padding: 8 12; -fx-background-radius: 14 14 14 4;"
 				);
 			}
 

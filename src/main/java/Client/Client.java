@@ -1,6 +1,6 @@
 package Client;
 
-import Util.Message.Message;
+import Util.Message;
 import Util.SocketProxy;
 
 import java.io.IOException;

@@ -1,6 +1,6 @@
 package Util.Emoji;
 
-import Client.View;
+import Client.Controller;
 import Util.User;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
@@ -12,11 +12,11 @@ import java.util.List;
 public class EmojiPicker {
 
     private final User user;
-    private final View view;
+    private final Controller controller;
 
-    public EmojiPicker(User user, View view) {
+    public EmojiPicker(User user, Controller controller) {
         this.user = user;
-        this.view = view;
+        this.controller = controller;
     }
 
     public void open() {
@@ -39,11 +39,12 @@ public class EmojiPicker {
     }
 
     private Button createEmojiButton(Emoji emoji, Stage stage) {
+        final Emoji finalEmoji = emoji;
         Button btn = new Button(emoji.getCharacter());
         btn.setStyle("-fx-font-size: 20;");
 
         btn.setOnAction(e -> {
-            view.getMessages().add(new EmojiMessage(user, emoji.getCharacter()));
+            controller.sendEmojiMessage(user, finalEmoji.getCharacter());
             stage.close();
         });
 
