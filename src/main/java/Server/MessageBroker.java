@@ -1,5 +1,6 @@
 package Server;
 
+import Util.Message.DeleteMessage;
 import Util.Message.Message;
 import Util.Message.TextMessage;
 import Util.SocketProxy;
@@ -36,6 +37,10 @@ public class MessageBroker implements Runnable {
 	}
 
 	private Message handleMessage(Message message) {
+		if (message instanceof DeleteMessage deleteMessage) {
+			return handleDeleteMessage(deleteMessage);
+		}
+
 		if (message instanceof TextMessage textMessage) {
 			return handleTextMessage(textMessage);
 		}
@@ -72,6 +77,21 @@ public class MessageBroker implements Runnable {
 		);
 		messagesById.put(editedMessage.getMessageId(), editedMessage);
 		return editedMessage;
+	}
+
+	private Message handleDeleteMessage(DeleteMessage deleteMessage) {
+		Message oldMessage = messagesById.get(deleteMessage.getMessageId());
+
+		if (oldMessage == null) {
+			return null;
+		}
+
+		if (!oldMessage.getSender().getIdentifier().equals(deleteMessage.getSender().getIdentifier())) {
+			return null;
+		}
+
+		messagesById.remove(deleteMessage.getMessageId());
+		return deleteMessage;
 	}
 
 	private void sendToAllClients(Message message) {

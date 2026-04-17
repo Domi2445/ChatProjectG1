@@ -1,6 +1,7 @@
 package Client;
 
 import Util.Emoji.EmojiMessage;
+import Util.Message.DeleteMessage;
 import Util.Message.FileMessage;
 import Util.Message.Message;
 import Util.Message.TextMessage;
@@ -106,6 +107,11 @@ public class Controller {
 	}
 
 	private void showIncomingMessage(Message message) {
+		if (message instanceof DeleteMessage deleteMessage) {
+			removeMessage(deleteMessage.getMessageId());
+			return;
+		}
+
 		int index = findMessageIndex(message.getMessageId());
 
 		if (index >= 0) {
@@ -116,6 +122,20 @@ public class Controller {
 
 		getMessages().add(message);
 		messageListView.scrollTo(getMessages().size() - 1);
+	}
+
+	private void removeMessage(String messageId) {
+		int index = findMessageIndex(messageId);
+
+		if (index < 0) {
+			return;
+		}
+
+		if (editingMessage != null && editingMessage.getMessageId().equals(messageId)) {
+			stopEditing();
+		}
+
+		getMessages().remove(index);
 	}
 
 	private int findMessageIndex(String messageId) {
@@ -212,6 +232,14 @@ public class Controller {
 		sendButton.setText("Senden");
 	}
 
+	private void deleteMessage(Message message) {
+		sendToQueue(new DeleteMessage(message.getMessageId(), localUser));
+
+		if (editingMessage != null && editingMessage.getMessageId().equals(message.getMessageId())) {
+			stopEditing();
+		}
+	}
+
 	private boolean isOwnMessage(Message message) {
 		return localUser != null
 				&& message.getSender().getIdentifier().equals(localUser.getIdentifier());
@@ -303,13 +331,20 @@ public class Controller {
 		}
 
 		private ContextMenu createContextMenu(Message item, boolean isOwn) {
-			if (!isOwn || !(item instanceof TextMessage textMessage)) {
+			if (!isOwn) {
 				return null;
 			}
 
-			MenuItem editItem = new MenuItem("Bearbeiten");
-			editItem.setOnAction(event -> startEditing(textMessage));
-			return new ContextMenu(editItem);
+			MenuItem deleteItem = new MenuItem("Löschen");
+			deleteItem.setOnAction(event -> deleteMessage(item));
+
+			if (item instanceof TextMessage textMessage) {
+				MenuItem editItem = new MenuItem("Bearbeiten");
+				editItem.setOnAction(event -> startEditing(textMessage));
+				return new ContextMenu(editItem, deleteItem);
+			}
+
+			return new ContextMenu(deleteItem);
 		}
 	}
 }
