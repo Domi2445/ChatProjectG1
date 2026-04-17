@@ -20,9 +20,9 @@ public class PacketBroker implements Runnable {
 
 	@Override
 	public void run() {
-		while (true) {
-			ArrayList<SocketProxy> clientsToRemove = new ArrayList<>();
+		ArrayList<SocketProxy> clientsToRemove = new ArrayList<>();
 
+		while (true) {
 			try {
 				Packet packet = packetBrokerQueue.take();
 
