@@ -1,13 +1,33 @@
 package User.Model;
 
-import jakarta.persistence.Embeddable;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
 
-@Embeddable
+@Entity
+@Table(name = "contact_data")
 public class ContactData {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column
     private String firstname;
+
+    @Column
     private String lastname;
+
+    @Column
     private String email;
+
+    @Column
     private long discordId;
+
+    @Column
     private String website;
 
     public ContactData(String firstname, String lastname, String email, long discordId, String website) {
@@ -20,6 +40,14 @@ public class ContactData {
 
     public ContactData() {
 
+    }
+
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
     }
 
     public String getFirstname() {

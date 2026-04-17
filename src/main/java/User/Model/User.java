@@ -19,7 +19,8 @@ public class User
     private String profileDescription;
     @Column
     private String profilePicturePath;
-    @Embedded
+    @OneToOne(cascade = CascadeType.ALL, orphanRemoval = true) //1:1 beziehung ein datensatz gehört genau einem User
+    @JoinColumn(name = "contact_data_id") //Nichts anderes wie ein Join
     private ContactData contactData;
 
     public User(String username, String displayname, String passwordHash, String statusMessage, String profileDescription, String profilePicturePath, ContactData contactData) {

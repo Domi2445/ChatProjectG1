@@ -11,5 +11,7 @@ public interface UserRepository {
 
     void updateUser(User user);
 
+    void deleteUser(String username);
+
     boolean usernameExists(String username);
 }

@@ -7,6 +7,9 @@
     <persistence-unit name="chat-oracle" transaction-type="RESOURCE_LOCAL">
         <provider>org.hibernate.jpa.HibernatePersistenceProvider</provider>
 
+        <class>User.Model.User</class>
+        <class>User.Model.ContactData</class>
+
         <properties>
             <property name="jakarta.persistence.jdbc.driver" value="oracle.jdbc.OracleDriver"/>
             <property name="jakarta.persistence.jdbc.url" value="jdbc:oracle:thin:@//db.freesql.com:1521/26ai_un3c1"/>
