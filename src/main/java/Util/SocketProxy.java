@@ -15,6 +15,7 @@ public class SocketProxy implements AutoCloseable {
 	public SocketProxy(Socket socket) throws IOException {
 		this.socket = socket;
 		this.out = new ObjectOutputStream(socket.getOutputStream());
+		this.out.flush();
 		this.in  = new ObjectInputStream(socket.getInputStream());
 	}
 
