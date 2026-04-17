@@ -26,6 +26,7 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 
@@ -166,7 +167,8 @@ public class Controller {
 			fileType = FileMessage.FileType.FILE;
 		}
 
-		Message message = new FileMessage(localUser, bytes, fileName, fileType);
+		UUID uuid = UUID.randomUUID();
+		Message message = new FileMessage(localUser, bytes, uuid, fileName, fileType);
 
 		try {
 			outPacketQueue.put(message);
