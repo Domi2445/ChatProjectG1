@@ -1,119 +1,134 @@
 package User.Repository;
 
+import DBUtil.Connection;
 import User.Model.User;
 
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.EntityManagerFactory;
+import jakarta.persistence.EntityTransaction;
 import jakarta.persistence.NoResultException;
 import jakarta.persistence.NonUniqueResultException;
-import jakarta.persistence.Persistence;
 
-import java.util.NoSuchElementException;
 import java.util.Optional;
 
 public class JPAUserRepository implements UserRepository {
 
-    private EntityManagerFactory emf;
-    private EntityManager entityManager;
+	@Override
+	public Optional<User> findByUsername(String username) {
+		validateUsername(username);
 
-    public JPAUserRepository() {
-        this.emf = Persistence.createEntityManagerFactory("chat-oracle");
-        this.entityManager = emf.createEntityManager();
-    }
+		try (EntityManager entityManager = Connection.createEntityManager()) {
+			User user = entityManager.createQuery(
+					"SELECT u FROM User u WHERE u.username = :username", User.class)
+				.setParameter("username", username)
+				.getSingleResult();
+			return Optional.of(user);
+		} catch (NoResultException e) {
+			return Optional.empty();
+		} catch (NonUniqueResultException e) {
+			throw new RepositoryException("Mehrere User mit gleichem Username gefunden: " + username, e);
+		} catch (RuntimeException e) {
+			throw new RepositoryException("User konnte nicht geladen werden: " + username, e);
+		}
+	}
 
-    @Override
-    public Optional<User> findByUsername(String username) {
-        if (username == null) {
-            throw new IllegalArgumentException("Username darf nicht null sein");
-        }
+	@Override
+	public void createUser(User user) {
+		validateUser(user);
 
-        try {
-            User user = entityManager.createQuery(
-                            "SELECT u FROM User u WHERE u.username = :username", User.class)
-                    .setParameter("username", username)
-                    .getSingleResult();
+		if (usernameExists(user.getUsername())) {
+			throw new UsernameAlreadyExistsException(user.getUsername());
+		}
 
-            return Optional.of(user);
-        } catch (NoResultException e)
-        {
-            return Optional.empty();
-        } catch (NonUniqueResultException e)
-        {
-            throw new IllegalStateException("Mehrere User mit gleichem Username gefunden");
-        }
-    }
+		executeInTransaction(entityManager -> entityManager.persist(user),
+			"User konnte nicht erstellt werden: " + user.getUsername());
+	}
 
-    @Override
-    public void createUser(User user)
-    {
-        if (user == null || user.getUsername() == null)
-        {
-            throw new IllegalArgumentException("User oder Username darf nicht null sein");
-        }
+	@Override
+	public void updateUser(User user) {
+		validateUser(user);
 
-        if (usernameExists(user.getUsername()))
-        {
-            throw new IllegalArgumentException("Username existiert bereits");
-        }
+		executeInTransaction(entityManager -> {
+			User existing = entityManager.find(User.class, user.getUsername());
+			if (existing == null) {
+				throw new UserNotFoundException(user.getUsername());
+			}
+			entityManager.merge(user);
+		}, "User konnte nicht aktualisiert werden: " + user.getUsername());
+	}
 
-        entityManager.getTransaction().begin();
-        entityManager.persist(user);
-        entityManager.getTransaction().commit();
-    }
+	@Override
+	public void deleteUser(String username) {
+		validateUsername(username);
 
-    @Override
-    public void updateUser(User user)
-    {
-        if (user == null || user.getUsername() == null)
-        {
-            throw new IllegalArgumentException("User oder Username darf nicht null sein");
-        }
+		executeInTransaction(entityManager -> {
+			User user = entityManager.find(User.class, username);
+			if (user == null) {
+				throw new UserNotFoundException(username);
+			}
+			entityManager.remove(user);
+		}, "User konnte nicht gelöscht werden: " + username);
+	}
 
-        // Prüfen ob genau dieser User existiert
-        User existing = entityManager.find(User.class, user.getUsername());
-        if (existing == null) {
-            throw new NoSuchElementException("User existiert nicht");
-        }
+	@Override
+	public boolean usernameExists(String username) {
+		validateUsername(username);
 
-        entityManager.getTransaction().begin();
-        entityManager.merge(user);
-        entityManager.getTransaction().commit();
-    }
+		try (EntityManager entityManager = Connection.createEntityManager()) {
+			Long count = entityManager.createQuery(
+					"SELECT COUNT(u) FROM User u WHERE u.username = :username", Long.class)
+				.setParameter("username", username)
+				.getSingleResult();
+			return count != null && count > 0;
+		} catch (RuntimeException e) {
+			throw new RepositoryException("Username-Prüfung fehlgeschlagen: " + username, e);
+		}
+	}
 
-    @Override
-    public void deleteUser(String username)
-    {
-        if (username == null)
-        {
-            throw new IllegalArgumentException("Username darf nicht null sein");
-        }
+	private void executeInTransaction(EntityWork work, String errorMessage) {
+		EntityManager entityManager = Connection.createEntityManager();
+		EntityTransaction transaction = entityManager.getTransaction();
 
-        // robuster als Query → direkt über Primary Key
-        User user = entityManager.find(User.class, username);
-        if (user == null)
-        {
-            throw new NoSuchElementException("User existiert nicht");
-        }
+		try {
+			transaction.begin();
+			work.run(entityManager);
+			transaction.commit();
+		} catch (RuntimeException e) {
+			rollbackQuietly(transaction);
+			throw translateRuntimeException(errorMessage, e);
+		} finally {
+			if (entityManager.isOpen()) {
+				entityManager.close();
+			}
+		}
+	}
 
-        entityManager.getTransaction().begin();
-        entityManager.remove(user);
-        entityManager.getTransaction().commit();
-    }
+	private RuntimeException translateRuntimeException(String errorMessage, RuntimeException e) {
+		if (e instanceof UsernameAlreadyExistsException || e instanceof UserNotFoundException || e instanceof IllegalArgumentException || e instanceof RepositoryException) {
+			return e;
+		}
+		return new RepositoryException(errorMessage, e);
+	}
 
-    //
-    @Override
-    public boolean usernameExists(String username)
-    {
-        if (username == null)
-        {
-            throw new IllegalArgumentException("Username darf nicht null sein");
-        }
+	private void rollbackQuietly(EntityTransaction transaction) {
+		if (transaction != null && transaction.isActive()) {
+			transaction.rollback();
+		}
+	}
 
-        Long count = entityManager.createQuery(
-                        "SELECT COUNT(u) FROM User u WHERE u.username = :username", Long.class)
-                .setParameter("username", username)
-                .getSingleResult();
+	private void validateUser(User user) {
+		if (user == null || user.getUsername() == null) {
+			throw new IllegalArgumentException("User oder Username darf nicht null sein");
+		}
+	}
 
-        return count > 0;
-    }
+	private void validateUsername(String username) {
+		if (username == null) {
+			throw new IllegalArgumentException("Username darf nicht null sein");
+		}
+	}
+
+	@FunctionalInterface
+	private interface EntityWork {
+		void run(EntityManager entityManager);
+	}
 }
