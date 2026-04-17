@@ -1,7 +1,9 @@
 package Util.Emoji;
 
-import Client.View;
+import Util.Network.Messages.EmojiMessage;
+import Util.Network.Messages.Message;
 import Util.User;
+import javafx.collections.ObservableList;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.layout.FlowPane;
@@ -10,13 +12,12 @@ import javafx.stage.Stage;
 import java.util.List;
 
 public class EmojiPicker {
-
     private final User user;
-    private final View view;
+	private final ObservableList<Message> messages;
 
-    public EmojiPicker(User user, View view) {
+    public EmojiPicker(User user, ObservableList<Message> messages) {
         this.user = user;
-        this.view = view;
+        this.messages = messages;
     }
 
     public void open() {
@@ -43,7 +44,7 @@ public class EmojiPicker {
         btn.setStyle("-fx-font-size: 20;");
 
         btn.setOnAction(e -> {
-            view.getMessages().add(new EmojiMessage(user, emoji.getCharacter()));
+            messages.add(new EmojiMessage(user, emoji.getCharacter()));
             stage.close();
         });
 

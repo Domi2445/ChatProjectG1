@@ -12,4 +12,7 @@ module com.chatproject {
     exports Server;
     exports Util;
     exports Util.Login;
+	exports Util.Network;
+	exports Util.Network.Messages;
+	exports Util.Network.Notifications;
 }

@@ -1,8 +1,12 @@
 package Client;
 
-import Util.FileMessage;
-import Util.Message;
-import Util.TextMessage;
+import Util.Network.Messages.FileMessage;
+import Util.Network.Messages.Message;
+import Util.Network.Messages.TextMessage;
+import Util.Network.Notifications.JoinNotification;
+import Util.Network.Notifications.LeaveNotification;
+import Util.Network.Notifications.Notification;
+import Util.Network.Packet;
 import Util.User;
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
@@ -28,15 +32,15 @@ import java.util.concurrent.BlockingQueue;
 public class Controller {
 	public static final int MAX_FILE_SIZE = 1_000_000;
 
-	private final BlockingQueue<Message> outgoingMessageQueue;
-	private final BlockingQueue<Message> incomingMessageQueue;
+	private final BlockingQueue<Packet> outPacketQueue;
+	private final BlockingQueue<Packet> inPacketQueue;
 
 	private Client client;
 	private User localUser;
 	private Stage stage;
 
 	@FXML
-	private ListView<Message> messageListView;
+	private ListView<Packet> messageListView;
 
 	@FXML
 	private TextField messageTextField;
@@ -48,8 +52,8 @@ public class Controller {
 	private Button uploadButton;
 
 	public Controller() {
-		this.outgoingMessageQueue = new ArrayBlockingQueue<>(4);
-		this.incomingMessageQueue = new ArrayBlockingQueue<>(4);
+		this.outPacketQueue = new ArrayBlockingQueue<>(4);
+		this.inPacketQueue = new ArrayBlockingQueue<>(4);
 	}
 
 	@FXML
@@ -67,7 +71,7 @@ public class Controller {
 
 	public void connectAndRun(String ip, int port) {
 		try {
-			client = new Client(ip, port, outgoingMessageQueue, incomingMessageQueue);
+			client = new Client(ip, port, outPacketQueue, inPacketQueue);
 			Thread clientThread = new Thread(client, "ClientThread");
 			clientThread.setDaemon(true);
 			clientThread.start();
@@ -75,11 +79,21 @@ public class Controller {
 			Thread listener = new Thread(() -> {
 				while (true) {
 					try {
-						Message message = incomingMessageQueue.take();
-						Platform.runLater(() -> {
-							getMessages().add(message);
-							messageListView.scrollTo(getMessages().size() - 1);
-						});
+						Packet packet = inPacketQueue.take();
+						switch (packet) {
+							case Message message -> Platform.runLater(() -> {
+								getMessages().add(message);
+								messageListView.scrollTo(getMessages().size() - 1);
+							});
+							case Notification notification -> Platform.runLater(() -> {
+								getMessages().add(notification);
+								messageListView.scrollTo(getMessages().size() - 1);
+								handleNotification(notification);
+							});
+							case null, default -> throw new IllegalStateException("Unbekanntes Paket empfangen");
+						}
+
+
 					} catch (InterruptedException e) {
 						break;
 					}
@@ -95,7 +109,7 @@ public class Controller {
 		}
 	}
 
-	private ObservableList<Message> getMessages() {
+	private ObservableList<Packet> getMessages() {
 		return messageListView.getItems();
 	}
 
@@ -105,7 +119,7 @@ public class Controller {
 			Message message = new TextMessage(localUser, text);
 
 			try {
-				outgoingMessageQueue.put(message);
+				outPacketQueue.put(message);
 			} catch (InterruptedException ex) {
 				throw new RuntimeException(ex);
 			}
@@ -155,7 +169,7 @@ public class Controller {
 		Message message = new FileMessage(localUser, bytes, fileName, fileType);
 
 		try {
-			outgoingMessageQueue.put(message);
+			outPacketQueue.put(message);
 		} catch (InterruptedException e) {
 			throw new RuntimeException(e);
 		}
@@ -164,68 +178,112 @@ public class Controller {
 		messageTextField.clear();
 	}
 
-	private class MessageCell extends ListCell<Message> {
+	private void handleNotification(Notification notification) {
+		switch (notification) {
+			case JoinNotification join -> {
+				System.out.println(join.getUser() + " ist beigetreten");
+				// todo(team-view): in der View einen neuen Nutzer anzeigen (z. B. In Seitenleiste oder direkt im Chat)
+			}
+			case LeaveNotification leave -> {
+				System.out.println(leave.getUser() + " hat verlassen");
+				// todo(team-view): in der View den angezeigten Benutzer entfernen
+			}
+			case null, default -> throw new IllegalStateException("Unbekannte Systemnachricht");
+		}
+	}
+
+	private class MessageCell extends ListCell<Packet> {
 		@Override
-		protected void updateItem(Message item, boolean empty) {
+		protected void updateItem(Packet item, boolean empty) {
 			super.updateItem(item, empty);
+
+			setText(null);
+			setGraphic(null);
+			setStyle("-fx-background-color: transparent; -fx-padding: 0;");
+
 			if (empty || item == null) {
-				setGraphic(null);
-				setStyle("-fx-background-color: transparent;");
 				return;
 			}
 
+			switch (item) {
+				case Message message -> setGraphic(renderMessageBubble(message));
+				case Notification notification -> renderNotificationLine(notification);
+				default -> throw new IllegalStateException("Unbekannte Servernachricht: " + item);
+			}
+		}
+
+		private HBox renderMessageBubble(Message message) {
 			Node node;
 
-			switch (item) {
+			switch (message) {
 				case TextMessage textMessage -> {
 					Label label = new Label(textMessage.getContent());
 					label.setWrapText(true);
 					label.setMaxWidth(300);
 					node = label;
 				}
-				case FileMessage fileMessage -> {
-					FileMessage.FileType fileType = fileMessage.getFileType();
-					switch (fileType) {
-						case FILE -> {
-							Label label = new Label("Datei: " + fileMessage.getFileName());
-							node = label;
-						}
-						case IMAGE -> {
-							Image image = new Image(new ByteArrayInputStream(fileMessage.getContent()));
-							ImageView imageView = new ImageView(image);
-							imageView.setPreserveRatio(true);
-							imageView.fitWidthProperty().bind(Bindings.createDoubleBinding(
-								() -> Math.min(Math.max(getScene().getWidth() - 32, 100.0), image.getWidth()),
-								getScene().widthProperty()
-							));
-							node = imageView;
-						}
-						default -> throw new IllegalStateException("Unbekannter Dateityp: " + fileType);
-					}
-				}
-				default -> throw new IllegalStateException("Unexpected value: " + item);
+				case FileMessage fileMessage -> node = createFileNode(fileMessage);
+				case null, default -> throw new IllegalStateException("Unerwarteter Wert: " + message);
 			}
 
-			boolean isOwn = localUser != null && item.getSender().getIdentifier().equals(localUser.getIdentifier());
-
-			if (isOwn) {
-				node.setStyle(
-					"-fx-background-color: #89b4fa; -fx-text-fill: #1e1e2e; "
-						+ "-fx-padding: 8 12; -fx-background-radius: 14 14 4 14;"
-				);
-			} else {
-				node.setStyle(
-					"-fx-background-color: #313244; -fx-text-fill: #cdd6f4; "
-						+ "-fx-padding: 8 12; -fx-background-radius: 14 14 14 4;"
-				);
-			}
+			boolean isOwn = localUser != null && message.getSender().getUsername().equals(localUser.getUsername());
+			node.setStyle(getBubbleStyle(isOwn));
 
 			HBox container = new HBox(node);
-			container.setPadding(new Insets(2, 10, 2, 10));
 			container.setAlignment(isOwn ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT);
+			container.setPadding(new Insets(2, 10, 2, 10));
+			return container;
+		}
 
-			setGraphic(container);
-			setStyle("-fx-background-color: transparent; -fx-padding: 0;");
+		private Node createFileNode(FileMessage fileMessage) {
+			return switch (fileMessage.getFileType()) {
+				case FILE -> {
+					Label label = new Label("Datei: " + fileMessage.getFileName());
+					// todo(team-view): Datei herunterladen Button
+					yield label;
+				}
+				case IMAGE -> {
+					Image image = new Image(new ByteArrayInputStream(fileMessage.getContent()));
+					ImageView imageView = new ImageView(image);
+					imageView.setPreserveRatio(true);
+					imageView.fitWidthProperty().bind(Bindings.createDoubleBinding(
+						() -> Math.clamp(getScene().getWidth() - 32, 100.0, image.getWidth()),
+						getScene().widthProperty()
+					));
+					yield imageView;
+				}
+			};
+		}
+
+		private String getBubbleStyle(boolean isOwn) {
+			if (isOwn) {
+				return "-fx-background-color: #89b4fa; -fx-text-fill: #1e1e2e; "
+					+ "-fx-padding: 8 12; -fx-background-radius: 14 14 4 14;";
+			}
+			return "-fx-background-color: #313244; -fx-text-fill: #cdd6f4; "
+				+ "-fx-padding: 8 12; -fx-background-radius: 14 14 14 4;";
+		}
+
+		private void renderNotificationLine(Notification notification) {
+			String text;
+			String color;
+
+			switch (notification) {
+				case JoinNotification join -> {
+					text = join.getUser().getUsername() + " ist beigetreten";
+					color = "#89b4fa";
+				}
+				case LeaveNotification leave -> {
+					text = leave.getUser().getUsername() + " hat verlassen";
+					color = "#f38ba8";
+				}
+				case null, default -> throw new IllegalStateException("Unerwarteter Wert: " + notification);
+			}
+
+			setText(text);
+			setAlignment(Pos.CENTER);
+			setStyle("-fx-background-color: transparent; -fx-padding: 4 0; "
+				+ "-fx-text-fill: " + color + "; -fx-font-style: italic;");
 		}
 	}
 }

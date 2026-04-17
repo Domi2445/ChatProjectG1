@@ -14,16 +14,13 @@ public class EmojiService {
     private static final String API_URL = "https://api.api-ninjas.com/v1/emoji?name=face";
 
     public List<Emoji> loadEmojis() {
-        try {
-            HttpClient client = HttpClient.newHttpClient();
-
+        try (HttpClient client = HttpClient.newHttpClient()) {
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(API_URL))
                     .header("X-Api-Key", API_KEY)
                     .build();
 
-            HttpResponse<String> response =
-                    client.send(request, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
             return parseResponse(response.body());
 

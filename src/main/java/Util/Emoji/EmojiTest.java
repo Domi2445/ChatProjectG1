@@ -7,7 +7,7 @@ public class EmojiTest {
         EmojiService service = new EmojiService();
         var emojis = service.loadEmojis();
 
-        emojis.stream().forEach(e -> System.out.println(e.getCharacter()));
+        emojis.forEach(e -> System.out.println(e.getCharacter()));
 
         var emojisGeladen = service.loadEmojis();
     }
