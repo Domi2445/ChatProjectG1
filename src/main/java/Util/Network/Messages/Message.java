@@ -3,7 +3,7 @@ package Util.Network.Messages;
 import Util.Network.Packet;
 import Util.User;
 
-/// Oberklasse für alle Benutzernachrichten
+/// Basisklasse für alle Benutzernachrichten
 public abstract class Message extends Packet {
     private final User sender;
 
