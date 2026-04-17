@@ -1,5 +1,7 @@
 package User.Model;
 
+import java.util.Objects;
+
 public class ContactData {
     private String firstname;
     private String lastname;
@@ -54,4 +56,28 @@ public class ContactData {
     public void setWebsite(String website) {
         this.website = website;
     }
+
+	@Override
+	public String toString() {
+		return "ContactData{" +
+			"firstname='" + firstname + '\'' +
+			", lastname='" + lastname + '\'' +
+			", email='" + email + '\'' +
+			", discordId=" + discordId +
+			", website='" + website + '\'' +
+			'}';
+	}
+
+	@Override
+	public boolean equals(Object o) {
+		if (this == o) return true;
+		if (o == null || getClass() != o.getClass()) return false;
+		ContactData that = (ContactData) o;
+		return discordId == that.discordId && Objects.equals(firstname, that.firstname) && Objects.equals(lastname, that.lastname) && Objects.equals(email, that.email) && Objects.equals(website, that.website);
+	}
+
+	@Override
+	public int hashCode() {
+		return Objects.hash(firstname, lastname, email, discordId, website);
+	}
 }

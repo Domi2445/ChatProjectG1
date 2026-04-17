@@ -19,7 +19,7 @@ public class BCryptWrapper {
             return BCrypt.checkpw(plainText, hashedPwd);
         } catch (Exception e)
         {
-            System.out.println("BCrpytWrapper - "+e);
+            System.out.println("BCryptWrapper - "+e);
         }
         return false;
     }
