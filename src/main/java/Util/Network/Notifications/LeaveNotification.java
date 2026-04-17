@@ -3,9 +3,8 @@ package Util.Network.Notifications;
 import Util.User;
 
 import java.io.Serial;
-import java.io.Serializable;
 
-public class LeaveNotification extends Notification implements Serializable {
+public class LeaveNotification extends Notification {
 	@Serial
 	private static final long serialVersionUID = 1L;
 

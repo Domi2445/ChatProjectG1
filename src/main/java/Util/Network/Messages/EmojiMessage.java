@@ -2,7 +2,12 @@ package Util.Network.Messages;
 
 import Util.User;
 
+import java.io.Serial;
+
 public class EmojiMessage extends Message {
+	@Serial
+	private static final long serialVersionUID = 1L;
+
     private final String emoji;
 
     public EmojiMessage(User sender, String emoji) {

@@ -3,10 +3,8 @@ package Util.Network.Messages;
 import Util.Network.Packet;
 import Util.User;
 
-import java.io.Serializable;
-
 /// Oberklasse für alle Benutzernachrichten
-public abstract class Message extends Packet implements Serializable {
+public abstract class Message extends Packet {
     private final User sender;
 
     public Message(User sender) {
