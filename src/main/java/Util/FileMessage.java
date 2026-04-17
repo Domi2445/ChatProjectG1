@@ -1,5 +1,7 @@
 package Util;
 
+import Util.Message;
+
 public class FileMessage extends Message {
     private final byte[] content;
     private final String fileName;
