@@ -8,6 +8,7 @@ import Util.Network.Notifications.LeaveNotification;
 import Util.Network.Notifications.Notification;
 import Util.Network.Packet;
 import Util.User;
+import VideoCall.AudioCall;
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
 import javafx.collections.ObservableList;
@@ -30,260 +31,226 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 
 public class Controller {
-	public static final int MAX_FILE_SIZE = 1_000_000;
 
-	private final BlockingQueue<Packet> outPacketQueue;
-	private final BlockingQueue<Packet> inPacketQueue;
+    public static final int MAX_FILE_SIZE = 1_000_000;
 
-	private Client client;
-	private User localUser;
-	private Stage stage;
+    private final BlockingQueue<Packet> outPacketQueue;
+    private final BlockingQueue<Packet> inPacketQueue;
 
-	@FXML
-	private ListView<Packet> messageListView;
+    private Client client;
+    private User localUser;
+    private Stage stage;
 
-	@FXML
-	private TextField messageTextField;
+    @FXML private ListView<Packet> messageListView;
+    @FXML private TextField messageTextField;
+    @FXML private Button sendButton;
+    @FXML private Button uploadButton;
+    @FXML private Button videoCallButton;
 
-	@FXML
-	private Button sendButton;
+    // 🔊 AudioCall Feature
+    private AudioCall audioCall = new AudioCall();
+    private boolean inCall = false;
 
-	@FXML
-	private Button uploadButton;
+    private static final String RELAY_IP = "127.0.0.1";
+    private static final int RELAY_PORT = 9000;
+    private static final int MY_PORT = 7000;
 
-	public Controller() {
-		this.outPacketQueue = new ArrayBlockingQueue<>(4);
-		this.inPacketQueue = new ArrayBlockingQueue<>(4);
-	}
+    public Controller() {
+        this.outPacketQueue = new ArrayBlockingQueue<>(4);
+        this.inPacketQueue = new ArrayBlockingQueue<>(4);
+    }
 
-	@FXML
-	private void initialize() {
-		messageListView.setCellFactory(lv -> new MessageCell());
-		sendButton.setOnAction(e -> sendMessage());
-		messageTextField.setOnAction(e -> sendMessage());
-		uploadButton.setOnAction(e -> sendFile());
-	}
+    @FXML
+    private void initialize() {
+        messageListView.setCellFactory(lv -> new MessageCell());
 
-	public void configure(Stage stage, User user) {
-		this.stage = stage;
-		this.localUser = user;
-	}
+        sendButton.setOnAction(e -> sendMessage());
+        messageTextField.setOnAction(e -> sendMessage());
+        uploadButton.setOnAction(e -> sendFile());
+        videoCallButton.setOnAction(e -> handleCallButton());
+    }
 
-	public void connectAndRun(String ip, int port) {
-		try {
-			client = new Client(ip, port, outPacketQueue, inPacketQueue);
-			Thread clientThread = new Thread(client, "ClientThread");
-			clientThread.setDaemon(true);
-			clientThread.start();
+    public void configure(Stage stage, User user) {
+        this.stage = stage;
+        this.localUser = user;
+    }
 
-			Thread listener = new Thread(() -> {
-				while (true) {
-					try {
-						Packet packet = inPacketQueue.take();
-						switch (packet) {
-							case Message message -> Platform.runLater(() -> {
-								getMessages().add(message);
-								messageListView.scrollTo(getMessages().size() - 1);
-							});
-							case Notification notification -> Platform.runLater(() -> {
-								getMessages().add(notification);
-								messageListView.scrollTo(getMessages().size() - 1);
-								handleNotification(notification);
-							});
-							case null, default -> throw new IllegalStateException("Unbekanntes Paket empfangen");
-						}
+    public void connectAndRun(String ip, int port) {
+        try {
+            client = new Client(ip, port, outPacketQueue, inPacketQueue);
 
+            Thread clientThread = new Thread(client, "ClientThread");
+            clientThread.setDaemon(true);
+            clientThread.start();
 
-					} catch (InterruptedException e) {
-						break;
-					}
-				}
-			}, "IncomingMessageListener");
-			listener.setDaemon(true);
-			listener.start();
+            Thread listener = new Thread(() -> {
+                while (true) {
+                    try {
+                        Packet packet = inPacketQueue.take();
 
-		} catch (IOException e) {
-			Platform.runLater(() ->
-				getMessages().add(new TextMessage(new User("System"), "Verbindung fehlgeschlagen: " + e.getMessage()))
-			);
-		}
-	}
+                        switch (packet) {
+                            case Message message -> Platform.runLater(() -> {
+                                getMessages().add(message);
+                                messageListView.scrollTo(getMessages().size() - 1);
+                            });
 
-	private ObservableList<Packet> getMessages() {
-		return messageListView.getItems();
-	}
+                            case Notification notification -> Platform.runLater(() -> {
+                                getMessages().add(notification);
+                                messageListView.scrollTo(getMessages().size() - 1);
+                                handleNotification(notification);
+                            });
 
-	private void sendMessage() {
-		String text = messageTextField.getText().trim();
-		if (!text.isEmpty()) {
-			Message message = new TextMessage(localUser, text);
+                            case null, default -> throw new IllegalStateException("Unbekanntes Paket empfangen");
+                        }
 
-			try {
-				outPacketQueue.put(message);
-			} catch (InterruptedException ex) {
-				throw new RuntimeException(ex);
-			}
+                    } catch (InterruptedException e) {
+                        break;
+                    }
+                }
+            }, "IncomingMessageListener");
 
-			messageListView.scrollTo(getMessages().size() - 1);
-			messageTextField.clear();
-		}
-	}
+            listener.setDaemon(true);
+            listener.start();
 
-	private void sendFile() {
-		FileChooser fileChooser = new FileChooser();
-		File selectedFile = fileChooser.showOpenDialog(stage);
+        } catch (IOException e) {
+            Platform.runLater(() ->
+                    getMessages().add(
+                            new TextMessage(new User("System"),
+                                    "Verbindung fehlgeschlagen: " + e.getMessage()))
+            );
+        }
+    }
 
-		if (selectedFile == null || !selectedFile.isFile()) {
-			return;
-		}
+    private ObservableList<Packet> getMessages() {
+        return messageListView.getItems();
+    }
 
-		if (selectedFile.length() > MAX_FILE_SIZE) {
-			Alert alert = new Alert(Alert.AlertType.ERROR);
-			alert.setHeaderText("Die Datei ist zu groß!");
-			alert.setContentText(selectedFile.length() + " Bytes / " + MAX_FILE_SIZE + " Bytes");
-			alert.show();
-			return;
-		}
+    private void sendMessage() {
+        String text = messageTextField.getText().trim();
 
-		byte[] bytes;
+        if (!text.isEmpty()) {
+            Message message = new TextMessage(localUser, text);
 
-		try {
-			bytes = Files.readAllBytes(selectedFile.toPath());
-		} catch (IOException e) {
-			Alert alert = new Alert(Alert.AlertType.ERROR);
-			alert.setHeaderText("Datei konnte nicht geöffnet werden");
-			alert.setContentText(e.toString());
-			alert.show();
-			return;
-		}
+            try {
+                outPacketQueue.put(message);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
 
-		FileMessage.FileType fileType;
-		String fileName = selectedFile.getName();
+            messageListView.scrollTo(getMessages().size() - 1);
+            messageTextField.clear();
+        }
+    }
 
-		if (fileName.endsWith(".png") || fileName.endsWith(".jpg") || fileName.endsWith(".gif") || fileName.endsWith(".bmp")) {
-			fileType = FileMessage.FileType.IMAGE;
-		} else {
-			fileType = FileMessage.FileType.FILE;
-		}
+    private void sendFile() {
+        FileChooser fileChooser = new FileChooser();
+        File selectedFile = fileChooser.showOpenDialog(stage);
 
-		Message message = new FileMessage(localUser, bytes, fileName, fileType);
+        if (selectedFile == null || !selectedFile.isFile()) return;
 
-		try {
-			outPacketQueue.put(message);
-		} catch (InterruptedException e) {
-			throw new RuntimeException(e);
-		}
+        if (selectedFile.length() > MAX_FILE_SIZE) {
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            alert.setHeaderText("Die Datei ist zu groß!");
+            alert.setContentText(selectedFile.length() + " / " + MAX_FILE_SIZE);
+            alert.show();
+            return;
+        }
 
-		messageListView.scrollTo(getMessages().size() - 1);
-		messageTextField.clear();
-	}
+        byte[] bytes;
 
-	private void handleNotification(Notification notification) {
-		switch (notification) {
-			case JoinNotification join -> {
-				System.out.println(join.getUser() + " ist beigetreten");
-				// todo(team-view): in der View einen neuen Nutzer anzeigen (z. B. In Seitenleiste oder direkt im Chat)
-			}
-			case LeaveNotification leave -> {
-				System.out.println(leave.getUser() + " hat verlassen");
-				// todo(team-view): in der View den angezeigten Benutzer entfernen
-			}
-			case null, default -> throw new IllegalStateException("Unbekannte Systemnachricht");
-		}
-	}
+        try {
+            bytes = Files.readAllBytes(selectedFile.toPath());
+        } catch (IOException e) {
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            alert.setHeaderText("Datei konnte nicht geöffnet werden");
+            alert.setContentText(e.toString());
+            alert.show();
+            return;
+        }
 
-	private class MessageCell extends ListCell<Packet> {
-		@Override
-		protected void updateItem(Packet item, boolean empty) {
-			super.updateItem(item, empty);
+        FileMessage.FileType type =
+                selectedFile.getName().matches(".*\\.(png|jpg|gif|bmp)")
+                        ? FileMessage.FileType.IMAGE
+                        : FileMessage.FileType.FILE;
 
-			setText(null);
-			setGraphic(null);
-			setStyle("-fx-background-color: transparent; -fx-padding: 0;");
+        Message message = new FileMessage(localUser, bytes, selectedFile.getName(), type);
 
-			if (empty || item == null) {
-				return;
-			}
+        try {
+            outPacketQueue.put(message);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
 
-			switch (item) {
-				case Message message -> setGraphic(renderMessageBubble(message));
-				case Notification notification -> renderNotificationLine(notification);
-				default -> throw new IllegalStateException("Unbekannte Servernachricht: " + item);
-			}
-		}
+        messageListView.scrollTo(getMessages().size() - 1);
+        messageTextField.clear();
+    }
 
-		private HBox renderMessageBubble(Message message) {
-			Node node;
+    // 🔊 Call Button Logic
+    private void handleCallButton() {
+        if (!inCall) {
+            try {
+                audioCall.start(RELAY_IP, RELAY_PORT, MY_PORT);
+                inCall = true;
+            } catch (Exception ex) {
+                getMessages().add(
+                        new TextMessage(new User("System"),
+                                "Call failed: " + ex.getMessage())
+                );
+            }
+        } else {
+            audioCall.stop();
+            audioCall = new AudioCall();
+            inCall = false;
+        }
+    }
 
-			switch (message) {
-				case TextMessage textMessage -> {
-					Label label = new Label(textMessage.getContent());
-					label.setWrapText(true);
-					label.setMaxWidth(300);
-					node = label;
-				}
-				case FileMessage fileMessage -> node = createFileNode(fileMessage);
-				case null, default -> throw new IllegalStateException("Unerwarteter Wert: " + message);
-			}
+    private void handleNotification(Notification notification) {
+        switch (notification) {
+            case JoinNotification join ->
+                    System.out.println(join.getUser() + " ist beigetreten");
 
-			boolean isOwn = localUser != null && message.getSender().getUsername().equals(localUser.getUsername());
-			node.setStyle(getBubbleStyle(isOwn));
+            case LeaveNotification leave ->
+                    System.out.println(leave.getUser() + " hat verlassen");
 
-			HBox container = new HBox(node);
-			container.setAlignment(isOwn ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT);
-			container.setPadding(new Insets(2, 10, 2, 10));
-			return container;
-		}
+            case null, default ->
+                    throw new IllegalStateException("Unbekannte Systemnachricht");
+        }
+    }
 
-		private Node createFileNode(FileMessage fileMessage) {
-			return switch (fileMessage.getFileType()) {
-				case FILE -> {
-					Label label = new Label("Datei: " + fileMessage.getFileName());
-					// todo(team-view): Datei herunterladen Button
-					yield label;
-				}
-				case IMAGE -> {
-					Image image = new Image(new ByteArrayInputStream(fileMessage.getContent()));
-					ImageView imageView = new ImageView(image);
-					imageView.setPreserveRatio(true);
-					imageView.fitWidthProperty().bind(Bindings.createDoubleBinding(
-						() -> Math.clamp(getScene().getWidth() - 32, 100.0, image.getWidth()),
-						getScene().widthProperty()
-					));
-					yield imageView;
-				}
-			};
-		}
+    // 💬 UI Rendering
+    private class MessageCell extends ListCell<Packet> {
 
-		private String getBubbleStyle(boolean isOwn) {
-			if (isOwn) {
-				return "-fx-background-color: #89b4fa; -fx-text-fill: #1e1e2e; "
-					+ "-fx-padding: 8 12; -fx-background-radius: 14 14 4 14;";
-			}
-			return "-fx-background-color: #313244; -fx-text-fill: #cdd6f4; "
-				+ "-fx-padding: 8 12; -fx-background-radius: 14 14 14 4;";
-		}
+        @Override
+        protected void updateItem(Packet item, boolean empty) {
+            super.updateItem(item, empty);
 
-		private void renderNotificationLine(Notification notification) {
-			String text;
-			String color;
+            setText(null);
+            setGraphic(null);
 
-			switch (notification) {
-				case JoinNotification join -> {
-					text = join.getUser().getUsername() + " ist beigetreten";
-					color = "#89b4fa";
-				}
-				case LeaveNotification leave -> {
-					text = leave.getUser().getUsername() + " hat verlassen";
-					color = "#f38ba8";
-				}
-				case null, default -> throw new IllegalStateException("Unerwarteter Wert: " + notification);
-			}
+            if (empty || item == null) return;
 
-			setText(text);
-			setAlignment(Pos.CENTER);
-			setStyle("-fx-background-color: transparent; -fx-padding: 4 0; "
-				+ "-fx-text-fill: " + color + "; -fx-font-style: italic;");
-		}
-	}
+            switch (item) {
+                case Message message -> setGraphic(renderMessage(message));
+                case Notification notification -> setText(notification.toString());
+            }
+        }
+
+        private HBox renderMessage(Message message) {
+            Label label = new Label(message.toString());
+            label.setWrapText(true);
+
+            boolean isOwn = localUser != null &&
+                    message.getSender().getUsername().equals(localUser.getUsername());
+
+            label.setStyle(isOwn
+                    ? "-fx-background-color: lightblue; -fx-padding: 8;"
+                    : "-fx-background-color: lightgray; -fx-padding: 8;");
+
+            HBox box = new HBox(label);
+            box.setAlignment(isOwn ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT);
+            box.setPadding(new Insets(5));
+
+            return box;
+        }
+    }
 }
