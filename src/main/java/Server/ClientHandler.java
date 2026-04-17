@@ -1,5 +1,6 @@
 package Server;
 
+import Util.Message.Message;
 import Util.SocketProxy;
 
 import java.io.IOException;
@@ -7,9 +8,9 @@ import java.util.concurrent.BlockingQueue;
 
 public class ClientHandler implements Runnable {
 	private final SocketProxy client;
-	private final BlockingQueue<String> messageBrokerQueue;
+	private final BlockingQueue<Message> messageBrokerQueue;
 
-	public ClientHandler(SocketProxy client, BlockingQueue<String> messageBrokerQueue) throws IOException {
+	public ClientHandler(SocketProxy client, BlockingQueue<Message> messageBrokerQueue) throws IOException {
 		this.client = client;
 		this.messageBrokerQueue = messageBrokerQueue;
 	}
@@ -18,15 +19,13 @@ public class ClientHandler implements Runnable {
 	public void run() {
 		while (true) {
 			try {
-				String message = client.in.readLine();
-				System.out.println("Received message from client: " + message);
+				Message message = (Message) client.in.readObject();
+				System.out.println("Nachricht von " + message.getSender().getIdentifier());
 				messageBrokerQueue.put(message);
-
 			} catch (IOException e) {
-				System.out.println("Failed to read line:\n" + e);
+				System.out.println("Verbindung getrennt:\n" + e);
 				break;
-
-			} catch (InterruptedException e) {
+			} catch (ClassNotFoundException | InterruptedException e) {
 				break;
 			}
 		}

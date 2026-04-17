@@ -1,5 +1,6 @@
 package Server;
 
+import Util.Message.Message;
 import Util.SocketProxy;
 
 import java.io.IOException;
@@ -7,10 +8,10 @@ import java.util.List;
 import java.util.concurrent.BlockingQueue;
 
 public class MessageBroker implements Runnable {
-	private final BlockingQueue<String> messageBrokerQueue;
+	private final BlockingQueue<Message> messageBrokerQueue;
 	private final List<SocketProxy> clients;
 
-	public MessageBroker(BlockingQueue<String> messageBrokerQueue, List<SocketProxy> clients) {
+	public MessageBroker(BlockingQueue<Message> messageBrokerQueue, List<SocketProxy> clients) {
 		this.messageBrokerQueue = messageBrokerQueue;
 		this.clients = clients;
 	}
@@ -19,15 +20,14 @@ public class MessageBroker implements Runnable {
 	public void run() {
 		while (true) {
 			try {
-				String message = messageBrokerQueue.take();
+				Message message = messageBrokerQueue.take();
 
 				for (SocketProxy client : clients) {
 					try {
-						client.out.write(message + '\n');
+						client.out.writeObject(message);
 						client.out.flush();
-
 					} catch (IOException e) {
-						System.out.println("Failed to send message to client:\n" + e);
+						System.out.println("Fehler beim Senden:\n" + e);
 					}
 				}
 
