@@ -1,21 +1,23 @@
 package User.Model;
 
+import java.util.UUID;
+
 public class User {
     private String username;
     private String displayname;
     private String passwordHash;
     private String statusMessage;
     private String profileDescription;
-    private String profilePicturePath;
+    private UUID profilePictureUUID;
     private ContactData contactData;
 
-    public User(String username, String displayname, String passwordHash, String statusMessage, String profileDescription, String profilePicturePath, ContactData contactData) {
+    public User(String username, String displayname, String passwordHash, String statusMessage, String profileDescription, UUID profilePictureUUID, ContactData contactData) {
         this.username = username;
         this.displayname = displayname;
         this.passwordHash = passwordHash;
         this.statusMessage = statusMessage;
         this.profileDescription = profileDescription;
-        this.profilePicturePath = profilePicturePath;
+        this.profilePictureUUID = profilePictureUUID;
         this.contactData = contactData;
     }
 
@@ -59,12 +61,12 @@ public class User {
         this.profileDescription = profileDescription;
     }
 
-    public String getProfilePicturePath() {
-        return profilePicturePath;
+    public UUID getProfilePictureUUID() {
+        return profilePictureUUID;
     }
 
-    public void setProfilePicturePath(String profilePicturePath) {
-        this.profilePicturePath = profilePicturePath;
+    public void setProfilePictureUUI(UUID profilePictureUUID) {
+        this.profilePictureUUID = profilePictureUUID;
     }
 
     public ContactData getContactData() {
