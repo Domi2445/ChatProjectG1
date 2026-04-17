@@ -1,4 +1,16 @@
 package Server;
 
-public class PacketCarrier {
+import Util.Network.Packet;
+import Util.SocketProxy;
+
+public class PacketCarrier
+{
+	public final Packet packet;
+	public final SocketProxy sender;
+
+	public PacketCarrier(Packet packet, SocketProxy sender)
+	{
+		this.packet = packet;
+		this.sender = sender;
+	}
 }
