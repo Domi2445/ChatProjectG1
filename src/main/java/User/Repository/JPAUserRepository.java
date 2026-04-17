@@ -100,6 +100,7 @@ public class JPAUserRepository implements UserRepository {
         entityManager.getTransaction().commit();
     }
 
+    //
     @Override
     public boolean usernameExists(String username)
     {
