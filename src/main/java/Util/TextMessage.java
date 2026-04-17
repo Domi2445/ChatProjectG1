@@ -8,5 +8,16 @@ public class TextMessage extends Message {
         this.content = content;
     }
 
+    @Override
     public String getContent() { return content; }
+
+    @Override
+    public String getDisplayText() {
+        return "";
+    }
+
+    @Override
+    public void send() {
+
+    }
 }

@@ -11,7 +11,7 @@ public abstract class Message implements Serializable {
 
     public User getSender() { return sender; }
 
-    public abstract String getContent();
+    public abstract Object getContent();
 
     public abstract String getDisplayText();
 

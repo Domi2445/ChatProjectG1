@@ -12,8 +12,19 @@ public class FileMessage extends Message {
         this.fileType = fileType;
     }
 
+    @Override
     public byte[] getContent() {
         return content;
+    }
+
+    @Override
+    public String getDisplayText() {
+        return "";
+    }
+
+    @Override
+    public void send() {
+
     }
 
     public String getFileName() {
