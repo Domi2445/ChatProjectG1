@@ -13,11 +13,11 @@ public class TextMessage extends Message {
 
     @Override
     public String getDisplayText() {
-        return "";
+        return content != null ? content : "";
     }
 
     @Override
     public void send() {
-
+        throw new UnsupportedOperationException("Sending TextMessage is not supported yet.");
     }
 }
