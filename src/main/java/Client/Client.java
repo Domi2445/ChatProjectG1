@@ -1,5 +1,6 @@
 package Client;
 
+import Util.Network.Packet;
 import Util.SocketProxy;
 
 import java.io.IOException;
@@ -8,44 +9,38 @@ import java.net.SocketTimeoutException;
 import java.util.concurrent.BlockingQueue;
 
 public class Client implements Runnable {
-	private final BlockingQueue<String> outgoingMessageQueue;
-	private final BlockingQueue<String> incomingMessageQueue;
+	private final BlockingQueue<Packet> out;
+	private final BlockingQueue<Packet> in;
 	private final SocketProxy socket;
 
-	public Client(String ip, int port, BlockingQueue<String> outgoingMessageQueue, BlockingQueue<String> incomingMessageQueue) throws IOException {
+	public Client(String ip, int port, BlockingQueue<Packet> out, BlockingQueue<Packet> in) throws IOException {
 		this.socket = new SocketProxy(new Socket(ip, port));
 		this.socket.socket.setSoTimeout(100);
-
-		this.outgoingMessageQueue = outgoingMessageQueue;
-		this.incomingMessageQueue = incomingMessageQueue;
+		this.out = out;
+		this.in = in;
 	}
 
 	@Override
 	public void run() {
 		while (true) {
 			try {
-				String message = socket.in.readLine();
-				if (message != null) {
-					System.out.println("Received message from server: " + message);
-					incomingMessageQueue.put(message);
-				}
+				Packet packet = (Packet) socket.in.readObject();
+				in.put(packet);
 			} catch (SocketTimeoutException ignored) {
 			} catch (IOException e) {
-				System.out.println("Failed to read line from server:\n" + e);
+				System.out.println("Verbindung zum Server getrennt:\n" + e);
 				break;
-			} catch (InterruptedException e) {
+			} catch (ClassNotFoundException | InterruptedException e) {
 				throw new RuntimeException(e);
 			}
 
-			String message = outgoingMessageQueue.poll();
-			if (message != null) {
+			Packet packet = out.poll();
+			if (packet != null) {
 				try {
-					socket.out.write(message + '\n');
+					socket.out.writeObject(packet);
 					socket.out.flush();
-					System.out.println("Sent message to server");
-
 				} catch (IOException e) {
-					System.out.println("Failed to send message to server:\n" + e);
+					System.out.println("Fehler beim Senden:\n" + e);
 					break;
 				}
 			}
