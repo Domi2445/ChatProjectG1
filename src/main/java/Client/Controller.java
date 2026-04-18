@@ -229,10 +229,11 @@ public class Controller {
 
             if (empty || item == null) return;
 
-            switch (item) {
-                case Message message -> setGraphic(renderMessage(message));
-                case Notification notification -> setText(notification.toString());
-            }
+			switch (item) {
+				case Message message -> setGraphic(renderMessage(message));
+				case Notification notification -> setText(notification.toString());
+				case null, default -> {}
+			}
         }
 
         private HBox renderMessage(Message message) {

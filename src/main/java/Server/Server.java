@@ -1,6 +1,7 @@
 package Server;
 
-import Util.Message;
+import Util.Network.Notifications.JoinNotification;
+import Util.Network.Packet;
 import Util.SocketProxy;
 import Util.User;
 
@@ -26,7 +27,7 @@ public class Server implements Runnable {
 
 	@Override
 	public void run() {
-		new Thread(new MessageBroker(messageBrokerQueue, clients)).start();
+		new Thread(new PacketBroker(packetBrokerQueue, clients)).start();
         new Thread(new AudioRelayServer(9000)).start();
 		while (true) {
 			try {

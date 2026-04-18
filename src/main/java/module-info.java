@@ -5,6 +5,7 @@ module com.chatproject {
 	requires javafx.fxml;
 	requires java.desktop;
     requires java.net.http;
+	requires jbcrypt;
 
 	opens Client to javafx.fxml, javafx.graphics, javafx.base;
 	exports Client;
