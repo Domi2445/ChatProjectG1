@@ -1,6 +1,6 @@
 package Util.Network.Messages;
 
-import Util.User;
+import User.Model.User;
 
 import java.io.Serial;
 
