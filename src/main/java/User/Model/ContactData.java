@@ -40,6 +40,7 @@ public class ContactData {
 		this.website = website;
 	}
 
+	// Needed for JPA
 	public ContactData() {
 
 	}

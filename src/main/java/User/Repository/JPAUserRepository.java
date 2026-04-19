@@ -48,7 +48,7 @@ public class JPAUserRepository implements UserRepository {
 					throw new UsernameAlreadyExistsException(user.getUsername());
 				}
 			} catch (RepositoryException ignored) {
-				// Falls der Re-Check technisch scheitert, Originalfehler beibehalten.
+				// Falls der Re-Check technisch scheitert, werden Originalfehler beibehalten.
 			}
 			throw e;
 		}

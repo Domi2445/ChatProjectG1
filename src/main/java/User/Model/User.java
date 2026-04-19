@@ -33,6 +33,7 @@ public class User {
         this.contactData = contactData;
     }
 
+	//Wird für JPA gebraucht
     public User() {
 
     }

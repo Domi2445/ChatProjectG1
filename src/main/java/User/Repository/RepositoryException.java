@@ -1,7 +1,7 @@
 package User.Repository;
 
 /**
- * Einheitliche technische Ausnahme fuer Repository-Zugriffe.
+ * Einheitliche technische Ausnahme für Repository-Zugriffe.
  */
 public class RepositoryException extends RuntimeException {
 
