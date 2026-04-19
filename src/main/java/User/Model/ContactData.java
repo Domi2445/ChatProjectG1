@@ -6,6 +6,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.util.Objects;
 
 @Entity
 @Table(name = "contact_data")
@@ -89,4 +90,28 @@ public class ContactData {
     public void setWebsite(String website) {
         this.website = website;
     }
+
+	@Override
+	public String toString() {
+		return "ContactData{" +
+			"firstname='" + firstname + '\'' +
+			", lastname='" + lastname + '\'' +
+			", email='" + email + '\'' +
+			", discordId=" + discordId +
+			", website='" + website + '\'' +
+			'}';
+	}
+
+	@Override
+	public boolean equals(Object o) {
+		if (this == o) return true;
+		if (o == null || getClass() != o.getClass()) return false;
+		ContactData that = (ContactData) o;
+		return discordId == that.discordId && Objects.equals(firstname, that.firstname) && Objects.equals(lastname, that.lastname) && Objects.equals(email, that.email) && Objects.equals(website, that.website);
+	}
+
+	@Override
+	public int hashCode() {
+		return Objects.hash(firstname, lastname, email, discordId, website);
+	}
 }
