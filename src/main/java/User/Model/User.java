@@ -38,6 +38,7 @@ public class User {
     }
 	//TODO: Vorübergehend, da sonst fehler
 	public User(String benutzername) {
+    this.username = benutzername;
 	}
 
 	public String getUsername() {

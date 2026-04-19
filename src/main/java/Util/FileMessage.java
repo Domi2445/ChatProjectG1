@@ -1,5 +1,7 @@
 package Util;
 
+import User.Model.User;
+
 public class FileMessage extends Message {
     private final byte[] content;
     private final String fileName;
@@ -12,12 +14,10 @@ public class FileMessage extends Message {
         this.fileType = fileType;
     }
 
-    @Override
     public byte[] getContent() {
         return content;
     }
 
-    @Override
     public String getDisplayText() {
         String name = (fileName == null || fileName.trim().isEmpty()) ? "(unbenannt)" : fileName;
         return switch (fileType) {
@@ -26,7 +26,6 @@ public class FileMessage extends Message {
         };
     }
 
-    @Override
     public void send() {
         throw new UnsupportedOperationException("FileMessage.send() wird nicht direkt unterstützt.");
     }

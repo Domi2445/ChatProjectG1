@@ -3,7 +3,7 @@ package Server;
 import Util.Network.Notifications.JoinNotification;
 import Util.Network.Packet;
 import Util.SocketProxy;
-import Util.User;
+import User.Model.User;
 
 import java.io.IOException;
 import java.net.ServerSocket;

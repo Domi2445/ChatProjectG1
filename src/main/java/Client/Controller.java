@@ -7,7 +7,7 @@ import Util.Network.Notifications.JoinNotification;
 import Util.Network.Notifications.LeaveNotification;
 import Util.Network.Notifications.Notification;
 import Util.Network.Packet;
-import Util.User;
+import User.Model.User;
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
 import javafx.collections.ObservableList;
@@ -28,6 +28,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+
 
 public class Controller {
 	public static final int MAX_FILE_SIZE = 1_000_000;
@@ -226,7 +227,7 @@ public class Controller {
 				case null, default -> throw new IllegalStateException("Unerwarteter Wert: " + message);
 			}
 
-			boolean isOwn = localUser != null && message.getSender().getUsername().equals(localUser.getUsername());
+			boolean isOwn = localUser != null && localUser.equals(message.getSender());
 			node.setStyle(getBubbleStyle(isOwn));
 
 			HBox container = new HBox(node);
@@ -255,7 +256,7 @@ public class Controller {
 			};
 		}
 
-			boolean isOwn = localUser != null && item.getSender().getUsername().equals(localUser.getUsername());
+		private String getBubbleStyle(boolean isOwn) {
 			if (isOwn) {
 				return "-fx-background-color: #89b4fa; -fx-text-fill: #1e1e2e; "
 					+ "-fx-padding: 8 12; -fx-background-radius: 14 14 4 14;";
@@ -270,11 +271,11 @@ public class Controller {
 
 			switch (notification) {
 				case JoinNotification join -> {
-					text = join.getUser().getUsername() + " ist beigetreten";
+					text = join.getUser() + " ist beigetreten";
 					color = "#89b4fa";
 				}
 				case LeaveNotification leave -> {
-					text = leave.getUser().getUsername() + " hat verlassen";
+					text = leave.getUser() + " hat verlassen";
 					color = "#f38ba8";
 				}
 				case null, default -> throw new IllegalStateException("Unerwarteter Wert: " + notification);

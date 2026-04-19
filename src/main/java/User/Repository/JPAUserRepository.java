@@ -2,7 +2,6 @@ package User.Repository;
 
 import DBUtil.Connection;
 import User.Model.User;
-
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityTransaction;
 import jakarta.persistence.NoResultException;
@@ -35,12 +34,24 @@ public class JPAUserRepository implements UserRepository {
 	public void createUser(User user) {
 		validateUser(user);
 
-		if (usernameExists(user.getUsername())) {
-			throw new UsernameAlreadyExistsException(user.getUsername());
+		try {
+			executeInTransaction(entityManager -> {
+				if (entityManager.find(User.class, user.getUsername()) != null) {
+					throw new UsernameAlreadyExistsException(user.getUsername());
+				}
+				entityManager.persist(user);
+			}, "User konnte nicht erstellt werden: " + user.getUsername());
+		} catch (RepositoryException e) {
+			// Bei paralleler Registrierung trotzdem fachliche Exception liefern.
+			try {
+				if (usernameExists(user.getUsername())) {
+					throw new UsernameAlreadyExistsException(user.getUsername());
+				}
+			} catch (RepositoryException ignored) {
+				// Falls der Re-Check technisch scheitert, Originalfehler beibehalten.
+			}
+			throw e;
 		}
-
-		executeInTransaction(entityManager -> entityManager.persist(user),
-			"User konnte nicht erstellt werden: " + user.getUsername());
 	}
 
 	@Override
@@ -85,19 +96,15 @@ public class JPAUserRepository implements UserRepository {
 	}
 
 	private void executeInTransaction(EntityWork work, String errorMessage) {
-		EntityManager entityManager = Connection.createEntityManager();
-		EntityTransaction transaction = entityManager.getTransaction();
-
-		try {
-			transaction.begin();
-			work.run(entityManager);
-			transaction.commit();
-		} catch (RuntimeException e) {
-			rollbackQuietly(transaction);
-			throw translateRuntimeException(errorMessage, e);
-		} finally {
-			if (entityManager.isOpen()) {
-				entityManager.close();
+		try (EntityManager entityManager = Connection.createEntityManager()) {
+			EntityTransaction transaction = entityManager.getTransaction();
+			try {
+				transaction.begin();
+				work.run(entityManager);
+				transaction.commit();
+			} catch (RuntimeException e) {
+				rollbackQuietly(transaction);
+				throw translateRuntimeException(errorMessage, e);
 			}
 		}
 	}
@@ -116,14 +123,19 @@ public class JPAUserRepository implements UserRepository {
 	}
 
 	private void validateUser(User user) {
-		if (user == null || user.getUsername() == null) {
-			throw new IllegalArgumentException("User oder Username darf nicht null sein");
+		if (user == null) {
+			throw new IllegalArgumentException("User darf nicht null sein");
 		}
+		validateUsername(user.getUsername());
+	}
+
+	private boolean isBlank(String value) {
+		return value == null || value.trim().isEmpty();
 	}
 
 	private void validateUsername(String username) {
-		if (username == null) {
-			throw new IllegalArgumentException("Username darf nicht null sein");
+		if (isBlank(username)) {
+			throw new IllegalArgumentException("Username darf nicht null oder leer sein");
 		}
 	}
 

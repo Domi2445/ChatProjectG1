@@ -1,9 +1,10 @@
 package Server;
 
+import Util.Network.Messages.Message;
 import Util.Network.Notifications.LeaveNotification;
 import Util.Network.Packet;
 import Util.SocketProxy;
-import Util.User;
+import User.Model.User;
 
 import java.io.IOException;
 import java.util.concurrent.BlockingQueue;
@@ -23,7 +24,8 @@ public class ClientHandler implements Runnable {
 			try {
 				Message message = (Message) client.in.readObject();
 				System.out.println("Nachricht von " + message.getSender().getUsername());
-				messageBrokerQueue.put(message);
+				packetBrokerQueue.put(message);
+
 			} catch (IOException e) {
 				System.out.println("Verbindung getrennt: " + e);
 				client.setStopFlag();
