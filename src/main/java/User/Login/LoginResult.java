@@ -17,4 +17,12 @@ public record LoginResult(Status status, String message, User user) {
     public static LoginResult databaseError(){
         return new LoginResult(Status.DATABASE_ERROR, "Verbindung zur Datenbank fehlgeschlagen. Bitte Später erneut versuchen",null);
     }
+
+	public boolean isSuccess() {
+		return status == Status.SUCCESS;
+	}
+
+	public boolean hasUser() {
+		return user != null;
+	}
 }
