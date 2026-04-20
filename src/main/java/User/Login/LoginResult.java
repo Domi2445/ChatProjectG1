@@ -25,4 +25,13 @@ public record LoginResult(Status status, String message, User user) {
 	public boolean hasUser() {
 		return user != null;
 	}
+
+	@Override
+	public String toString() {
+		return "LoginResult{" +
+			"status=" + status +
+			", message='" + message + '\'' +
+			", user=" + user +
+			'}';
+	}
 }
