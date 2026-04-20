@@ -8,6 +8,7 @@ module com.chatproject {
 	requires jbcrypt;
 
 	requires java.net.http;
+	requires jakarta.persistence;
 
 	opens Client to javafx.fxml, javafx.graphics, javafx.base;
 }

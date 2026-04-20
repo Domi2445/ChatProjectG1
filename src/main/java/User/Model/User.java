@@ -1,19 +1,39 @@
 package User.Model;
 
+import jakarta.persistence.*;
+import java.io.Serial;
 import java.io.Serializable;
+
 import java.util.Objects;
 import java.util.UUID;
 
+@Entity
+@Table(name = "users")
 public class User implements Serializable {
-    private String username;
+	@Serial
+	private static final long serialVersionUID = 1L;
+
+	@Id
+	private String username;
+	@Column
     private String displayname;
+    @Column
     private String passwordHash;
+    @Column
     private String statusMessage;
+    @Column
     private String profileDescription;
+    @Column
     private UUID profilePictureUUID;
+    @OneToOne(cascade = CascadeType.ALL, orphanRemoval = true) //1:1 beziehung ein datensatz gehört genau einem User
+    @JoinColumn(name = "contact_data_id") //Nichts anderes wie ein Join
     private ContactData contactData;
 
 	public User() {}
+
+	public User(String username) {
+		this.username = username;
+	}
 
     public User(String username, String displayname, String passwordHash, String statusMessage, String profileDescription, UUID profilePictureUUID, ContactData contactData) {
         this.username = username;

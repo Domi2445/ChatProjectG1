@@ -1,61 +1,97 @@
 package User.Model;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+
 import java.util.Objects;
 
+@Entity
+@Table(name = "contact_data")
 public class ContactData {
-    private String firstname;
-    private String lastname;
-    private String email;
-    private long discordId;
-    private String website;
 
-    public ContactData(String firstname, String lastname, String email, long discordId, String website) {
-        this.firstname = firstname;
-        this.lastname = lastname;
-        this.email = email;
-        this.discordId = discordId;
-        this.website = website;
-    }
+	@Id
+	@GeneratedValue(strategy = GenerationType.IDENTITY)
+	private Long id;
 
-    public String getFirstname() {
-        return firstname;
-    }
+	@Column
+	private String firstname;
 
-    public void setFirstname(String firstname) {
-        this.firstname = firstname;
-    }
+	@Column
+	private String lastname;
 
-    public String getLastname() {
-        return lastname;
-    }
+	@Column
+	private String email;
 
-    public void setLastname(String lastname) {
-        this.lastname = lastname;
-    }
+	@Column
+	private long discordId;
 
-    public String getEmail() {
-        return email;
-    }
+	@Column
+	private String website;
 
-    public void setEmail(String email) {
-        this.email = email;
-    }
+	public ContactData(String firstname, String lastname, String email, long discordId, String website) {
+		this.firstname = firstname;
+		this.lastname = lastname;
+		this.email = email;
+		this.discordId = discordId;
+		this.website = website;
+	}
 
-    public long getDiscordId() {
-        return discordId;
-    }
+	// Needed for JPA
+	public ContactData() {
 
-    public void setDiscordId(long discordId) {
-        this.discordId = discordId;
-    }
+	}
 
-    public String getWebsite() {
-        return website;
-    }
+	public Long getId() {
+		return id;
+	}
 
-    public void setWebsite(String website) {
-        this.website = website;
-    }
+	public void setId(Long id) {
+		this.id = id;
+	}
+
+	public String getFirstname() {
+		return firstname;
+	}
+
+	public void setFirstname(String firstname) {
+		this.firstname = firstname;
+	}
+
+	public String getLastname() {
+		return lastname;
+	}
+
+	public void setLastname(String lastname) {
+		this.lastname = lastname;
+	}
+
+	public String getEmail() {
+		return email;
+	}
+
+	public void setEmail(String email) {
+		this.email = email;
+	}
+
+	public long getDiscordId() {
+		return discordId;
+	}
+
+	public void setDiscordId(long discordId) {
+		this.discordId = discordId;
+	}
+
+	public String getWebsite() {
+		return website;
+	}
+
+	public void setWebsite(String website) {
+		this.website = website;
+	}
 
 	@Override
 	public String toString() {

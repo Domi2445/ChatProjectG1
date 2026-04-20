@@ -1,6 +1,10 @@
 package Client;
 
-import User.Model.User;
+import User.Login.Status;
+import Util.Network.Auth.LoginRequest;
+import Util.Network.Auth.LoginResponse;
+import Util.Network.Auth.RegisterRequest;
+import Util.Network.Auth.RegisterResponse;
 import Util.Network.Messages.FileMessage;
 import Util.Network.Messages.Message;
 import Util.Network.Messages.TextMessage;
@@ -8,7 +12,7 @@ import Util.Network.Notifications.JoinNotification;
 import Util.Network.Notifications.LeaveNotification;
 import Util.Network.Notifications.Notification;
 import Util.Network.Packet;
-import VideoCall.AudioCall;
+import User.Model.User;
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
 import javafx.collections.ObservableList;
@@ -29,6 +33,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.function.Consumer;
 
 public class Controller {
 	public static final int MAX_FILE_SIZE = 1_000_000;
@@ -36,16 +41,22 @@ public class Controller {
 	private final BlockingQueue<Packet> outPacketQueue;
 	private final BlockingQueue<Packet> inPacketQueue;
 
+
+
+	private Consumer<LoginResponse> onLoginResult;
+	private Consumer<RegisterResponse> onRegisterResult;
+
+	// UI registriert hier ihren Handler (z.B. Screen-Wechsel bei Success)
+	public void setOnLoginResult(Consumer<LoginResponse> onLoginResult) {
+		this.onLoginResult = onLoginResult;
+	}
+	public void setOnRegisterResult(Consumer<RegisterResponse> onRegisterResult) {
+		this.onRegisterResult = onRegisterResult;
+	}
+
 	private Client client;
 	private User localUser;
 	private Stage stage;
-
-	private AudioCall audioCall = new AudioCall();
-	private boolean inCall = false;
-
-	private static final String RELAY_IP = "127.0.0.1";
-	private static final int RELAY_PORT = 9000;
-	private static final int MY_PORT = 7000;
 
 	@FXML
 	private ListView<Packet> messageListView;
@@ -58,8 +69,6 @@ public class Controller {
 
 	@FXML
 	private Button uploadButton;
-	@FXML
-	private Button videoCallButton;
 
 	public Controller() {
 		this.outPacketQueue = new ArrayBlockingQueue<>(4);
@@ -72,7 +81,6 @@ public class Controller {
 		sendButton.setOnAction(e -> sendMessage());
 		messageTextField.setOnAction(e -> sendMessage());
 		uploadButton.setOnAction(e -> sendFile());
-		videoCallButton.setOnAction(e -> handleCallButton());
 	}
 
 	public void configure(Stage stage, User user) {
@@ -100,6 +108,12 @@ public class Controller {
 								getMessages().add(notification);
 								messageListView.scrollTo(getMessages().size() - 1);
 								handleNotification(notification);
+							});
+							case LoginResponse loginResp -> Platform.runLater(() -> { //FÜR UI CALLBACK
+								handleLoginResponse(loginResp);
+							});
+							case RegisterResponse registerResp -> Platform.runLater(()->{
+								handleRegisterResponse(registerResp);
 							});
 							case null, default -> throw new IllegalStateException("Unbekanntes Paket empfangen");
 						}
@@ -196,17 +210,46 @@ public class Controller {
 	private void handleNotification(Notification notification) {
 		switch (notification) {
 			case JoinNotification join -> {
-				System.out.println(join.getUser() + " ist beigetreten");
+				System.out.println(join.getUser().getUsername() + " ist beigetreten");
 				// todo(team-view): in der View einen neuen Nutzer anzeigen (z. B. In Seitenleiste oder direkt im Chat)
 			}
 			case LeaveNotification leave -> {
-				System.out.println(leave.getUser() + " hat verlassen");
+				System.out.println(leave.getUser().getUsername() + " hat verlassen");
 				// todo(team-view): in der View den angezeigten Benutzer entfernen
 			}
 			case null, default -> throw new IllegalStateException("Unbekannte Systemnachricht");
 		}
+
 	}
 
+	public void sendLoginRequest(String username, String password) {
+		LoginRequest request = new LoginRequest(username, password);
+		try {
+			outPacketQueue.put(request);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+		}
+	}
+	public void sendRegisterRequest(String username, String displayname, String password) {
+		RegisterRequest request = new RegisterRequest(username, displayname, password);
+		try {
+			outPacketQueue.put(request);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+		}
+	}
+	private void handleLoginResponse(LoginResponse response) {
+		if(response.getStatus() == Status.SUCCESS){
+			this.localUser = response.getUser();
+		} if (onLoginResult != null) {
+			onLoginResult.accept(response);
+		}
+	}
+	private void handleRegisterResponse(RegisterResponse response){
+		if(onRegisterResult != null){
+			onRegisterResult.accept(response);
+		}
+	}
 
 	private class MessageCell extends ListCell<Packet> {
 		@Override
@@ -242,7 +285,7 @@ public class Controller {
 				case null, default -> throw new IllegalStateException("Unerwarteter Wert: " + message);
 			}
 
-			boolean isOwn = localUser != null && message.getSender().getUsername().equals(localUser.getUsername());
+			boolean isOwn = localUser != null && localUser.equals(message.getSender());
 			node.setStyle(getBubbleStyle(isOwn));
 
 			HBox container = new HBox(node);
@@ -286,11 +329,11 @@ public class Controller {
 
 			switch (notification) {
 				case JoinNotification join -> {
-					text = join.getUser().getUsername() + " ist beigetreten";
+					text = join.getUser() + " ist beigetreten";
 					color = "#89b4fa";
 				}
 				case LeaveNotification leave -> {
-					text = leave.getUser().getUsername() + " hat verlassen";
+					text = leave.getUser() + " hat verlassen";
 					color = "#f38ba8";
 				}
 				case null, default -> throw new IllegalStateException("Unerwarteter Wert: " + notification);
@@ -300,27 +343,6 @@ public class Controller {
 			setAlignment(Pos.CENTER);
 			setStyle("-fx-background-color: transparent; -fx-padding: 4 0; "
 				+ "-fx-text-fill: " + color + "; -fx-font-style: italic;");
-		}
-
-	}
-
-	private void handleCallButton() {
-		System.out.println("Call button clicked!");
-		if (!inCall) {
-			try {
-				System.out.println("Starting call...");
-				audioCall.start(RELAY_IP, RELAY_PORT, MY_PORT);
-				inCall = true;
-				System.out.println("Call started!");
-			} catch (Exception ex) {
-				System.out.println("Call failed: " + ex.getMessage());
-				ex.printStackTrace();
-			}
-		} else {
-			audioCall.stop();
-			audioCall = new AudioCall();
-			inCall = false;
-			System.out.println("Call stopped!");
 		}
 	}
 }
