@@ -7,7 +7,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class AudioRelayServer implements Runnable {
 	private final int port;
 
-	// roomId → список клиентов в dieser Raum
+	// roomId
 	private final Map<String, List<InetSocketAddress>> rooms = new ConcurrentHashMap<>();
 
 	public AudioRelayServer(int port) {
@@ -31,7 +31,7 @@ public class AudioRelayServer implements Runnable {
 				String raw = new String(packet.getData(), 0, packet.getLength());
 
 				if (raw.startsWith("JOIN:")) {
-					// Client registriert sich in einem Raum: "JOIN:Artur-Bob"
+					// Client registriert sich in einem Raum:
 					String roomId = raw.substring(5).trim();
 					rooms.computeIfAbsent(roomId, k -> new ArrayList<>());
 					if (!rooms.get(roomId).contains(sender)) {
