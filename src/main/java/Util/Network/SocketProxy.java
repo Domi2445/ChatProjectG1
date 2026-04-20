@@ -1,16 +1,15 @@
-package Util;
+package Util.Network;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
-import java.util.concurrent.atomic.AtomicBoolean;
 
+/// Kapselt einen Socket und die zugehörigen Ein- und Ausgabestreams.
 public class SocketProxy implements AutoCloseable {
-	public final Socket socket;
+	private final Socket socket;
 	public final ObjectInputStream in;
 	public final ObjectOutputStream out;
-	private final AtomicBoolean stopFlag = new AtomicBoolean(false);
 
 	public SocketProxy(Socket socket) throws IOException {
 		this.socket = socket;
@@ -19,12 +18,16 @@ public class SocketProxy implements AutoCloseable {
 		this.in = new ObjectInputStream(socket.getInputStream());
 	}
 
+	public boolean isClosed() {
+		return socket.isClosed();
+	}
+
 	@Override
 	public void close() throws IOException {
 		IOException exception = null;
 
 		try {
-			if (socket != null) socket.close();
+			if (!socket.isClosed()) socket.close();
 		} catch (IOException e) {
 			exception = e;
 		}
@@ -42,13 +45,5 @@ public class SocketProxy implements AutoCloseable {
 		}
 
 		if (exception != null) throw exception;
-	}
-
-	public void setStopFlag() {
-		stopFlag.set(true);
-	}
-
-	public boolean getStopFlag() {
-		return stopFlag.get();
 	}
 }

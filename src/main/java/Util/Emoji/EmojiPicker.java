@@ -2,7 +2,7 @@ package Util.Emoji;
 
 import Util.Network.Messages.EmojiMessage;
 import Util.Network.Messages.Message;
-import Util.User;
+import User.Model.User;
 import javafx.collections.ObservableList;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;

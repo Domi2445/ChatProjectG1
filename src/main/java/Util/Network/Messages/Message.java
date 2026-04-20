@@ -1,7 +1,7 @@
 package Util.Network.Messages;
 
 import Util.Network.Packet;
-import Util.User;
+import User.Model.User;
 
 /// Oberklasse für alle Benutzernachrichten
 public abstract class Message extends Packet {
