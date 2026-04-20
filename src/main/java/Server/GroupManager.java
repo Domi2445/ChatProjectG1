@@ -1,8 +1,8 @@
 package Server;
 
 import Util.Network.Groups.Group;
-import Util.SocketProxy;
-import Util.User;
+import Util.Network.SocketProxy;
+import User.Model.User;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;

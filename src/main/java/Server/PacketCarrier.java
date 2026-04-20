@@ -1,7 +1,7 @@
 package Server;
 
 import Util.Network.Packet;
-import Util.SocketProxy;
+import Util.Network.SocketProxy;
 
 public class PacketCarrier
 {

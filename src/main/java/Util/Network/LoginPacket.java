@@ -1,6 +1,6 @@
 package Util.Network;
 
-import Util.User;
+import User.Model.User;
 import java.io.Serial;
 
 public class LoginPacket extends Packet
