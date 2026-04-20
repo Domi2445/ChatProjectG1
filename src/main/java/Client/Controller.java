@@ -185,11 +185,11 @@ public class Controller {
 	private void handleNotification(Notification notification) {
 		switch (notification) {
 			case JoinNotification join -> {
-				System.out.println(join.getUser() + " ist beigetreten");
+				System.out.println(join.getUser().getUsername() + " ist beigetreten");
 				// todo(team-view): in der View einen neuen Nutzer anzeigen (z. B. In Seitenleiste oder direkt im Chat)
 			}
 			case LeaveNotification leave -> {
-				System.out.println(leave.getUser() + " hat verlassen");
+				System.out.println(leave.getUser().getUsername() + " hat verlassen");
 				// todo(team-view): in der View den angezeigten Benutzer entfernen
 			}
 			case null, default -> throw new IllegalStateException("Unbekannte Systemnachricht");

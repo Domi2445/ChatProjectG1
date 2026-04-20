@@ -1,6 +1,7 @@
 package User.Model;
 
 import jakarta.persistence.*;
+import java.io.Serial;
 import java.io.Serializable;
 
 import java.util.Objects;
@@ -9,6 +10,9 @@ import java.util.UUID;
 @Entity
 @Table(name = "users")
 public class User implements Serializable {
+	@Serial
+	private static final long serialVersionUID = 1L;
+
 	@Id
 	private String username;
 	@Column
@@ -27,6 +31,10 @@ public class User implements Serializable {
 
 	public User() {}
 
+	public User(String username) {
+		this.username = username;
+	}
+
     public User(String username, String displayname, String passwordHash, String statusMessage, String profileDescription, UUID profilePictureUUID, ContactData contactData) {
         this.username = username;
         this.displayname = displayname;
@@ -37,13 +45,7 @@ public class User implements Serializable {
         this.contactData = contactData;
     }
 
-
-	//TODO: Vorübergehend, da sonst fehler
-	public User(String benutzername) {
-    this.username = benutzername;
-	}
-
-	public String getUsername() {
+    public String getUsername() {
         return username;
     }
 
