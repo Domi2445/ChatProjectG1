@@ -1,11 +1,13 @@
 package Util.Login;
 
+import Logs.LogHandler;
 import org.mindrot.jbcrypt.BCrypt;
 
 public class BCryptWrapper {
     public static String hash(String plainText)
     {
         if (plainText == null || plainText.isBlank()) {
+			LogHandler.createLogEntry("BCryptWrapper", "Password darf nicht leer sein.");
             throw new IllegalArgumentException("BCryptWrapper - Password darf nicht leer sein.");
         }
         return BCrypt.hashpw(plainText, BCrypt.gensalt(12));
@@ -19,7 +21,7 @@ public class BCryptWrapper {
             return BCrypt.checkpw(plainText, hashedPwd);
         } catch (Exception e)
         {
-            System.out.println("BCryptWrapper - "+e);
+			LogHandler.createLogEntry("BCryptWrapper", e.getMessage());
         }
         return false;
     }
