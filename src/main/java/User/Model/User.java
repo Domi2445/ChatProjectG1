@@ -1,9 +1,10 @@
 package User.Model;
 
+import java.io.Serializable;
 import java.util.Objects;
 import java.util.UUID;
 
-public class User {
+public class User implements Serializable {
     private String username;
     private String displayname;
     private String passwordHash;
@@ -11,6 +12,8 @@ public class User {
     private String profileDescription;
     private UUID profilePictureUUID;
     private ContactData contactData;
+
+	public User() {}
 
     public User(String username, String displayname, String passwordHash, String statusMessage, String profileDescription, UUID profilePictureUUID, ContactData contactData) {
         this.username = username;
