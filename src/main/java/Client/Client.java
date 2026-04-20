@@ -25,7 +25,7 @@ public class Client implements Runnable {
 	public void run() {
 		while (true) {
 			try {
-				Packet packet = (Packet) socket.in.readObject();
+				Packet packet = (Packet) socket.getInputStream().readObject();
 				in.put(packet);
 			} catch (SocketTimeoutException ignored) {
 			} catch (IOException e) {
@@ -39,8 +39,8 @@ public class Client implements Runnable {
 			Packet packet = out.poll();
 			if (packet != null) {
 				try {
-					socket.out.writeObject(packet);
-					socket.out.flush();
+					socket.getOutputStream().writeObject(packet);
+					socket.getOutputStream().flush();
 				} catch (IOException e) {
 					System.err.println("Fehler beim Senden:\n" + e);
 					break;
