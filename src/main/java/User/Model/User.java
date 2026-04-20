@@ -8,10 +8,7 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "users")
-
-public class User implements Serializable
-{
-
+public class User implements Serializable {
 	@Id
 	private String username;
 	@Column

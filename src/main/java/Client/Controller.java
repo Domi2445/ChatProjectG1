@@ -1,6 +1,5 @@
 package Client;
 
-import User.Model.User;
 import Util.Network.Messages.FileMessage;
 import Util.Network.Messages.Message;
 import Util.Network.Messages.TextMessage;
@@ -8,6 +7,7 @@ import Util.Network.Notifications.JoinNotification;
 import Util.Network.Notifications.LeaveNotification;
 import Util.Network.Notifications.Notification;
 import Util.Network.Packet;
+import User.Model.User;
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
 import javafx.collections.ObservableList;
@@ -230,7 +230,7 @@ public class Controller {
 				case null, default -> throw new IllegalStateException("Unerwarteter Wert: " + message);
 			}
 
-			boolean isOwn = localUser != null && message.getSender().getUsername().equals(localUser.getUsername());
+			boolean isOwn = localUser != null && localUser.equals(message.getSender());
 			node.setStyle(getBubbleStyle(isOwn));
 
 			HBox container = new HBox(node);
@@ -274,11 +274,11 @@ public class Controller {
 
 			switch (notification) {
 				case JoinNotification join -> {
-					text = join.getUser().getUsername() + " ist beigetreten";
+					text = join.getUser() + " ist beigetreten";
 					color = "#89b4fa";
 				}
 				case LeaveNotification leave -> {
-					text = leave.getUser().getUsername() + " hat verlassen";
+					text = leave.getUser() + " hat verlassen";
 					color = "#f38ba8";
 				}
 				case null, default -> throw new IllegalStateException("Unerwarteter Wert: " + notification);

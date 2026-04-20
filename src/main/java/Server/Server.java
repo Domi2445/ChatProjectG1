@@ -1,8 +1,9 @@
 package Server;
 
-import User.Model.User;
 import Util.Network.Notifications.JoinNotification;
-import Util.Network.SocketProxy;
+import Util.Network.Packet;
+import Util.SocketProxy;
+import User.Model.User;
 
 import java.io.IOException;
 import java.net.ServerSocket;
