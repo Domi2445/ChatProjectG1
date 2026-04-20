@@ -1,18 +1,29 @@
 package Logs;
 
-import java.io.BufferedWriter;
-import java.io.FileWriter;
 import java.io.IOException;
-import java.nio.file.Path;
+import java.util.logging.*;
 
 public class LogHandler {
-	private static Path path = Path.of("Logs/log.txt");
-	public static void createLogEntry(String enterCurrentClassHere, String logMessage) {
-		try (BufferedWriter writer = new BufferedWriter(new FileWriter(path.toString(), true))) {
-			writer.write(new LogEntry(enterCurrentClassHere, logMessage).toString());
-			writer.newLine();
+
+	private static final Logger logger = Logger.getLogger("Logger");
+
+	static {
+		try {
+			FileHandler fileHandler = new FileHandler("Logs/log.txt", true);
+			fileHandler.setFormatter(new CustomFormatter());
+			logger.addHandler(fileHandler);
+
+			logger.setUseParentHandlers(false);
+
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
 	}
+
+	public static void log(String prefix, String message) {
+		logger.info("[" + prefix + "] " + message);
+	}
+
+	public static void error(String prefix, String message) {
+		logger.severe("[" + prefix + "] " + message);	}
 }
