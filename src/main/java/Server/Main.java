@@ -3,19 +3,26 @@ package Server;
 import java.io.IOException;
 
 public class Main {
+	private static final int PORT = 6969;
+
 	public static void main(String[] args) {
-		// TCP Chat-Server
-		try
-		{
-			Thread tcpThread = new Thread(new Server(6969), "TCPServer");
-			tcpThread.start();
+		Server server;
+
+		try {
+			server = new Server(PORT);
 		} catch (IOException e) {
-			e.printStackTrace();
+			System.err.println("Fehler beim Starten des Servers: " + e);
+			return;
 		}
 
-		// UDP Audio Relay Server
-		Thread udpThread = new Thread(new AudioRelayServer(9000), "AudioRelayServer");
-		udpThread.setDaemon(true);
-		udpThread.start();
+		Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+			try {
+				server.stop();
+			} catch (IOException e) {
+				System.err.println("Fehler beim Stoppen des Servers: " + e);
+			}
+		}));
+
+		server.run();
 	}
 }
