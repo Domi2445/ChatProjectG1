@@ -27,3 +27,9 @@ bin/
 
 ### Mac OS ###
 .DS_Store
+
+### Local environment ###
+.env
+.env.*
+!.env.example
+data/chatdb.mv.db

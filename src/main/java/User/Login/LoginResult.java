@@ -1,4 +1,5 @@
 package User.Login;
+
 import User.Model.User;
 
 public record LoginResult(Status status, String message, User user) {
