@@ -2,50 +2,64 @@ package Server;
 
 import java.net.*;
 import java.util.*;
-import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class AudioRelayServer implements Runnable {
-    private final int port;
-    private final List<InetSocketAddress> clients = new CopyOnWriteArrayList<>();
+	private final int port;
 
-    public AudioRelayServer(int port) {
-        this.port = port;
-    }
+	// roomId → список клиентов в dieser Raum
+	private final Map<String, List<InetSocketAddress>> rooms = new ConcurrentHashMap<>();
 
-    @Override
-    public void run() {
-        try (DatagramSocket socket = new DatagramSocket(port)) {
-            System.out.println("AudioRelayServer running on port " + port);
-            byte[] buffer = new byte[2048];
+	public AudioRelayServer(int port) {
+		this.port = port;
+	}
 
-            while (true) {
-                DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
-                socket.receive(packet);
+	@Override
+	public void run() {
+		try (DatagramSocket socket = new DatagramSocket(port)) {
+			System.out.println("AudioRelayServer running on port " + port);
+			byte[] buffer = new byte[2048];
 
-                InetSocketAddress sender = new InetSocketAddress(
-                        packet.getAddress(), packet.getPort()
-                );
+			while (true) {
+				DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+				socket.receive(packet);
 
-                // Register new client if not already in list
-                if (!clients.contains(sender)) {
-                    clients.add(sender);
-                    System.out.println("New client connected: " + sender);
-                }
+				InetSocketAddress sender = new InetSocketAddress(
+					packet.getAddress(), packet.getPort()
+				);
 
-                // Forward to everyone except sender
-                byte[] data = Arrays.copyOf(packet.getData(), packet.getLength());
-                for (InetSocketAddress client : clients) {
-                    if (!client.equals(sender)) {
-                        DatagramPacket forward = new DatagramPacket(
-                                data, data.length,
-                                client.getAddress(), client.getPort()
-                        );
-                        socket.send(forward);
-                    }
-                }
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
+				String raw = new String(packet.getData(), 0, packet.getLength());
+
+				if (raw.startsWith("JOIN:")) {
+					// Client registriert sich in einem Raum: "JOIN:Artur-Bob"
+					String roomId = raw.substring(5).trim();
+					rooms.computeIfAbsent(roomId, k -> new ArrayList<>());
+					if (!rooms.get(roomId).contains(sender)) {
+						rooms.get(roomId).add(sender);
+						System.out.println(sender + " joined room: " + roomId);
+					}
+
+				} else {
+					// Audiodaten weiterleiten — nur an Mitglieder desselben Raums
+					byte[] data = Arrays.copyOf(packet.getData(), packet.getLength());
+
+					for (List<InetSocketAddress> members : rooms.values()) {
+						if (members.contains(sender)) {
+							for (InetSocketAddress member : members) {
+								if (!member.equals(sender)) {
+									socket.send(new DatagramPacket(
+										data, data.length,
+										member.getAddress(), member.getPort()
+									));
+								}
+							}
+							break;
+						}
+					}
+				}
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
 }
