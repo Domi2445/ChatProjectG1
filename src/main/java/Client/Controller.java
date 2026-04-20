@@ -8,6 +8,7 @@ import Util.Network.Notifications.JoinNotification;
 import Util.Network.Notifications.LeaveNotification;
 import Util.Network.Notifications.Notification;
 import Util.Network.Packet;
+import VideoCall.AudioCall;
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
 import javafx.collections.ObservableList;
@@ -39,6 +40,13 @@ public class Controller {
 	private User localUser;
 	private Stage stage;
 
+	private AudioCall audioCall = new AudioCall();
+	private boolean inCall = false;
+
+	private static final String RELAY_IP = "127.0.0.1";
+	private static final int RELAY_PORT = 9000;
+	private static final int MY_PORT = 7000;
+
 	@FXML
 	private ListView<Packet> messageListView;
 
@@ -50,6 +58,8 @@ public class Controller {
 
 	@FXML
 	private Button uploadButton;
+	@FXML
+	private Button videoCallButton;
 
 	public Controller() {
 		this.outPacketQueue = new ArrayBlockingQueue<>(4);
@@ -62,6 +72,7 @@ public class Controller {
 		sendButton.setOnAction(e -> sendMessage());
 		messageTextField.setOnAction(e -> sendMessage());
 		uploadButton.setOnAction(e -> sendFile());
+		videoCallButton.setOnAction(e -> handleCallButton());
 	}
 
 	public void configure(Stage stage, User user) {
@@ -196,6 +207,7 @@ public class Controller {
 		}
 	}
 
+
 	private class MessageCell extends ListCell<Packet> {
 		@Override
 		protected void updateItem(Packet item, boolean empty) {
@@ -288,6 +300,27 @@ public class Controller {
 			setAlignment(Pos.CENTER);
 			setStyle("-fx-background-color: transparent; -fx-padding: 4 0; "
 				+ "-fx-text-fill: " + color + "; -fx-font-style: italic;");
+		}
+
+	}
+
+	private void handleCallButton() {
+		System.out.println("Call button clicked!");
+		if (!inCall) {
+			try {
+				System.out.println("Starting call...");
+				audioCall.start(RELAY_IP, RELAY_PORT, MY_PORT);
+				inCall = true;
+				System.out.println("Call started!");
+			} catch (Exception ex) {
+				System.out.println("Call failed: " + ex.getMessage());
+				ex.printStackTrace();
+			}
+		} else {
+			audioCall.stop();
+			audioCall = new AudioCall();
+			inCall = false;
+			System.out.println("Call stopped!");
 		}
 	}
 }
