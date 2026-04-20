@@ -10,4 +10,8 @@ module com.chatproject {
 	requires jakarta.persistence;
 
 	opens Client to javafx.fxml, javafx.graphics, javafx.base;
+	opens DBUtil to javafx.fxml;
+	opens User.Model;
+
+	exports DBUtil;
 }
