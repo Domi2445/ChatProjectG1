@@ -1,7 +1,7 @@
 package Client;
 
 import Util.Network.Packet;
-import Util.SocketProxy;
+import Util.Network.SocketProxy;
 
 import java.io.IOException;
 import java.net.Socket;
@@ -14,8 +14,9 @@ public class Client implements Runnable {
 	private final SocketProxy socket;
 
 	public Client(String ip, int port, BlockingQueue<Packet> out, BlockingQueue<Packet> in) throws IOException {
-		this.socket = new SocketProxy(new Socket(ip, port));
-		this.socket.socket.setSoTimeout(100);
+		Socket socket = new Socket(ip, port);
+		this.socket = new SocketProxy(socket);
+		socket.setSoTimeout(100);
 		this.out = out;
 		this.in = in;
 	}
@@ -28,7 +29,8 @@ public class Client implements Runnable {
 				in.put(packet);
 			} catch (SocketTimeoutException ignored) {
 			} catch (IOException e) {
-				System.out.println("Verbindung zum Server getrennt:\n" + e);
+				// todo: Anzeige in der GUI, dass die Verbindung zum Server getrennt wurde
+				System.err.println("Verbindung zum Server getrennt:\n" + e);
 				break;
 			} catch (ClassNotFoundException | InterruptedException e) {
 				throw new RuntimeException(e);
@@ -40,7 +42,7 @@ public class Client implements Runnable {
 					socket.out.writeObject(packet);
 					socket.out.flush();
 				} catch (IOException e) {
-					System.out.println("Fehler beim Senden:\n" + e);
+					System.err.println("Fehler beim Senden:\n" + e);
 					break;
 				}
 			}
