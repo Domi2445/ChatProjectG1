@@ -1,10 +1,6 @@
 package Client;
 
-import User.Login.Status;
-import Util.Network.Auth.LoginRequest;
-import Util.Network.Auth.LoginResponse;
-import Util.Network.Auth.RegisterRequest;
-import Util.Network.Auth.RegisterResponse;
+import User.Model.User;
 import Util.Network.Messages.FileMessage;
 import Util.Network.Messages.Message;
 import Util.Network.Messages.TextMessage;
@@ -12,7 +8,6 @@ import Util.Network.Notifications.JoinNotification;
 import Util.Network.Notifications.LeaveNotification;
 import Util.Network.Notifications.Notification;
 import Util.Network.Packet;
-import User.Model.User;
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
 import javafx.collections.ObservableList;
@@ -329,11 +324,11 @@ public class Controller {
 
 			switch (notification) {
 				case JoinNotification join -> {
-					text = join.getUser() + " ist beigetreten";
+					text = join.getUser().getUsername() + " ist beigetreten";
 					color = "#89b4fa";
 				}
 				case LeaveNotification leave -> {
-					text = leave.getUser() + " hat verlassen";
+					text = leave.getUser().getUsername() + " hat verlassen";
 					color = "#f38ba8";
 				}
 				case null, default -> throw new IllegalStateException("Unerwarteter Wert: " + notification);
