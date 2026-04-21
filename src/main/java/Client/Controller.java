@@ -1,5 +1,10 @@
 package Client;
 
+import User.Login.Status;
+import Util.Network.Auth.LoginRequest;
+import Util.Network.Auth.LoginResponse;
+import Util.Network.Auth.RegisterRequest;
+import Util.Network.Auth.RegisterResponse;
 import Util.Network.Messages.FileMessage;
 import Util.Network.Messages.Message;
 import Util.Network.Messages.TextMessage;
@@ -28,12 +33,26 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.function.Consumer;
 
 public class Controller {
 	public static final int MAX_FILE_SIZE = 1_000_000;
 
 	private final BlockingQueue<Packet> outPacketQueue;
 	private final BlockingQueue<Packet> inPacketQueue;
+
+
+
+	private Consumer<LoginResponse> onLoginResult;
+	private Consumer<RegisterResponse> onRegisterResult;
+
+	// UI registriert hier ihren Handler (z.B. Screen-Wechsel bei Success)
+	public void setOnLoginResult(Consumer<LoginResponse> onLoginResult) {
+		this.onLoginResult = onLoginResult;
+	}
+	public void setOnRegisterResult(Consumer<RegisterResponse> onRegisterResult) {
+		this.onRegisterResult = onRegisterResult;
+	}
 
 	private Client client;
 	private User localUser;
@@ -89,6 +108,12 @@ public class Controller {
 								getMessages().add(notification);
 								messageListView.scrollTo(getMessages().size() - 1);
 								handleNotification(notification);
+							});
+							case LoginResponse loginResp -> Platform.runLater(() -> { //FÜR UI CALLBACK
+								handleLoginResponse(loginResp);
+							});
+							case RegisterResponse registerResp -> Platform.runLater(()->{
+								handleRegisterResponse(registerResp);
 							});
 							case null, default -> throw new IllegalStateException("Unbekanntes Paket empfangen");
 						}
@@ -193,6 +218,36 @@ public class Controller {
 				// todo(team-view): in der View den angezeigten Benutzer entfernen
 			}
 			case null, default -> throw new IllegalStateException("Unbekannte Systemnachricht");
+		}
+
+	}
+
+	public void sendLoginRequest(String username, String password) {
+		LoginRequest request = new LoginRequest(username, password);
+		try {
+			outPacketQueue.put(request);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+		}
+	}
+	public void sendRegisterRequest(String username, String displayname, String password) {
+		RegisterRequest request = new RegisterRequest(username, displayname, password);
+		try {
+			outPacketQueue.put(request);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+		}
+	}
+	private void handleLoginResponse(LoginResponse response) {
+		if(response.getStatus() == Status.SUCCESS){
+			this.localUser = response.getUser();
+		} if (onLoginResult != null) {
+			onLoginResult.accept(response);
+		}
+	}
+	private void handleRegisterResponse(RegisterResponse response){
+		if(onRegisterResult != null){
+			onRegisterResult.accept(response);
 		}
 	}
 
