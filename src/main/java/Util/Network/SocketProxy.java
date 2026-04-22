@@ -8,8 +8,8 @@ import java.net.Socket;
 /// Kapselt einen Socket und die zugehörigen Ein- und Ausgabestreams.
 public class SocketProxy implements AutoCloseable {
 	private final Socket socket;
-	public final ObjectInputStream in;
-	public final ObjectOutputStream out;
+	private final ObjectInputStream in;
+	private final ObjectOutputStream out;
 
 	public SocketProxy(Socket socket) throws IOException {
 		this.socket = socket;
@@ -20,6 +20,14 @@ public class SocketProxy implements AutoCloseable {
 
 	public boolean isClosed() {
 		return socket.isClosed();
+	}
+
+	public ObjectInputStream getInputStream() {
+		return in;
+	}
+
+	public ObjectOutputStream getOutputStream() {
+		return out;
 	}
 
 	@Override
