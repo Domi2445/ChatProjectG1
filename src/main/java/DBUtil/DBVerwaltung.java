@@ -69,7 +69,15 @@ public class DBVerwaltung {
 		} catch (IllegalArgumentException e) {
 			showStatus("Ungültige Eingabe: " + e.getMessage(), false);
 		} catch (RepositoryException e) {
-			showStatus("Datenbankfehler beim Erstellen des Users.", false);
+			System.err.println("Fehler beim Erstellen des Users '" + username + "': " + e.getMessage());
+			e.printStackTrace(System.err);
+			String detail = e.getMessage();
+			showStatus(
+				detail == null || detail.isBlank()
+					? "Datenbankfehler beim Erstellen des Users."
+					: "Datenbankfehler beim Erstellen des Users: " + detail,
+				false
+			);
 		}
 	}
 
