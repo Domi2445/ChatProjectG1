@@ -36,12 +36,12 @@ public final class ClientProxy implements AutoCloseable {
 		outPacketSenderFuture = threadExecutor.submit(outPacketSender());
 	}
 
-	public Runnable inPacketListener() {
+	private Runnable inPacketListener() {
 		return () -> {
 			while (!Thread.currentThread().isInterrupted()) {
 				if (stopFlag.get()) break;
 				try {
-					Packet packet = (Packet) socket.in.readObject();
+					Packet packet = (Packet) socket.getInputStream().readObject();
 					inPacketQueue.put(packet);
 				} catch (IOException e) {
 					if (!stopFlag.get()) {
@@ -62,15 +62,18 @@ public final class ClientProxy implements AutoCloseable {
 		};
 	}
 
-	public Runnable outPacketSender() {
+	private Runnable outPacketSender() {
 		return () -> {
+			int maxQueuedPackets = 0;
+
 			while (!Thread.currentThread().isInterrupted()) {
 				if (stopFlag.get()) break;
 				try {
 					Packet packet = outPacketQueue.take();
-					socket.out.writeObject(packet);
-					if (outPacketQueue.isEmpty()) {
-						socket.out.flush();
+					socket.getOutputStream().writeObject(packet);
+					if (outPacketQueue.isEmpty() || maxQueuedPackets++ >= 8) {
+						socket.getOutputStream().flush();
+						maxQueuedPackets = 0;
 					}
 				} catch (IOException e) {
 					if (!stopFlag.get()) {
@@ -92,6 +95,10 @@ public final class ClientProxy implements AutoCloseable {
 		return outPacketQueue.offer(packet);
 	}
 
+	public boolean shouldStop() {
+		return stopFlag.get() || socket.isClosed();
+	}
+
 	@Override
 	public void close() throws IOException {
 		stopFlag.set(true);
@@ -105,14 +112,6 @@ public final class ClientProxy implements AutoCloseable {
 		if (!socket.isClosed()) {
 			socket.close();
 		}
-	}
-
-	public SocketProxy getSocket() {
-		return socket;
-	}
-
-	public boolean getStopFlag() {
-		return stopFlag.get();
 	}
 
 	public User getUser() {
