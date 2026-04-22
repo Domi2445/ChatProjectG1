@@ -301,6 +301,10 @@ public class Controller {
 
 						audioCall.stop();
 						inCall = false;
+						videoCallButton.setStyle(
+							"-fx-background-color: #45475a; -fx-text-fill: #cdd6f4; -fx-font-size: 14; " +
+								"-fx-background-radius: 20; -fx-min-width: 70; -fx-min-height: 40;"
+						);
 					}
 			}
 
@@ -343,20 +347,22 @@ public class Controller {
 
 				// Startet den echten Audio-Anruf über den Relay-Server
 				private void startAudioCall(CallNotification call) {
-					// RoomId aus beiden Usernamen zusammenbauen (sortiert damit beide die gleiche ID haben)
-					// z.B. "Artur" + "Bob" -> "Artur-Bob"
 					String roomId = Stream.of(localUser.getUsername(), call.getSender().getUsername())
 						.sorted().collect(Collectors.joining("-"));
 					try {
-						// AudioCall starten: Relay-Server IP, Port, mein Port, Raumname
-						audioCall.start(RELAY_IP, RELAY_PORT, MY_PORT, roomId);
+						int myPort = audioCall.start(RELAY_IP, RELAY_PORT, roomId);
 						inCall = true;
-					} catch (Exception e) { e.printStackTrace(); }
+						System.out.println("Audio call started on port: " + myPort);
+
+						// Button rot färben
+						Platform.runLater(() -> videoCallButton.setStyle(
+							"-fx-background-color: #f38ba8; -fx-text-fill: #1e1e2e; -fx-font-size: 14; " +
+								"-fx-background-radius: 20; -fx-min-width: 70; -fx-min-height: 40;"
+						));
+					} catch (Exception e) {
+						e.printStackTrace();
+					}
 				}
-
-	//
-
-
 
 
 	private void handleLoginResponse(LoginResponse response) {
