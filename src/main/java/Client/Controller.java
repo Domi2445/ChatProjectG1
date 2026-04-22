@@ -61,17 +61,10 @@ public class Controller {
 	@FXML
 	private void initialize() {
 		messageListView.setCellFactory(lv -> new MessageCell());
+		
 		sendButton.setOnAction(e -> sendMessage());
 		messageTextField.setOnAction(e -> sendMessage());
 		uploadButton.setOnAction(e -> sendFile());
-		
-		messageTextField.focusedProperty().addListener((obs, oldVal, newVal) -> {
-			if (!newVal && isEditingMessage != null) {
-				messageTextField.clear();
-				isEditingMessage = null;
-				resetSendButton();
-			}
-		});
 	}
 
 	public void configure(Stage stage, User user) {
@@ -348,16 +341,17 @@ public class Controller {
 			
 			MenuItem editItem = new MenuItem("✏️ Bearbeiten");
 			editItem.setStyle("-fx-font-size: 12;");
-			editItem.setOnAction(event -> startEditMessage(message));
+			editItem.setOnAction(event -> Controller.this.startEditMessage(message));
 			
 			MenuItem deleteItem = new MenuItem("🗑️ Löschen");
 			deleteItem.setStyle("-fx-font-size: 12;");
-			deleteItem.setOnAction(event -> deleteMessage(message));
+			deleteItem.setOnAction(event -> Controller.this.deleteMessage(message));
 			
 			menu.getItems().addAll(editItem, deleteItem);
 			return menu;
 		}
-		
+	}
+	
 	private void startEditMessage(TextMessage message) {
 		messageTextField.setText(message.getContent());
 		messageTextField.requestFocus();
@@ -366,12 +360,11 @@ public class Controller {
 		sendButton.setStyle("-fx-background-color: #a6e3a1; -fx-text-fill: #1e1e2e; -fx-font-size: 14; -fx-background-radius: 20; -fx-min-width: 70; -fx-min-height: 40;");
 	}
 
-		private void deleteMessage(TextMessage message) {
-			message.setDeleted();
-			int index = getMessages().indexOf(message);
-			if (index >= 0) {
-				messageListView.getItems().set(index, message);
-			}
+	private void deleteMessage(TextMessage message) {
+		message.setDeleted();
+		int index = getMessages().indexOf(message);
+		if (index >= 0) {
+			messageListView.getItems().set(index, message);
 		}
 	}
 }
