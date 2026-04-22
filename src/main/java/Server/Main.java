@@ -6,6 +6,11 @@ public class Main {
 	private static final int PORT = 6969;
 
 	public static void main(String[] args) {
+
+		//UDP relay starten
+		new Thread(new AudioRelayServer(8000),"AudioRelayServer").start();
+
+
 		Server server;
 
 		try {

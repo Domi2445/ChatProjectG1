@@ -4,6 +4,7 @@ import User.Model.User;
 import Util.Network.Notifications.LeaveNotification;
 import Util.Network.Packet;
 import Util.Network.SocketProxy;
+import Util.Network.Notifications.CallNotification;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -35,6 +36,10 @@ public class PacketBroker implements Runnable {
 		this.stopFlag = new AtomicBoolean(false);
 	}
 
+
+
+
+
 	@Override
 	public void run() {
 		ArrayList<ClientProxy> clientsToUnregister = new ArrayList<>();
@@ -42,6 +47,20 @@ public class PacketBroker implements Runnable {
 		while (!stopFlag.get() && !Thread.currentThread().isInterrupted()) {
 			try {
 				Packet packet = broadcastPacketQueue.take();
+
+
+				// IP des Absenders in CallNotification injizieren
+				if (packet instanceof CallNotification call) {
+					for (ClientProxy client : clients) {
+						if (client.getUser() != null &&
+							client.getUser().getUsername().equals(call.getSender().getUsername())) {
+							call.setSenderIp(client.getIpAddress());
+							break;
+						}
+					}
+				}
+
+
 
 				synchronized (clients) {
 					for (var client : clients) {

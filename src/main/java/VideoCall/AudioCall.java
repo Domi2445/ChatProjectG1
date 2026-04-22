@@ -8,11 +8,16 @@ public class AudioCall {
     // relayIp   = Server IP (e.g., 127.0.0.1)
     // relayPort = 9000
     // myPort    = Our local port for receiving data (e.g., 7000)
-	public void start(String relayIp, int relayPort, int myPort) throws Exception {
+	public void start(String relayIp, int relayPort, int myPort, String roomId) throws Exception {
 		running = true;
 
 		UDPSender sender = new UDPSender(relayIp, relayPort);
 		UDPReciever receiver = new UDPReciever(myPort);
+
+
+		// Room regestr
+		sender.sendString("JOIN:" + roomId);
+
 
 		new Thread(() -> {
 			TargetDataLine microphone = null;

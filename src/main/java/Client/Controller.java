@@ -27,6 +27,13 @@ import javafx.scene.layout.HBox;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
+
+import VideoCall.AudioCall;
+import Util.Network.Notifications.CallNotification;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+import javafx.scene.control.TextInputDialog;
+
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
@@ -41,6 +48,16 @@ public class Controller {
 	private final BlockingQueue<Packet> outPacketQueue;
 	private final BlockingQueue<Packet> inPacketQueue;
 
+
+	//Audio
+
+	private static final String RELAY_IP = "127.0.0.1";
+	private static final int    RELAY_PORT = 8000;
+	private static final int    MY_PORT    = 7000;
+	private final AudioCall audioCall = new AudioCall();
+	private boolean inCall = false;
+
+	//
 
 
 	private Consumer<LoginResponse> onLoginResult;
@@ -74,13 +91,18 @@ public class Controller {
 		this.outPacketQueue = new ArrayBlockingQueue<>(4);
 		this.inPacketQueue = new ArrayBlockingQueue<>(4);
 	}
-
+	//Audio
+	@FXML
+	private Button videoCallButton;
+	//
 	@FXML
 	private void initialize() {
 		messageListView.setCellFactory(lv -> new MessageCell());
 		sendButton.setOnAction(e -> sendMessage());
 		messageTextField.setOnAction(e -> sendMessage());
 		uploadButton.setOnAction(e -> sendFile());
+
+		videoCallButton.setOnAction(e -> handleCallButton()); // Audio
 	}
 
 	public void configure(Stage stage, User user) {
@@ -104,6 +126,10 @@ public class Controller {
 								getMessages().add(message);
 								messageListView.scrollTo(getMessages().size() - 1);
 							});
+							//Audio
+							case CallNotification call -> Platform.runLater(() ->
+								handleCallNotification(call));
+							//
 							case Notification notification -> Platform.runLater(() -> {
 								getMessages().add(notification);
 								messageListView.scrollTo(getMessages().size() - 1);
@@ -112,9 +138,12 @@ public class Controller {
 							case LoginResponse loginResp -> Platform.runLater(() -> { //FÜR UI CALLBACK
 								handleLoginResponse(loginResp);
 							});
-							case RegisterResponse registerResp -> Platform.runLater(()->{
+							case RegisterResponse registerResp -> Platform.runLater(()->
+							{
 								handleRegisterResponse(registerResp);
 							});
+
+
 							case null, default -> throw new IllegalStateException("Unbekanntes Paket empfangen");
 						}
 
@@ -217,6 +246,11 @@ public class Controller {
 				System.out.println(leave.getUser().getUsername() + " hat verlassen");
 				// todo(team-view): in der View den angezeigten Benutzer entfernen
 			}
+
+			// Audio
+			case CallNotification call -> handleCallNotification(call);
+
+			//
 			case null, default -> throw new IllegalStateException("Unbekannte Systemnachricht");
 		}
 
@@ -238,6 +272,93 @@ public class Controller {
 			Thread.currentThread().interrupt();
 		}
 	}
+
+	 // Audio
+
+			// Wird aufgerufen wenn der Nutzer auf den Anruf-Button drückt
+			public void handleCallButton()
+			{
+				if (!inCall)
+				{
+					// Kleines Fenster öffnen wo man den Benutzernamen eingibt
+					TextInputDialog dialog = new TextInputDialog();
+					dialog.setTitle("Anruf starten");
+					dialog.setHeaderText("Benutzername des Empfängers:");
+					String target = dialog.showAndWait().orElse(null);
+
+					// Abbrechen wenn nichts eingegeben wurde
+					if (target == null || target.isBlank()) return;
+
+					// CallNotification mit REQUEST an den Server schicken
+					try {
+						outPacketQueue.put(new CallNotification(
+							CallNotification.CallType.REQUEST, localUser, target, MY_PORT));
+						} catch (InterruptedException e) { e.printStackTrace(); }
+
+				}
+					else
+					{
+
+						audioCall.stop();
+						inCall = false;
+					}
+			}
+
+
+
+				// Wird aufgerufen wenn wir eine CallNotification vom Server bekommen
+				private void handleCallNotification(CallNotification call) {
+					// Ignorieren wenn das Paket nicht für uns ist
+					if (!call.getTargetUsername().equals(localUser.getUsername())) return;
+
+					switch (call.getType()) {
+						case REQUEST -> {
+							// Jemand ruft uns an -> Popup anzeigen
+							Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+							alert.setTitle("Eingehender Anruf");
+							alert.setHeaderText("Anruf von: " + call.getSender().getUsername());
+							boolean accepted = alert.showAndWait().orElse(ButtonType.CANCEL) == ButtonType.OK;
+
+							try {
+								// Antwort (ACCEPT oder REJECT) zurück an den Server schicken
+								outPacketQueue.put(new CallNotification(
+									accepted ? CallNotification.CallType.ACCEPT : CallNotification.CallType.REJECT,
+									localUser, call.getSender().getUsername(), MY_PORT));
+
+
+								if (accepted) startAudioCall(call);
+							} catch (InterruptedException e) { e.printStackTrace(); }
+						}
+						//
+						case ACCEPT -> startAudioCall(call);
+
+						// Der andere hat abgelehnt -> Nachricht im Chat anzeigen
+						case REJECT -> getMessages().add(
+							new TextMessage(localUser, call.getSender().getUsername() + " hat abgelehnt."));
+					}
+				}
+
+
+
+
+				// Startet den echten Audio-Anruf über den Relay-Server
+				private void startAudioCall(CallNotification call) {
+					// RoomId aus beiden Usernamen zusammenbauen (sortiert damit beide die gleiche ID haben)
+					// z.B. "Artur" + "Bob" -> "Artur-Bob"
+					String roomId = Stream.of(localUser.getUsername(), call.getSender().getUsername())
+						.sorted().collect(Collectors.joining("-"));
+					try {
+						// AudioCall starten: Relay-Server IP, Port, mein Port, Raumname
+						audioCall.start(RELAY_IP, RELAY_PORT, MY_PORT, roomId);
+						inCall = true;
+					} catch (Exception e) { e.printStackTrace(); }
+				}
+
+	//
+
+
+
+
 	private void handleLoginResponse(LoginResponse response) {
 		if(response.getStatus() == Status.SUCCESS){
 			this.localUser = response.getUser();

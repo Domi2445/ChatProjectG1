@@ -29,4 +29,10 @@ public class UDPSender
             socket.close();
     }
 
+
+	public void sendString(String text) throws Exception
+	{
+		byte[] data = text.getBytes();
+		socket.send(new DatagramPacket(data, data.length, address, port));
+	}
 }
