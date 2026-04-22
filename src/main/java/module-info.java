@@ -3,6 +3,10 @@ module com.chatproject {
 	requires javafx.controls;
 	requires javafx.graphics;
 	requires javafx.base;
+	requires org.hibernate.orm.core;
+	requires jakarta.transaction;
+	requires java.sql;
+
 
 	requires jbcrypt;
 
@@ -10,4 +14,9 @@ module com.chatproject {
 	requires jakarta.persistence;
 
 	opens Client to javafx.fxml, javafx.graphics, javafx.base;
+	opens DBUtil to javafx.fxml;
+	opens User.Model to org.hibernate.orm.core;
+
+
+	exports DBUtil;
 }

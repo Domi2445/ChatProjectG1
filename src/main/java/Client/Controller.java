@@ -1,6 +1,11 @@
 package Client;
 
+import User.Login.Status;
 import User.Model.User;
+import Util.Network.Auth.LoginRequest;
+import Util.Network.Auth.LoginResponse;
+import Util.Network.Auth.RegisterRequest;
+import Util.Network.Auth.RegisterResponse;
 import Util.Network.Messages.FileMessage;
 import Util.Network.Messages.Message;
 import Util.Network.Messages.TextMessage;
