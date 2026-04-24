@@ -2,6 +2,7 @@ package Client;
 
 import User.Login.Status;
 import User.Model.User;
+import Util.FileUtil;
 import Util.Network.Auth.LoginRequest;
 import Util.Network.Auth.LoginResponse;
 import Util.Network.Auth.RegisterRequest;
@@ -42,18 +43,8 @@ public class Controller {
 	private final BlockingQueue<Packet> outPacketQueue;
 	private final BlockingQueue<Packet> inPacketQueue;
 
-
-
 	private Consumer<LoginResponse> onLoginResult;
 	private Consumer<RegisterResponse> onRegisterResult;
-
-	// UI registriert hier ihren Handler (z.B. Screen-Wechsel bei Success)
-	public void setOnLoginResult(Consumer<LoginResponse> onLoginResult) {
-		this.onLoginResult = onLoginResult;
-	}
-	public void setOnRegisterResult(Consumer<RegisterResponse> onRegisterResult) {
-		this.onRegisterResult = onRegisterResult;
-	}
 
 	private Client client;
 	private User localUser;
@@ -75,6 +66,15 @@ public class Controller {
 	public Controller() {
 		this.outPacketQueue = new ArrayBlockingQueue<>(4);
 		this.inPacketQueue = new ArrayBlockingQueue<>(4);
+	}
+	
+	// UI registriert hier ihren Handler (z.B. Screen-Wechsel bei Success)
+	public void setOnLoginResult(Consumer<LoginResponse> onLoginResult) {
+		this.onLoginResult = onLoginResult;
+	}
+
+	public void setOnRegisterResult(Consumer<RegisterResponse> onRegisterResult) {
+		this.onRegisterResult = onRegisterResult;
 	}
 
 	@FXML
@@ -115,12 +115,11 @@ public class Controller {
 							case LoginResponse loginResp -> Platform.runLater(() -> { //FÜR UI CALLBACK
 								handleLoginResponse(loginResp);
 							});
-							case RegisterResponse registerResp -> Platform.runLater(()->{
+							case RegisterResponse registerResp -> Platform.runLater(() -> {
 								handleRegisterResponse(registerResp);
 							});
 							case null, default -> throw new IllegalStateException("Unbekanntes Paket empfangen");
 						}
-
 
 					} catch (InterruptedException e) {
 						break;
@@ -131,13 +130,13 @@ public class Controller {
 			listener.start();
 
 		} catch (IOException e) {
-			// todo(team-view): schöner Fehler anzeigen (z. B. Popup) und Möglichkeit zum erneuten Verbinden anbieten
-			User user = new User();
-			user.setUsername("System");
-
-			Platform.runLater(() ->
-				getMessages().add(new TextMessage(user, "Verbindung fehlgeschlagen: " + e.getMessage()))
-			);
+			Alert alert = new Alert(Alert.AlertType.ERROR, e.getLocalizedMessage() + "\n\nErneut verbinden?", ButtonType.YES, ButtonType.NO);
+			alert.setHeaderText("Verbindung fehlgeschlagen");
+			alert.showAndWait().ifPresent(response -> {
+				if (response == ButtonType.YES) {
+					connectAndRun(ip, port);
+				}
+			});
 		}
 	}
 
@@ -204,16 +203,9 @@ public class Controller {
 			return;
 		}
 
-		FileMessage.FileType fileType;
 		String fileName = selectedFile.getName();
-
-		if (fileName.endsWith(".png") || fileName.endsWith(".jpg") || fileName.endsWith(".gif") || fileName.endsWith(".bmp")) {
-			fileType = FileMessage.FileType.IMAGE;
-		} else {
-			fileType = FileMessage.FileType.FILE;
-		}
-
-		Message message = new FileMessage(localUser, bytes, fileName, fileType);
+		String fileExt = FileUtil.getFileExtension(fileName).toLowerCase();
+		Message message = new FileMessage(localUser, bytes, fileExt);
 
 		try {
 			outPacketQueue.put(message);
@@ -248,6 +240,7 @@ public class Controller {
 			Thread.currentThread().interrupt();
 		}
 	}
+
 	public void sendRegisterRequest(String username, String displayname, String password) {
 		RegisterRequest request = new RegisterRequest(username, displayname, password);
 		try {
@@ -256,15 +249,18 @@ public class Controller {
 			Thread.currentThread().interrupt();
 		}
 	}
+
 	private void handleLoginResponse(LoginResponse response) {
-		if(response.getStatus() == Status.SUCCESS){
+		if (response.getStatus() == Status.SUCCESS) {
 			this.localUser = response.getUser();
-		} if (onLoginResult != null) {
+		}
+		if (onLoginResult != null) {
 			onLoginResult.accept(response);
 		}
 	}
-	private void handleRegisterResponse(RegisterResponse response){
-		if(onRegisterResult != null){
+
+	private void handleRegisterResponse(RegisterResponse response) {
+		if (onRegisterResult != null) {
 			onRegisterResult.accept(response);
 		}
 	}
@@ -341,23 +337,20 @@ public class Controller {
 		}
 
 		private Node createFileNode(FileMessage fileMessage) {
-			return switch (fileMessage.getFileType()) {
-				case FILE -> {
-					Label label = new Label("Datei: " + fileMessage.getFileName());
-					// todo(team-view): Datei herunterladen Button
-					yield label;
-				}
-				case IMAGE -> {
-					Image image = new Image(new ByteArrayInputStream(fileMessage.getContent()));
-					ImageView imageView = new ImageView(image);
-					imageView.setPreserveRatio(true);
-					imageView.fitWidthProperty().bind(Bindings.createDoubleBinding(
-						() -> Math.clamp(getScene().getWidth() - 32, 100.0, image.getWidth()),
-						getScene().widthProperty()
-					));
-					yield imageView;
-				}
-			};
+			if (FileUtil.isImageExtension(fileMessage.getFileExtension())) {
+				Image image = new Image(new ByteArrayInputStream(fileMessage.getContent()));
+				ImageView imageView = new ImageView(image);
+				imageView.setPreserveRatio(true);
+				imageView.fitWidthProperty().bind(Bindings.createDoubleBinding(
+					() -> Math.clamp(getScene().getWidth() - 32, 100.0, image.getWidth()),
+					getScene().widthProperty()
+				));
+				return imageView;
+			} else {
+				Label label = new Label(fileMessage.getFileExtension() + "-Datei");
+				// todo(team-view): Datei herunterladen Button
+				return label;
+			}
 		}
 
 		private String getBubbleStyle(boolean isOwn) {

@@ -1,6 +1,8 @@
 package Server;
 
 import User.Model.User;
+import Util.FileUtil;
+import Util.Network.Messages.FileMessage;
 import Util.Network.Notifications.LeaveNotification;
 import Util.Network.Packet;
 import Util.Network.SocketProxy;
@@ -43,14 +45,20 @@ public class PacketBroker implements Runnable {
 			try {
 				Packet packet = broadcastPacketQueue.take();
 
+				if (packet instanceof FileMessage file) {
+					try {
+						FileUtil.saveFile(file.getContent(), file.getFileExtension());
+					} catch (IOException e) {
+						System.err.println("Fehler beim Speichern einer Datei: " + e);
+						continue;
+					}
+				}
+
 				synchronized (clients) {
 					for (var client : clients) {
 						if (client.shouldStop()) {
 							clientsToUnregister.add(client);
-							continue;
-						}
-
-						if (!client.tryEnqueuePacket(packet)) {
+						} else if (!client.tryEnqueuePacket(packet)) {
 							System.err.println("Client outPacketQueue ist voll");
 							clientsToUnregister.add(client);
 						}
@@ -58,22 +66,19 @@ public class PacketBroker implements Runnable {
 				}
 
 				for (var client : clientsToUnregister) {
-					boolean result = unregister(client);
-
-					if (!result) {
+					if (!unregister(client)) {
 						System.err.println("Zu entfernenden Client nicht gefunden");
-						continue;
 					}
+				}
 
+				for (var client : clientsToUnregister) {
 					User user = client.getUser();
-
 					// todo: Benutzernamen des Clients übergeben oder keine Benachrichtigung senden wenn nicht eingeloggt
 					if (user == null) {
 						user = new User();
 						user.setUsername("Platzhalter");
 					}
 
-					// todo: Sende LeaveNotification direkt nach dem Disconnect
 					if (!broadcast(new LeaveNotification(user))) {
 						System.err.println("broadcastPacketQueue ist voll, Paket wurde verworfen");
 					}
@@ -101,20 +106,20 @@ public class PacketBroker implements Runnable {
 
 		synchronized (clients) {
 			if (clients.size() >= MAX_CLIENTS) {
-				for (var client : clients) {
-					if (client.shouldStop()) {
-						clientsToUnregister.add(client);
-					}
-				}
+				collectClientsToUnregister(clientsToUnregister);
 
 				if (clientsToUnregister.isEmpty()) {
 					return false;
+				} else {
+					System.err.println("Maximale Anzahl an Clients erreicht, es werden " + clientsToUnregister.size() + " inaktive Clients entfernt");
+					for (var client : clientsToUnregister) {
+						if (!unregister(client)) {
+							System.err.println("Zu entfernenden Client nicht gefunden");
+						}
+					}
+					clientsToUnregister.clear();
 				}
 			}
-		}
-
-		for (var client : clientsToUnregister) {
-			unregister(client);
 		}
 
 		BlockingQueue<Packet> outPacketQueue = new ArrayBlockingQueue<>(MAX_OUTGOING_PACKETS);
@@ -129,6 +134,7 @@ public class PacketBroker implements Runnable {
 
 	/// Entfernt einen Client aus der Liste der verbundenen Clients und schließt die Verbindung.
 	/// Gibt `true` zurück, wenn der Client erfolgreich entfernt wurde.
+	@SuppressWarnings("BooleanMethodIsAlwaysInverted")
 	public boolean unregister(ClientProxy client) {
 		boolean removed;
 
@@ -159,6 +165,16 @@ public class PacketBroker implements Runnable {
 
 	public void shutdown() {
 		stopFlag.set(true);
+	}
+
+	/// Sammelt alle Clients, die unregistriert werden müssen, in der übergebenen Liste.
+	/// Es muss die Clients-Liste synchronisiert werden, bevor diese Methode aufgerufen wird.
+	private void collectClientsToUnregister(List<ClientProxy> clientsToUnregister) {
+		for (var client : clients) {
+			if (client.shouldStop()) {
+				clientsToUnregister.add(client);
+			}
+		}
 	}
 
 	private void closeAllClients() {
