@@ -11,7 +11,6 @@ import javafx.fxml.Initializable;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
-import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.stage.Stage;
 
 import java.io.IOException;
@@ -93,26 +92,30 @@ public class TabelleController implements Initializable {
 
 	@FXML
 	private void handleDeleteUser() {
-		User selectedUser = userTable.getSelectionModel().getSelectedItem();
-		if (selectedUser == null) {
-			showError("Bitte wähle einen Benutzer zum Löschen aus.");
-			return;
-		}
+		try {
+			User selectedUser = userTable.getSelectionModel().getSelectedItem();
+			if (selectedUser == null) {
+				showError("Bitte wähle einen Benutzer zum Löschen aus.");
+				return;
+			}
 
-		// Bestätigungsdialog
-		Alert confirmation = new Alert(Alert.AlertType.CONFIRMATION);
-		confirmation.setTitle("Löschen bestätigen");
-		confirmation.setHeaderText("Benutzer löschen?");
-		confirmation.setContentText("Möchtest du den Benutzer '" + selectedUser.getUsername() + "' wirklich löschen?");
+			// Bestätigungsdialog
+			Alert confirmation = new Alert(Alert.AlertType.CONFIRMATION);
+			confirmation.setTitle("Löschen bestätigen");
+			confirmation.setHeaderText("Benutzer löschen?");
+			confirmation.setContentText("Möchtest du den Benutzer '" + selectedUser.getUsername() + "' wirklich löschen?");
 
-		Optional<ButtonType> result = confirmation.showAndWait();
-		if (result.isPresent() && result.get() == ButtonType.OK) {
-			try {
+			Optional<ButtonType> result = confirmation.showAndWait();
+			if (result.isPresent() && result.get() == ButtonType.OK) {
 				db.deleteUser(selectedUser.getUsername()); // Repository-Methode verwenden
 				ladeUserListe(); // Liste neu laden
-			} catch (RepositoryException e) {
-				showError("Fehler beim Löschen: " + e.getMessage());
 			}
+		} catch (RepositoryException e) {
+			showError("Fehler beim Löschen: " + e.getMessage());
+		} catch (Exception e) {
+			System.err.println("Unerwarteter Fehler beim Löschen: " + e.getMessage());
+			e.printStackTrace();
+			showError("Unerwarteter Fehler beim Löschen: " + e.getMessage());
 		}
 	}
 
