@@ -42,18 +42,8 @@ public class Controller {
 	private final BlockingQueue<Packet> outPacketQueue;
 	private final BlockingQueue<Packet> inPacketQueue;
 
-
-
 	private Consumer<LoginResponse> onLoginResult;
 	private Consumer<RegisterResponse> onRegisterResult;
-
-	// UI registriert hier ihren Handler (z.B. Screen-Wechsel bei Success)
-	public void setOnLoginResult(Consumer<LoginResponse> onLoginResult) {
-		this.onLoginResult = onLoginResult;
-	}
-	public void setOnRegisterResult(Consumer<RegisterResponse> onRegisterResult) {
-		this.onRegisterResult = onRegisterResult;
-	}
 
 	private Client client;
 	private User localUser;
@@ -75,6 +65,15 @@ public class Controller {
 	public Controller() {
 		this.outPacketQueue = new ArrayBlockingQueue<>(4);
 		this.inPacketQueue = new ArrayBlockingQueue<>(4);
+	}
+	
+	// UI registriert hier ihren Handler (z.B. Screen-Wechsel bei Success)
+	public void setOnLoginResult(Consumer<LoginResponse> onLoginResult) {
+		this.onLoginResult = onLoginResult;
+	}
+
+	public void setOnRegisterResult(Consumer<RegisterResponse> onRegisterResult) {
+		this.onRegisterResult = onRegisterResult;
 	}
 
 	@FXML
@@ -115,12 +114,11 @@ public class Controller {
 							case LoginResponse loginResp -> Platform.runLater(() -> { //FÜR UI CALLBACK
 								handleLoginResponse(loginResp);
 							});
-							case RegisterResponse registerResp -> Platform.runLater(()->{
+							case RegisterResponse registerResp -> Platform.runLater(() -> {
 								handleRegisterResponse(registerResp);
 							});
 							case null, default -> throw new IllegalStateException("Unbekanntes Paket empfangen");
 						}
-
 
 					} catch (InterruptedException e) {
 						break;
@@ -131,13 +129,13 @@ public class Controller {
 			listener.start();
 
 		} catch (IOException e) {
-			// todo(team-view): schöner Fehler anzeigen (z. B. Popup) und Möglichkeit zum erneuten Verbinden anbieten
-			User user = new User();
-			user.setUsername("System");
-
-			Platform.runLater(() ->
-				getMessages().add(new TextMessage(user, "Verbindung fehlgeschlagen: " + e.getMessage()))
-			);
+			Alert alert = new Alert(Alert.AlertType.ERROR, e.getLocalizedMessage() + "\n\nErneut verbinden?", ButtonType.YES, ButtonType.NO);
+			alert.setHeaderText("Verbindung fehlgeschlagen");
+			alert.showAndWait().ifPresent(response -> {
+				if (response == ButtonType.YES) {
+					connectAndRun(ip, port);
+				}
+			});
 		}
 	}
 
@@ -248,6 +246,7 @@ public class Controller {
 			Thread.currentThread().interrupt();
 		}
 	}
+
 	public void sendRegisterRequest(String username, String displayname, String password) {
 		RegisterRequest request = new RegisterRequest(username, displayname, password);
 		try {
@@ -256,15 +255,18 @@ public class Controller {
 			Thread.currentThread().interrupt();
 		}
 	}
+
 	private void handleLoginResponse(LoginResponse response) {
-		if(response.getStatus() == Status.SUCCESS){
+		if (response.getStatus() == Status.SUCCESS) {
 			this.localUser = response.getUser();
-		} if (onLoginResult != null) {
+		}
+		if (onLoginResult != null) {
 			onLoginResult.accept(response);
 		}
 	}
-	private void handleRegisterResponse(RegisterResponse response){
-		if(onRegisterResult != null){
+
+	private void handleRegisterResponse(RegisterResponse response) {
+		if (onRegisterResult != null) {
 			onRegisterResult.accept(response);
 		}
 	}
