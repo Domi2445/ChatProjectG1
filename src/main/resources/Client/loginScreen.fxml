@@ -57,7 +57,7 @@
                   <Insets bottom="10.0" />
                </VBox.margin>
             </Label>
-            <TextField maxWidth="250.0" promptText="Username" styleClass="rounded">
+            <TextField maxWidth="250.0" promptText="Benutzername" styleClass="rounded">
                <VBox.margin>
                   <Insets bottom="10.0" left="10.0" right="10.0" top="10.0" />
                </VBox.margin>
