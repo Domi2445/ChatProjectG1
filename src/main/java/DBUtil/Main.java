@@ -16,7 +16,7 @@ public class Main extends Application {
 
 	@Override
 	public void start(Stage primaryStage) throws IOException {
-		FXMLLoader loader = new FXMLLoader(Main.class.getResource("/DBUtil/db-verwaltung-view.fxml"));
+		FXMLLoader loader = new FXMLLoader(Main.class.getResource("/DBUtil/db-Tabelle.fxml"));
 		Parent root = loader.load();
 
 		Scene scene = new Scene(root, 430, 300);

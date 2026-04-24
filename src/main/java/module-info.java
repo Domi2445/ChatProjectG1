@@ -15,7 +15,7 @@ module com.chatproject {
 
 	opens Client to javafx.fxml, javafx.graphics, javafx.base;
 	opens DBUtil to javafx.fxml;
-	opens User.Model to org.hibernate.orm.core;
+	opens User.Model to org.hibernate.orm.core, javafx.base, jakarta.persistence;
 
 
 	exports DBUtil;

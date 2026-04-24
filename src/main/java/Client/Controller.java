@@ -2,6 +2,7 @@ package Client;
 
 import User.Login.Status;
 import User.Model.User;
+import Util.FileUtil;
 import Util.Network.Auth.LoginRequest;
 import Util.Network.Auth.LoginResponse;
 import Util.Network.Auth.RegisterRequest;
@@ -32,7 +33,6 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.function.Consumer;
@@ -203,17 +203,9 @@ public class Controller {
 			return;
 		}
 
-		FileMessage.FileType fileType;
 		String fileName = selectedFile.getName();
-
-		if (fileName.endsWith(".png") || fileName.endsWith(".jpg") || fileName.endsWith(".gif") || fileName.endsWith(".bmp")) {
-			fileType = FileMessage.FileType.IMAGE;
-		} else {
-			fileType = FileMessage.FileType.FILE;
-		}
-
-		UUID uuid = UUID.randomUUID();
-		Message message = new FileMessage(localUser, bytes, uuid, fileName, fileType);
+		String fileExt = FileUtil.getFileExtension(fileName).toLowerCase();
+		Message message = new FileMessage(localUser, bytes, fileExt);
 
 		try {
 			outPacketQueue.put(message);
@@ -345,23 +337,20 @@ public class Controller {
 		}
 
 		private Node createFileNode(FileMessage fileMessage) {
-			return switch (fileMessage.getFileType()) {
-				case FILE -> {
-					Label label = new Label("Datei: " + fileMessage.getFileName());
-					// todo(team-view): Datei herunterladen Button
-					yield label;
-				}
-				case IMAGE -> {
-					Image image = new Image(new ByteArrayInputStream(fileMessage.getContent()));
-					ImageView imageView = new ImageView(image);
-					imageView.setPreserveRatio(true);
-					imageView.fitWidthProperty().bind(Bindings.createDoubleBinding(
-						() -> Math.clamp(getScene().getWidth() - 32, 100.0, image.getWidth()),
-						getScene().widthProperty()
-					));
-					yield imageView;
-				}
-			};
+			if (FileUtil.isImageExtension(fileMessage.getFileExtension())) {
+				Image image = new Image(new ByteArrayInputStream(fileMessage.getContent()));
+				ImageView imageView = new ImageView(image);
+				imageView.setPreserveRatio(true);
+				imageView.fitWidthProperty().bind(Bindings.createDoubleBinding(
+					() -> Math.clamp(getScene().getWidth() - 32, 100.0, image.getWidth()),
+					getScene().widthProperty()
+				));
+				return imageView;
+			} else {
+				Label label = new Label(fileMessage.getFileExtension() + "-Datei");
+				// todo(team-view): Datei herunterladen Button
+				return label;
+			}
 		}
 
 		private String getBubbleStyle(boolean isOwn) {
