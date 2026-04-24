@@ -140,7 +140,7 @@ public class JPAUserRepository implements UserRepository {
 		}
 	}
 
-	public List<User> getAllUsers() {
+	public List<User> getAllUsers() throws RepositoryException {
 		try (EntityManager entityManager = Connection.createEntityManager()) {
 			return entityManager.createQuery(
 					"SELECT u FROM User u ORDER BY u.username", User.class)
