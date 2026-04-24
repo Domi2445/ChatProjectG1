@@ -1,47 +1,76 @@
 package Server;
 
-import Util.Message;
-import Util.SocketProxy;
+import User.Model.User;
+import Util.Network.Notifications.JoinNotification;
+import Util.Network.SocketProxy;
 
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 public class Server implements Runnable {
-	private final ServerSocket server;
+	protected final ExecutorService threadExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
-	private final BlockingQueue<Message> messageBrokerQueue;
-	private final List<SocketProxy> clients;
+	private final ServerSocket server;
+	private final PacketBroker packetBroker;
+	private final Future<?> packetBrokerFuture;
 
 	public Server(int port) throws IOException {
 		server = new ServerSocket(port);
-		messageBrokerQueue = new ArrayBlockingQueue<>(32);
-		clients = Collections.synchronizedList(new ArrayList<>());
+		packetBroker = new PacketBroker(threadExecutor);
+		packetBrokerFuture = threadExecutor.submit(packetBroker);
 	}
 
 	@Override
 	public void run() {
-		new Thread(new MessageBroker(messageBrokerQueue, clients)).start();
-
-		while (true) {
+		while (!Thread.currentThread().isInterrupted()) {
 			try {
-				Socket socket = server.accept();
-				SocketProxy client = new SocketProxy(socket);
-				System.out.println("Verbindung akzeptiert");
+				Socket s = server.accept();
 
-				clients.add(client);
+				SocketProxy socket = new SocketProxy(s);
+				if (packetBroker.register(socket)) {
+					System.out.println("Neuen Client registriert");
+				} else {
+					System.err.println("Maximale Anzahl an Clients erreicht, Verbindung abgelehnt");
+					try { socket.close(); } catch (IOException ignored) {}
+					continue;
+				}
 
-				new Thread(new ClientHandler(client, messageBrokerQueue)).start();
+				// todo: Wenn es ein Loginsystem gibt, hier das User-Objekt des neu beigetretenen Clients übergeben, sobald dieser sich angemeldet hat
+				User user = new User();
+				user.setUsername("Platzhalter");
+				packetBroker.broadcast(new JoinNotification(user));
 
 			} catch (IOException e) {
-				System.out.println("Fehler beim Verbindungsaufbau:\n" + e);
+				if (!server.isClosed()) {
+					System.err.println("Fehler beim Akzeptieren eines neuen Clients: " + e);
+				}
 				break;
+
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
 			}
+		}
+	}
+
+	public void stop() throws IOException {
+		System.out.println("Server wird heruntergefahren...");
+
+		packetBroker.shutdown();
+		packetBrokerFuture.cancel(true);
+		server.close();
+		threadExecutor.shutdownNow();
+
+		try {
+			if (!threadExecutor.awaitTermination(10, TimeUnit.SECONDS)) {
+				System.err.println("Server-Threads konnten nicht rechtzeitig beendet werden");
+			}
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
 		}
 	}
 }

@@ -1,9 +1,14 @@
-package Util;
+package Util.Network.Messages;
 
 import User.Model.User;
 
+import java.io.Serial;
+
 public class FileMessage extends Message {
-    private final byte[] content;
+	@Serial
+	private static final long serialVersionUID = 1L;
+
+	private final byte[] content;
     private final String fileName;
     private final FileType fileType;
 
@@ -16,18 +21,6 @@ public class FileMessage extends Message {
 
     public byte[] getContent() {
         return content;
-    }
-
-    public String getDisplayText() {
-        String name = (fileName == null || fileName.trim().isEmpty()) ? "(unbenannt)" : fileName;
-        return switch (fileType) {
-            case IMAGE -> "Bild: " + name;
-            case FILE -> "Datei: " + name;
-        };
-    }
-
-    public void send() {
-        throw new UnsupportedOperationException("FileMessage.send() wird nicht direkt unterstützt.");
     }
 
     public String getFileName() {

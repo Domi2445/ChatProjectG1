@@ -8,6 +8,7 @@
       <option name="environmentVariables" visible="false" />
     </selectedOptions>
     <option name="WORKING_DIRECTORY" value="$ContentRoot$" />
+	<option name="VM_PARAMETERS" value="--enable-native-access=javafx.graphics" />
     <method v="2">
       <option name="Make" enabled="true" />
     </method>

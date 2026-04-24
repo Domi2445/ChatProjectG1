@@ -3,11 +3,26 @@ package Server;
 import java.io.IOException;
 
 public class Main {
+	private static final int PORT = 6969;
+
 	public static void main(String[] args) {
+		Server server;
+
 		try {
-			new Server(6969).run();
+			server = new Server(PORT);
 		} catch (IOException e) {
-			e.printStackTrace();
+			System.err.println("Fehler beim Starten des Servers: " + e);
+			return;
 		}
+
+		Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+			try {
+				server.stop();
+			} catch (IOException e) {
+				System.err.println("Fehler beim Stoppen des Servers: " + e);
+			}
+		}));
+
+		server.run();
 	}
 }

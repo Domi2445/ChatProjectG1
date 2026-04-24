@@ -1,6 +1,6 @@
 package Client;
 
-import Util.User;
+import User.Model.User;
 import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
@@ -11,13 +11,20 @@ import java.io.IOException;
 
 public class Main extends Application {
 
+	public static void main(String[] args) {
+		launch(args);
+	}
+
 	@Override
 	public void start(Stage primaryStage) throws IOException {
 		FXMLLoader loader = new FXMLLoader(Main.class.getResource("/Client/chat-view.fxml"));
 		Parent root = loader.load();
 
 		Controller controller = loader.getController();
-		controller.configure(primaryStage, new User("Benutzername"));
+
+		User user = new User();
+		user.setUsername("Benutzername");
+		controller.configure(primaryStage, user);
 
 		Scene scene = new Scene(root, 500, 650);
 		primaryStage.setTitle("Socket Chat");
@@ -27,9 +34,5 @@ public class Main extends Application {
 		primaryStage.show();
 
 		controller.connectAndRun("127.0.0.1", 6969);
-	}
-
-	public static void main(String[] args) {
-		launch(args);
 	}
 }
