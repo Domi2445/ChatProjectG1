@@ -7,6 +7,7 @@ import jakarta.persistence.EntityTransaction;
 import jakarta.persistence.NoResultException;
 import jakarta.persistence.NonUniqueResultException;
 
+import java.util.List;
 import java.util.Optional;
 
 public class JPAUserRepository implements UserRepository {
@@ -139,8 +140,19 @@ public class JPAUserRepository implements UserRepository {
 		}
 	}
 
+	public List<User> getAllUsers() {
+		try (EntityManager entityManager = Connection.createEntityManager()) {
+			return entityManager.createQuery(
+					"SELECT u FROM User u ORDER BY u.username", User.class)
+				.getResultList();
+		} catch (RuntimeException e) {
+			throw new RepositoryException("User-Liste konnte nicht geladen werden", e);
+		}
+	}
+
 	@FunctionalInterface
 	private interface EntityWork {
 		void run(EntityManager entityManager);
 	}
+
 }
