@@ -13,7 +13,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 public class Server implements Runnable {
-	protected static final ExecutorService THREAD_EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
+	protected final ExecutorService threadExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
 	private final ServerSocket server;
 	private final PacketBroker packetBroker;
@@ -21,8 +21,8 @@ public class Server implements Runnable {
 
 	public Server(int port) throws IOException {
 		server = new ServerSocket(port);
-		packetBroker = new PacketBroker();
-		packetBrokerFuture = THREAD_EXECUTOR.submit(packetBroker);
+		packetBroker = new PacketBroker(threadExecutor);
+		packetBrokerFuture = threadExecutor.submit(packetBroker);
 	}
 
 	@Override
@@ -46,7 +46,7 @@ public class Server implements Runnable {
 				packetBroker.broadcast(new JoinNotification(user));
 
 			} catch (IOException e) {
-				if (!e.getMessage().equals("Socket closed")) {
+				if (!server.isClosed()) {
 					System.err.println("Fehler beim Akzeptieren eines neuen Clients: " + e);
 				}
 				break;
@@ -63,10 +63,10 @@ public class Server implements Runnable {
 		packetBroker.shutdown();
 		packetBrokerFuture.cancel(true);
 		server.close();
-		THREAD_EXECUTOR.shutdownNow();
+		threadExecutor.shutdownNow();
 
 		try {
-			if (!THREAD_EXECUTOR.awaitTermination(10, TimeUnit.SECONDS)) {
+			if (!threadExecutor.awaitTermination(10, TimeUnit.SECONDS)) {
 				System.err.println("Server-Threads konnten nicht rechtzeitig beendet werden");
 			}
 		} catch (InterruptedException e) {
