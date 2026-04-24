@@ -52,7 +52,7 @@
                   </LinearGradient>
                </fill>
             </Circle>
-            <Label text="Welcome!">
+            <Label text="Willkommen!">
                <VBox.margin>
                   <Insets bottom="10.0" />
                </VBox.margin>
