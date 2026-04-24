@@ -32,4 +32,5 @@ bin/
 .env
 .env.*
 !.env.example
-data/chatdb.mv.db
+data/*.mv.db  # Ignoriert alle .mv.db-Dateien im data-Ordner
+
