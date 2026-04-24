@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.geometry.Insets?>
+
+<VBox xmlns:fx="http://javafx.com/fxml"
+      fx:controller="DBUtil.TabelleController" spacing="10">
+	<padding>
+		<Insets top="10" right="10" bottom="10" left="10"/>
+	</padding>
+
+	<HBox spacing="10" alignment="CENTER_LEFT">
+		<Label text="Alle Benutzer:" style="-fx-font-size: 14px; -fx-font-weight: bold;"/>
+		<Region HBox.hgrow="ALWAYS"/>
+		<Button text="+ Neuer User" onAction="#handleNewUser"
+		        style="-fx-padding: 8 16; -fx-font-size: 12;"/>
+	</HBox>
+
+	<TableView fx:id="userTable" VBox.vgrow="ALWAYS">
+		<columns>
+			<TableColumn fx:id="usernameColumn" text="Username" prefWidth="150"/>
+			<TableColumn fx:id="displaynameColumn" text="Displayname" prefWidth="200"/>
+		</columns>
+	</TableView>
+
+	<!-- Neu: Lösch-Button unter der Tabelle -->
+	<HBox spacing="10" alignment="CENTER_RIGHT">
+		<Button text="Löschen" onAction="#handleDeleteUser"
+		        style="-fx-padding: 8 16; -fx-font-size: 12; -fx-background-color: #ff6b6b; -fx-text-fill: white;"/>
+	</HBox>
+</VBox>

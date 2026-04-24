@@ -1,6 +1,7 @@
 package Client;
 
 import User.Login.Status;
+import User.Model.User;
 import Util.Network.Auth.LoginRequest;
 import Util.Network.Auth.LoginResponse;
 import Util.Network.Auth.RegisterRequest;
@@ -12,7 +13,6 @@ import Util.Network.Notifications.JoinNotification;
 import Util.Network.Notifications.LeaveNotification;
 import Util.Network.Notifications.Notification;
 import Util.Network.Packet;
-import User.Model.User;
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
 import javafx.collections.ObservableList;
@@ -24,15 +24,9 @@ import javafx.scene.control.*;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.VBox;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
-
-
-import AudioCall.AudioCall;
-import Util.Network.Notifications.CallNotification;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-import javafx.scene.control.TextInputDialog;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
@@ -48,32 +42,13 @@ public class Controller {
 	private final BlockingQueue<Packet> outPacketQueue;
 	private final BlockingQueue<Packet> inPacketQueue;
 
-
-	//Audio
-
-	private static final String RELAY_IP = "127.0.0.1";
-	private static final int    RELAY_PORT = 8000;
-	private static final int    MY_PORT    = 7000;
-	private final AudioCall audioCall = new AudioCall();
-	private boolean inCall = false;
-
-	//
-
-
 	private Consumer<LoginResponse> onLoginResult;
 	private Consumer<RegisterResponse> onRegisterResult;
-
-	// UI registriert hier ihren Handler (z.B. Screen-Wechsel bei Success)
-	public void setOnLoginResult(Consumer<LoginResponse> onLoginResult) {
-		this.onLoginResult = onLoginResult;
-	}
-	public void setOnRegisterResult(Consumer<RegisterResponse> onRegisterResult) {
-		this.onRegisterResult = onRegisterResult;
-	}
 
 	private Client client;
 	private User localUser;
 	private Stage stage;
+	private TextMessage isEditingMessage;
 
 	@FXML
 	private ListView<Packet> messageListView;
@@ -91,18 +66,23 @@ public class Controller {
 		this.outPacketQueue = new ArrayBlockingQueue<>(4);
 		this.inPacketQueue = new ArrayBlockingQueue<>(4);
 	}
-	//Audio
-	@FXML
-	private Button videoCallButton;
-	//
+	
+	// UI registriert hier ihren Handler (z.B. Screen-Wechsel bei Success)
+	public void setOnLoginResult(Consumer<LoginResponse> onLoginResult) {
+		this.onLoginResult = onLoginResult;
+	}
+
+	public void setOnRegisterResult(Consumer<RegisterResponse> onRegisterResult) {
+		this.onRegisterResult = onRegisterResult;
+	}
+
 	@FXML
 	private void initialize() {
 		messageListView.setCellFactory(lv -> new MessageCell());
+		
 		sendButton.setOnAction(e -> sendMessage());
 		messageTextField.setOnAction(e -> sendMessage());
 		uploadButton.setOnAction(e -> sendFile());
-
-		videoCallButton.setOnAction(e -> handleCallButton()); // Audio
 	}
 
 	public void configure(Stage stage, User user) {
@@ -126,10 +106,6 @@ public class Controller {
 								getMessages().add(message);
 								messageListView.scrollTo(getMessages().size() - 1);
 							});
-							//Audio
-							case CallNotification call -> Platform.runLater(() ->
-								handleCallNotification(call));
-							//
 							case Notification notification -> Platform.runLater(() -> {
 								getMessages().add(notification);
 								messageListView.scrollTo(getMessages().size() - 1);
@@ -138,15 +114,11 @@ public class Controller {
 							case LoginResponse loginResp -> Platform.runLater(() -> { //FÜR UI CALLBACK
 								handleLoginResponse(loginResp);
 							});
-							case RegisterResponse registerResp -> Platform.runLater(()->
-							{
+							case RegisterResponse registerResp -> Platform.runLater(() -> {
 								handleRegisterResponse(registerResp);
 							});
-
-
 							case null, default -> throw new IllegalStateException("Unbekanntes Paket empfangen");
 						}
-
 
 					} catch (InterruptedException e) {
 						break;
@@ -157,13 +129,13 @@ public class Controller {
 			listener.start();
 
 		} catch (IOException e) {
-			// todo(team-view): schöner Fehler anzeigen (z. B. Popup) und Möglichkeit zum erneuten Verbinden anbieten
-			User user = new User();
-			user.setUsername("System");
-
-			Platform.runLater(() ->
-				getMessages().add(new TextMessage(user, "Verbindung fehlgeschlagen: " + e.getMessage()))
-			);
+			Alert alert = new Alert(Alert.AlertType.ERROR, e.getLocalizedMessage() + "\n\nErneut verbinden?", ButtonType.YES, ButtonType.NO);
+			alert.setHeaderText("Verbindung fehlgeschlagen");
+			alert.showAndWait().ifPresent(response -> {
+				if (response == ButtonType.YES) {
+					connectAndRun(ip, port);
+				}
+			});
 		}
 	}
 
@@ -174,17 +146,32 @@ public class Controller {
 	private void sendMessage() {
 		String text = messageTextField.getText().trim();
 		if (!text.isEmpty()) {
-			Message message = new TextMessage(localUser, text);
-
-			try {
-				outPacketQueue.put(message);
-			} catch (InterruptedException ex) {
-				throw new RuntimeException(ex);
+			if (isEditingMessage != null) {
+				isEditingMessage.setEditedContent(text);
+				int index = getMessages().indexOf(isEditingMessage);
+				if (index >= 0) {
+					messageListView.getItems().set(index, isEditingMessage);
+					messageListView.refresh();
+				}
+				isEditingMessage = null;
+				resetSendButton();
+			} else {
+				Message message = new TextMessage(localUser, text);
+				try {
+					outPacketQueue.put(message);
+				} catch (InterruptedException ex) {
+					throw new RuntimeException(ex);
+				}
 			}
 
 			messageListView.scrollTo(getMessages().size() - 1);
 			messageTextField.clear();
 		}
+	}
+	
+	private void resetSendButton() {
+		sendButton.setText("Send");
+		sendButton.setStyle("-fx-background-color: #89b4fa; -fx-text-fill: #1e1e2e; -fx-font-size: 14; -fx-background-radius: 20; -fx-min-width: 70; -fx-min-height: 40;");
 	}
 
 	private void sendFile() {
@@ -246,11 +233,6 @@ public class Controller {
 				System.out.println(leave.getUser().getUsername() + " hat verlassen");
 				// todo(team-view): in der View den angezeigten Benutzer entfernen
 			}
-
-			// Audio
-			case CallNotification call -> handleCallNotification(call);
-
-			//
 			case null, default -> throw new IllegalStateException("Unbekannte Systemnachricht");
 		}
 
@@ -264,6 +246,7 @@ public class Controller {
 			Thread.currentThread().interrupt();
 		}
 	}
+
 	public void sendRegisterRequest(String username, String displayname, String password) {
 		RegisterRequest request = new RegisterRequest(username, displayname, password);
 		try {
@@ -273,112 +256,24 @@ public class Controller {
 		}
 	}
 
-	 // Audio
-
-			// Wird aufgerufen wenn der Nutzer auf den Anruf-Button drückt
-			public void handleCallButton()
-			{
-				if (!inCall)
-				{
-					// Kleines Fenster öffnen wo man den Benutzernamen eingibt
-					TextInputDialog dialog = new TextInputDialog();
-					dialog.setTitle("Anruf starten");
-					dialog.setHeaderText("Benutzername des Empfängers:");
-					String target = dialog.showAndWait().orElse(null);
-
-					// Abbrechen wenn nichts eingegeben wurde
-					if (target == null || target.isBlank()) return;
-
-					// CallNotification mit REQUEST an den Server schicken
-					try {
-						outPacketQueue.put(new CallNotification(
-							CallNotification.CallType.REQUEST, localUser, target, MY_PORT));
-						} catch (InterruptedException e) { e.printStackTrace(); }
-
-				}
-					else
-					{
-
-						audioCall.stop();
-						inCall = false;
-						videoCallButton.setStyle(
-							"-fx-background-color: #45475a; -fx-text-fill: #cdd6f4; -fx-font-size: 14; " +
-								"-fx-background-radius: 20; -fx-min-width: 70; -fx-min-height: 40;"
-						);
-					}
-			}
-
-
-
-				// Wird aufgerufen wenn wir eine CallNotification vom Server bekommen
-				private void handleCallNotification(CallNotification call) {
-					// Ignorieren wenn das Paket nicht für uns ist
-					if (!call.getTargetUsername().equals(localUser.getUsername())) return;
-
-					switch (call.getType()) {
-						case REQUEST -> {
-							// Jemand ruft uns an -> Popup anzeigen
-							Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
-							alert.setTitle("Eingehender Anruf");
-							alert.setHeaderText("Anruf von: " + call.getSender().getUsername());
-							boolean accepted = alert.showAndWait().orElse(ButtonType.CANCEL) == ButtonType.OK;
-
-							try {
-								// Antwort (ACCEPT oder REJECT) zurück an den Server schicken
-								outPacketQueue.put(new CallNotification(
-									accepted ? CallNotification.CallType.ACCEPT : CallNotification.CallType.REJECT,
-									localUser, call.getSender().getUsername(), MY_PORT));
-
-
-								if (accepted) startAudioCall(call);
-							} catch (InterruptedException e) { e.printStackTrace(); }
-						}
-						//
-						case ACCEPT -> startAudioCall(call);
-
-						// Der andere hat abgelehnt -> Nachricht im Chat anzeigen
-						case REJECT -> getMessages().add(
-							new TextMessage(localUser, call.getSender().getUsername() + " hat abgelehnt."));
-					}
-				}
-
-
-
-
-				// Startet den echten Audio-Anruf über den Relay-Server
-				private void startAudioCall(CallNotification call) {
-					String roomId = Stream.of(localUser.getUsername(), call.getSender().getUsername())
-						.sorted().collect(Collectors.joining("-"));
-					try {
-						int myPort = audioCall.start(RELAY_IP, RELAY_PORT, roomId);
-						inCall = true;
-						System.out.println("Audio call started on port: " + myPort);
-
-						// Button rot färben
-						Platform.runLater(() -> videoCallButton.setStyle(
-							"-fx-background-color: #f38ba8; -fx-text-fill: #1e1e2e; -fx-font-size: 14; " +
-								"-fx-background-radius: 20; -fx-min-width: 70; -fx-min-height: 40;"
-						));
-					} catch (Exception e) {
-						e.printStackTrace();
-					}
-				}
-
-
 	private void handleLoginResponse(LoginResponse response) {
-		if(response.getStatus() == Status.SUCCESS){
+		if (response.getStatus() == Status.SUCCESS) {
 			this.localUser = response.getUser();
-		} if (onLoginResult != null) {
+		}
+		if (onLoginResult != null) {
 			onLoginResult.accept(response);
 		}
 	}
-	private void handleRegisterResponse(RegisterResponse response){
-		if(onRegisterResult != null){
+
+	private void handleRegisterResponse(RegisterResponse response) {
+		if (onRegisterResult != null) {
 			onRegisterResult.accept(response);
 		}
 	}
 
 	private class MessageCell extends ListCell<Packet> {
+		private TextMessage editingMessage;
+
 		@Override
 		protected void updateItem(Packet item, boolean empty) {
 			super.updateItem(item, empty);
@@ -403,9 +298,18 @@ public class Controller {
 
 			switch (message) {
 				case TextMessage textMessage -> {
-					Label label = new Label(textMessage.getContent());
+					String text = textMessage.isDeleted()
+						? "Diese Nachricht wurde gelöscht"
+						: textMessage.getContent();
+
+					Label label = new Label(text);
 					label.setWrapText(true);
 					label.setMaxWidth(300);
+
+					if (textMessage.isDeleted()) {
+						label.setStyle("-fx-text-fill: #6c7086; -fx-font-style: italic;");
+					}
+
 					node = label;
 				}
 				case FileMessage fileMessage -> node = createFileNode(fileMessage);
@@ -415,9 +319,26 @@ public class Controller {
 			boolean isOwn = localUser != null && localUser.equals(message.getSender());
 			node.setStyle(getBubbleStyle(isOwn));
 
-			HBox container = new HBox(node);
+			VBox messageBox = new VBox(2);
+			messageBox.getChildren().add(node);
+
+			if (message instanceof TextMessage textMessage && textMessage.isEdited() && !textMessage.isDeleted()) {
+				Label editedLabel = new Label("bearbeitet");
+				editedLabel.setStyle("-fx-font-size: 10; -fx-text-fill: #6c7086; -fx-font-style: italic;");
+				messageBox.getChildren().add(editedLabel);
+			}
+
+			HBox container = new HBox(messageBox);
 			container.setAlignment(isOwn ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT);
 			container.setPadding(new Insets(2, 10, 2, 10));
+
+			if (isOwn && message instanceof TextMessage textMessage && !textMessage.isDeleted()) {
+				container.setOnContextMenuRequested(event -> {
+					ContextMenu contextMenu = createMessageContextMenu(textMessage);
+					contextMenu.show(container, event.getScreenX(), event.getScreenY());
+				});
+			}
+
 			return container;
 		}
 
@@ -456,11 +377,11 @@ public class Controller {
 
 			switch (notification) {
 				case JoinNotification join -> {
-					text = join.getUser() + " ist beigetreten";
+					text = join.getUser().getUsername() + " ist beigetreten";
 					color = "#89b4fa";
 				}
 				case LeaveNotification leave -> {
-					text = leave.getUser() + " hat verlassen";
+					text = leave.getUser().getUsername() + " hat verlassen";
 					color = "#f38ba8";
 				}
 				case null, default -> throw new IllegalStateException("Unerwarteter Wert: " + notification);
@@ -470,6 +391,37 @@ public class Controller {
 			setAlignment(Pos.CENTER);
 			setStyle("-fx-background-color: transparent; -fx-padding: 4 0; "
 				+ "-fx-text-fill: " + color + "; -fx-font-style: italic;");
+		}
+
+		private ContextMenu createMessageContextMenu(TextMessage message) {
+			ContextMenu menu = new ContextMenu();
+			
+			MenuItem editItem = new MenuItem("✏️ Bearbeiten");
+			editItem.setStyle("-fx-font-size: 12;");
+			editItem.setOnAction(event -> Controller.this.startEditMessage(message));
+			
+			MenuItem deleteItem = new MenuItem("🗑️ Löschen");
+			deleteItem.setStyle("-fx-font-size: 12;");
+			deleteItem.setOnAction(event -> Controller.this.deleteMessage(message));
+			
+			menu.getItems().addAll(editItem, deleteItem);
+			return menu;
+		}
+	}
+	
+	private void startEditMessage(TextMessage message) {
+		messageTextField.setText(message.getContent());
+		messageTextField.requestFocus();
+		isEditingMessage = message;
+		sendButton.setText("Speichern");
+		sendButton.setStyle("-fx-background-color: #a6e3a1; -fx-text-fill: #1e1e2e; -fx-font-size: 14; -fx-background-radius: 20; -fx-min-width: 70; -fx-min-height: 40;");
+	}
+
+	private void deleteMessage(TextMessage message) {
+		message.setDeleted();
+		int index = getMessages().indexOf(message);
+		if (index >= 0) {
+			messageListView.getItems().set(index, message);
 		}
 	}
 }
