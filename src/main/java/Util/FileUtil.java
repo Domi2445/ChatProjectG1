@@ -9,20 +9,23 @@ import java.util.Arrays;
 import java.util.UUID;
 
 public final class FileUtil {
-	private static final String[] IMAGE_EXTENSIONS = { "png", "jpg", "jpeg", "gif", "bmp" };
+	public static final String[] IMAGE_EXTENSIONS = { "png", "jpg", "jpeg", "gif", "bmp" };
 	private static final String DIRECTORY_NAME = "ChatProjektG1-Bilder";
 
 	private FileUtil() {
 		throw new UnsupportedOperationException();
 	}
 
-	public static UUID saveFile(byte[] fileBytes, String extension, boolean isImage) throws IOException {
+	public static UUID saveFile(byte[] fileBytes, String extension) throws IOException {
 		if (fileBytes == null || fileBytes.length == 0) {
 			throw new IllegalArgumentException("Datei darf nicht null oder leer sein");
 		}
 
+		String normalizedExtension = normalizeExtension(extension);
+		boolean isImage = isImageExtension(normalizedExtension);
+
 		UUID uuid = UUID.randomUUID();
-		String fileName = isImage ? uuid + "." + normalizeImageExtension(extension) : uuid.toString();
+		String fileName = isImage ? uuid + "." + normalizedExtension : uuid.toString();
 		Path filePath = getDirectory().resolve(fileName);
 
 		if (Files.exists(filePath)) {
@@ -45,6 +48,19 @@ public final class FileUtil {
 		}
 
 		return new FileInputStream(file);
+	}
+
+	public static String getFileExtension(String fileName) {
+		if (fileName == null || fileName.isEmpty()) {
+			throw new IllegalArgumentException("Dateiname darf nicht null oder leer sein");
+		}
+
+		int lastDotIndex = fileName.lastIndexOf('.');
+		if (lastDotIndex == -1 || lastDotIndex == fileName.length() - 1) {
+			throw new IllegalArgumentException("Dateiname hat keine gültige Erweiterung: " + fileName);
+		}
+
+		return fileName.substring(lastDotIndex + 1);
 	}
 
 	private static Path getDirectory() throws IOException {
@@ -91,9 +107,9 @@ public final class FileUtil {
 		throw new IOException("Bilddatei existiert nicht: " + fileId);
 	}
 
-	private static String normalizeImageExtension(String extension) {
+	private static String normalizeExtension(String extension) {
 		if (extension == null) {
-			throw new IllegalArgumentException("Bild-Erweiterung darf nicht null sein");
+			throw new IllegalArgumentException("Datei-Erweiterung darf nicht null sein");
 		}
 
 		String normalized = extension.trim().toLowerCase();
@@ -102,14 +118,13 @@ public final class FileUtil {
 		}
 
 		if (normalized.isEmpty()) {
-			throw new IllegalArgumentException("Bild-Erweiterung darf nicht leer sein");
-		}
-
-		String extensionToCheck = normalized;
-		if (Arrays.stream(IMAGE_EXTENSIONS).noneMatch(ext -> ext.equals(extensionToCheck))) {
-			throw new IllegalArgumentException("Ungültige Bilderweiterung: " + extension);
+			throw new IllegalArgumentException("Datei-Erweiterung darf nicht leer sein");
 		}
 
 		return normalized;
+	}
+
+	public static boolean isImageExtension(String extension) {
+		return Arrays.asList(IMAGE_EXTENSIONS).contains(extension);
 	}
 }
