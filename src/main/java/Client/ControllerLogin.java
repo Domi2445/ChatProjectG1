@@ -136,5 +136,3 @@ public class ControllerLogin {
 		alert.showAndWait();
 	}
 }
-
-
