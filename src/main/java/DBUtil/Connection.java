@@ -4,7 +4,11 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.Persistence;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -40,6 +44,8 @@ public final class Connection {
 	 * {@code volatile} ist fuer korrektes Double-Checked-Locking notwendig.
 	 */
 	private static volatile EntityManagerFactory entityManagerFactory;
+	private static volatile boolean triedOracleFallback;
+	private static volatile String activeDatabaseLabel = "uninitialisiert";
 
 	static {
 		// Schließt die EMF beim JVM-Shutdown sauber.
@@ -63,11 +69,32 @@ public final class Connection {
 			synchronized (Connection.class) {
 				local = entityManagerFactory;
 				if (local == null || !local.isOpen()) {
-					entityManagerFactory = local = Persistence.createEntityManagerFactory(PERSISTENCE_UNIT, buildPersistenceOverrides());
+					Map<String, Object> overrides = buildPersistenceOverrides();
+					try {
+						setActiveDatabaseLabel(overrides);
+						entityManagerFactory = local = Persistence.createEntityManagerFactory(PERSISTENCE_UNIT, overrides);
+						System.out.println("Datenbank verbunden: " + activeDatabaseLabel);
+					} catch (RuntimeException firstFailure) {
+						if (!shouldRetryWithH2(overrides) || triedOracleFallback) {
+							throw firstFailure;
+						}
+
+						triedOracleFallback = true;
+						System.err.println("Oracle-Verbindung fehlgeschlagen, wechsle auf H2: " + firstFailure.getMessage());
+						Map<String, Object> h2Overrides = buildH2Overrides();
+						setActiveDatabaseLabel(h2Overrides);
+						entityManagerFactory = local = Persistence.createEntityManagerFactory(PERSISTENCE_UNIT, h2Overrides);
+						System.out.println("Datenbank verbunden: " + activeDatabaseLabel);
+					}
 				}
 			}
 		}
 		return local;
+	}
+
+	public static String getActiveDatabaseLabel() {
+		getEntityManagerFactory();
+		return activeDatabaseLabel;
 	}
 
 	/**
@@ -106,14 +133,12 @@ public final class Connection {
 	private static Map<String, Object> buildPersistenceOverrides() {
 		Map<String, Object> overrides = new HashMap<>();
 
-		String dbUrl = normalize(firstNonBlank(System.getProperty("db.url"), System.getenv("DB_URL")));
-		String dbUser = normalize(firstNonBlank(System.getProperty("db.user"), System.getenv("DB_USER")));
-		String dbPassword = normalize(firstNonBlank(System.getProperty("db.password"), System.getenv("DB_PASSWORD")));
+		String dbUrl = normalize(firstNonBlank(System.getProperty("db.url"), System.getenv("DB_URL"), readEnvFileValue("DB_URL")));
+		String dbUser = normalize(firstNonBlank(System.getProperty("db.user"), System.getenv("DB_USER"), readEnvFileValue("DB_USER")));
+		String dbPassword = normalize(firstNonBlank(System.getProperty("db.password"), System.getenv("DB_PASSWORD"), readEnvFileValue("DB_PASSWORD")));
 
-		// Platzhalter/leer => lokaler H2-Fallback.
 		if (isBlank(dbUrl) || dbUrl.contains("${")) {
-			applyH2Defaults(overrides);
-			return overrides;
+			return buildH2Overrides();
 		}
 
 		if (isOracleUrl(dbUrl)) {
@@ -158,15 +183,8 @@ public final class Connection {
 		return overrides;
 	}
 
-	/**
-	 * Setzt lokale H2-Defaults.
-	 *
-	 * <p>Die DB ist dateibasiert im Projektordner unter {@code ./data/chatdb}.
-	 * {@code MODE=Oracle} reduziert SQL-Unterschiede waehrend der Entwicklung.
-	 *
-	 * @param overrides Ziel-Map fuer Properties
-	 */
-	private static void applyH2Defaults(Map<String, Object> overrides) {
+	private static Map<String, Object> buildH2Overrides() {
+		Map<String, Object> overrides = new HashMap<>();
 		overrides.put("jakarta.persistence.jdbc.driver", "org.h2.Driver");
 		overrides.put("jakarta.persistence.jdbc.url", "jdbc:h2:./data/chatdb;MODE=Oracle;AUTO_SERVER=TRUE");
 		overrides.put("jakarta.persistence.jdbc.user", "sa");
@@ -188,6 +206,63 @@ public final class Connection {
 		} else {
 			overrides.put("hibernate.format_sql", "false");
 		}
+
+		return overrides;
+	}
+
+	private static void setActiveDatabaseLabel(Map<String, Object> overrides) {
+		Object url = overrides.get("jakarta.persistence.jdbc.url");
+		if (url instanceof String urlString && isOracleUrl(urlString)) {
+			activeDatabaseLabel = "Oracle";
+		} else {
+			activeDatabaseLabel = "H2";
+		}
+	}
+
+	private static boolean shouldRetryWithH2(Map<String, Object> overrides) {
+		Object url = overrides.get("jakarta.persistence.jdbc.url");
+		return url instanceof String urlString && isOracleUrl(urlString);
+	}
+
+	private static String readEnvFileValue(String key) {
+		for (Path candidate : candidateEnvFiles()) {
+			if (!Files.isRegularFile(candidate)) {
+				continue;
+			}
+
+			try {
+				for (String line : Files.readAllLines(candidate)) {
+					String trimmed = line.trim();
+					if (trimmed.isEmpty() || trimmed.startsWith("#")) {
+						continue;
+					}
+
+					int separator = trimmed.indexOf('=');
+					if (separator <= 0) {
+						continue;
+					}
+
+					String candidateKey = trimmed.substring(0, separator).trim();
+					if (candidateKey.equals(key)) {
+						return trimmed.substring(separator + 1).trim();
+					}
+				}
+			} catch (IOException ignored) {
+				// Keine .env vorhanden oder nicht lesbar -> normale Env-/Property-Werte werden genutzt.
+			}
+		}
+		return null;
+	}
+
+	private static List<Path> candidateEnvFiles() {
+		Path cwd = Path.of("").toAbsolutePath().normalize();
+		Path parent = cwd.getParent();
+		Path grandParent = parent != null ? parent.getParent() : null;
+		return List.of(
+			cwd.resolve(".env"),
+			parent != null ? parent.resolve(".env") : cwd.resolve(".env"),
+			grandParent != null ? grandParent.resolve(".env") : cwd.resolve(".env")
+		);
 	}
 
 	/**

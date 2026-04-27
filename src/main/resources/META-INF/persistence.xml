@@ -11,12 +11,6 @@
         <class>User.Model.ContactData</class>
 
         <properties>
-            <property name="jakarta.persistence.jdbc.driver" value="oracle.jdbc.OracleDriver"/>
-            <property name="jakarta.persistence.jdbc.url" value="${DB_URL"/>
-            <property name="jakarta.persistence.jdbc.user" value="${DB_USER}"/>
-            <property name="jakarta.persistence.jdbc.password" value="${DB_PASSWORD}"/>
-
-            <property name="hibernate.dialect" value="org.hibernate.dialect.OracleDialect"/>
             <property name="hibernate.hbm2ddl.auto" value="update"/>
         </properties>
     </persistence-unit>
