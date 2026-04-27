@@ -3,6 +3,9 @@ package Util.Network.Groups;
 import Util.Network.Packet;
 import java.io.Serial;
 
+// send this packet to the server to create a new group.
+// usage: outPacketQueue.put(new CreateGroupPacket("group name"));
+// the server will create the group and automatically add the sender as the first member.
 public class CreateGroupPacket extends Packet
 {
 	@Serial

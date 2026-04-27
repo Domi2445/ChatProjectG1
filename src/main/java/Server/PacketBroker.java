@@ -78,6 +78,7 @@ public class PacketBroker implements Runnable {
 				}
 
 				// ---- group actions ----
+				// these packets are sent by the client to manage groups, they are never broadcast to other clients
 				if (packet instanceof CreateGroupPacket cgp) {
 					handleCreateGroup(cgp, sender);
 					continue;
@@ -101,6 +102,9 @@ public class PacketBroker implements Runnable {
 				}
 
 				// ---- routing ----
+				// if the message has a groupid, only send it to members of that group.
+				// if there is no groupid it's a global message and goes to everyone.
+				// to send a group message from the client: create a TextMessage, call message.setGroupId(groupId), then send it.
 				if (packet instanceof Message msg && msg.getGroupId() != null) {
 					for (var member : groupManager.getGroupMembers(msg.getGroupId())) {
 						if (!member.tryEnqueuePacket(msg)) {
@@ -271,16 +275,22 @@ public class PacketBroker implements Runnable {
 		}
 	}
 
+	// creates a new group and adds the sender as the first member.
+	// the client only needs to send a CreateGroupPacket with the group name.
 	private void handleCreateGroup(CreateGroupPacket packet, ClientProxy sender) {
 		if (sender == null || sender.getUser() == null) return;
 		groupManager.createGroup(packet.getGroupName(), sender);
 	}
 
+	// adds the sender to an existing group using the group's uuid.
+	// the client needs to send a JoinGroupPacket with the group id.
 	private void handleJoinGroup(JoinGroupPacket packet, ClientProxy sender) {
 		if (sender == null || sender.getUser() == null) return;
 		groupManager.joinGroup(packet.getGroupId(), sender);
 	}
 
+	// removes the sender from a group using the group's uuid.
+	// the client needs to send a LeaveGroupPacket with the group id.
 	private void handleLeaveGroup(LeaveGroupPacket packet, ClientProxy sender) {
 		if (sender == null || sender.getUser() == null) return;
 		groupManager.leaveGroup(packet.getGroupId(), sender);
