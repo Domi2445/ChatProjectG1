@@ -17,22 +17,18 @@ public class Main extends Application {
 
 	@Override
 	public void start(Stage primaryStage) throws IOException {
-		FXMLLoader loader = new FXMLLoader(Main.class.getResource("/Client/chat-view.fxml"));
-		Parent root = loader.load();
+		// Login-Bildschirm laden
+		FXMLLoader loginLoader = new FXMLLoader(Main.class.getResource("/Client/loginScreen.fxml"));
+		Parent loginRoot = loginLoader.load();
 
-		Controller controller = loader.getController();
+		ControllerLogin loginController = loginLoader.getController();
+		loginController.setStage(primaryStage);
 
-		User user = new User();
-		user.setUsername("Benutzername");
-		controller.configure(primaryStage, user);
-
-		Scene scene = new Scene(root, 500, 650);
-		primaryStage.setTitle("Socket Chat");
+		Scene scene = new Scene(loginRoot, 1280, 720);
+		primaryStage.setTitle("Socket Chat - Login");
 		primaryStage.setScene(scene);
 		primaryStage.setMinWidth(350);
 		primaryStage.setMinHeight(400);
 		primaryStage.show();
-
-		controller.connectAndRun("127.0.0.1", 6969);
 	}
 }
