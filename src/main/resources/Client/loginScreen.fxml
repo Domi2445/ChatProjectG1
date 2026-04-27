@@ -15,7 +15,7 @@
 <?import javafx.scene.paint.Stop?>
 <?import javafx.scene.shape.Circle?>
 
-<GridPane maxHeight="-Infinity" maxWidth="-Infinity" minHeight="-Infinity" minWidth="-Infinity" prefHeight="720.0" prefWidth="1280.0" styleClass="grid-pane" stylesheets="@styleLoginScreen.css" xmlns="http://javafx.com/javafx/25" xmlns:fx="http://javafx.com/fxml/1">
+<GridPane fx:controller="Client.ControllerLogin" maxHeight="-Infinity" maxWidth="-Infinity" minHeight="-Infinity" minWidth="-Infinity" prefHeight="720.0" prefWidth="1280.0" styleClass="grid-pane" stylesheets="@styleLoginScreen.css" xmlns="http://javafx.com/javafx/25" xmlns:fx="http://javafx.com/fxml/1">
   <columnConstraints>
     <ColumnConstraints hgrow="SOMETIMES" minWidth="10.0" percentWidth="50.0" prefWidth="100.0" />
     <ColumnConstraints hgrow="SOMETIMES" minWidth="10.0" percentWidth="50.0" prefWidth="100.0" />
@@ -57,22 +57,22 @@
                   <Insets bottom="10.0" />
                </VBox.margin>
             </Label>
-            <TextField maxWidth="250.0" promptText="Benutzername" styleClass="rounded">
-               <VBox.margin>
-                  <Insets bottom="10.0" left="10.0" right="10.0" top="10.0" />
-               </VBox.margin>
-            </TextField>
-            <PasswordField maxWidth="250.0" promptText="Passwort" styleClass="rounded">
-               <VBox.margin>
-                  <Insets bottom="10.0" left="10.0" right="10.0" top="10.0" />
-               </VBox.margin>
-            </PasswordField>
-            <Button mnemonicParsing="false" prefWidth="250.0" styleClass="rounded" text="Login">
-               <VBox.margin>
-                  <Insets bottom="20.0" left="20.0" right="20.0" top="20.0" />
-               </VBox.margin>
-            </Button>
-            <Label styleClass="hyperlink" text="Registrieren &gt;" textFill="#0a84ff">
+             <TextField fx:id="usernameField" maxWidth="250.0" promptText="Benutzername" styleClass="rounded">
+                <VBox.margin>
+                   <Insets bottom="10.0" left="10.0" right="10.0" top="10.0" />
+                </VBox.margin>
+             </TextField>
+             <PasswordField fx:id="passwordField" maxWidth="250.0" promptText="Passwort" styleClass="rounded">
+                <VBox.margin>
+                   <Insets bottom="10.0" left="10.0" right="10.0" top="10.0" />
+                </VBox.margin>
+             </PasswordField>
+             <Button fx:id="loginButton" mnemonicParsing="false" prefWidth="250.0" styleClass="rounded" text="Login">
+                <VBox.margin>
+                   <Insets bottom="20.0" left="20.0" right="20.0" top="20.0" />
+                </VBox.margin>
+             </Button>
+             <Label fx:id="registerLink" styleClass="hyperlink" text="Registrieren &gt;" textFill="#0a84ff">
                <VBox.margin>
                   <Insets bottom="10.0" left="10.0" right="10.0" top="10.0" />
                </VBox.margin>
