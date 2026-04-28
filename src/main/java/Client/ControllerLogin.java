@@ -1,9 +1,15 @@
 package Client;
 
+import User.Login.Status;
+import Util.Network.Auth.LoginRequest;
+import Util.Network.Auth.LoginResponse;
+import Util.Network.SocketProxy;
+import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
+import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.PasswordField;
@@ -11,6 +17,7 @@ import javafx.scene.control.TextField;
 import javafx.stage.Stage;
 
 import java.io.IOException;
+import java.net.Socket;
 
 public class ControllerLogin {
 
@@ -44,7 +51,42 @@ public class ControllerLogin {
 
 		if (validateInput(username, password)) {
 			System.out.println("Login-Versuch für: " + username);
-			// TODO: Login-Anfrage an den Server senden
+			sendLoginRequest(username, password);
+		}
+	}
+
+	private void sendLoginRequest(String username, String password) {
+		Thread t = new Thread(() -> {
+			try (SocketProxy socket = new SocketProxy(new Socket("127.0.0.1", 6969))) {
+				socket.getOutputStream().writeObject(new LoginRequest(username, password));
+				socket.getOutputStream().flush();
+
+				while (true) {
+					Object packet = socket.getInputStream().readObject();
+					if (packet instanceof LoginResponse response) {
+						Platform.runLater(() -> showLoginResult(response));
+						return;
+					}
+				}
+			} catch (IOException | ClassNotFoundException e) {
+				Platform.runLater(() -> showError("Verbindung zum Server fehlgeschlagen: " + e.getMessage()));
+			}
+		});
+		t.setDaemon(true);
+		t.start();
+	}
+
+	private void showLoginResult(LoginResponse response) {
+		if (response.getStatus() == Status.SUCCESS) {
+			Alert alert = new Alert(Alert.AlertType.INFORMATION);
+			alert.setHeaderText("Login erfolgreich");
+			alert.setContentText(response.getMessage());
+			alert.show();
+		} else {
+			Alert alert = new Alert(Alert.AlertType.ERROR);
+			alert.setHeaderText("Login fehlgeschlagen");
+			alert.setContentText(response.getMessage());
+			alert.show();
 		}
 	}
 
@@ -79,6 +121,9 @@ public class ControllerLogin {
 
 	private void showError(String message) {
 		System.err.println("Fehler: " + message);
-		// TODO: Fehlermeldung in der UI anzeigen
+		Alert alert = new Alert(Alert.AlertType.ERROR);
+		alert.setHeaderText("Fehler");
+		alert.setContentText(message);
+		alert.show();
 	}
 }
