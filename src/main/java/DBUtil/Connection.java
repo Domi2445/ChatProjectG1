@@ -115,6 +115,7 @@ public final class Connection {
 		if (entityManagerFactory != null && entityManagerFactory.isOpen()) {
 			entityManagerFactory.close();
 		}
+		triedOracleFallback = false;
 	}
 
 	/**
