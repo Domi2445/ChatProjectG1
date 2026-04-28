@@ -267,14 +267,16 @@ public final class Connection {
 	}
 
 	/**
-	 * Einfache Oracle-Erkennung anhand typischer JDBC-Muster.
+	 * Strenge Oracle-Erkennung anhand des JDBC-URL-Praefix.
+	 *
+	 * <p>Es wird ausschliesslich auf {@code jdbc:oracle:} geprueft, damit URLs wie
+	 * {@code jdbc:h2:...;MODE=Oracle} nicht faelschlicherweise als Oracle erkannt werden.
 	 *
 	 * @param dbUrl JDBC-URL
-	 * @return {@code true}, wenn URL wie Oracle aussieht
+	 * @return {@code true}, wenn die URL ein Oracle-JDBC-Treiber-Schema verwendet
 	 */
 	private static boolean isOracleUrl(String dbUrl) {
-		String lower = dbUrl.toLowerCase();
-		return lower.contains("oracle") || lower.contains(":thin:");
+		return dbUrl.toLowerCase().startsWith("jdbc:oracle:");
 	}
 
 	/**
