@@ -12,6 +12,7 @@ module com.chatproject {
 
 	requires java.net.http;
 	requires jakarta.persistence;
+	requires java.desktop;
 
 	opens Client to javafx.fxml, javafx.graphics, javafx.base;
 	opens DBUtil to javafx.fxml;
