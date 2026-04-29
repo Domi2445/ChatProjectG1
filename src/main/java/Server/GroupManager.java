@@ -98,4 +98,16 @@ public class GroupManager
 	{
 		return groups.values();
 	}
+
+	// returns all groups that the given client is currently a member of
+	public Collection<Group> getGroupsForClient(ClientProxy client)
+	{
+		List<Group> result = new ArrayList<>();
+		for (Map.Entry<UUID, Set<ClientProxy>> entry : groupMembers.entrySet())
+		{
+			if (entry.getValue().contains(client))
+				result.add(groups.get(entry.getKey()));
+		}
+		return result;
+	}
 }
