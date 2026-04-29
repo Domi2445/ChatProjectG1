@@ -1,9 +1,9 @@
 package User.Model;
 
 import jakarta.persistence.*;
+
 import java.io.Serial;
 import java.io.Serializable;
-
 import java.util.Objects;
 import java.util.UUID;
 
@@ -101,12 +101,11 @@ public class User implements Serializable {
         this.contactData = contactData;
     }
 
-	@Override
+	@Override //Kein Password Hash, da er sonst geleakt werden könnte in dem LOG
 	public String toString() {
 		return "User{" +
 			"username='" + username + '\'' +
 			", displayname='" + displayname + '\'' +
-			", passwordHash='" + passwordHash + '\'' +
 			", statusMessage='" + statusMessage + '\'' +
 			", profileDescription='" + profileDescription + '\'' +
 			", profilePictureUUID=" + profilePictureUUID +

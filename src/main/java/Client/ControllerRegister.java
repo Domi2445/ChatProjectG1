@@ -26,7 +26,10 @@ public class ControllerRegister {
 
 	@FXML
 	private void initialize() {
-		registerButton.setOnAction(e -> handleRegister());
+		registerButton.setOnAction(e -> {
+			registerButton.setDisable(true);
+			handleRegister();
+		});
 	}
 
 	public void setStage(Stage stage) {
@@ -52,6 +55,7 @@ public class ControllerRegister {
 				stage.setTitle("Socket Chat");
 				stage.setScene(chatScene);
 			} else {
+				registerButton.setDisable(false);
 				showError(response.getMessage());
 			}
 		});
