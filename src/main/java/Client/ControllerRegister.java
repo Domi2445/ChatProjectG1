@@ -1,10 +1,19 @@
 package Client;
 
+import User.Login.Status;
+import Util.Network.Auth.RegisterRequest;
+import Util.Network.Auth.RegisterResponse;
+import Util.Network.SocketProxy;
+import javafx.application.Platform;
 import javafx.fxml.FXML;
+import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextField;
 import javafx.stage.Stage;
+
+import java.io.IOException;
+import java.net.Socket;
 
 public class ControllerRegister {
 
@@ -34,7 +43,42 @@ public class ControllerRegister {
 
 		if (validateInput(username, password)) {
 			System.out.println("Registrierungsversuch für: " + username);
-			// TODO: Registrierungs-Anfrage an den Server senden
+			sendRegisterRequest(username, username, password);
+		}
+	}
+
+	private void sendRegisterRequest(String username, String displayname, String password) {
+		Thread t = new Thread(() -> {
+			try (SocketProxy socket = new SocketProxy(new Socket("127.0.0.1", 6969))) {
+				socket.getOutputStream().writeObject(new RegisterRequest(username, displayname, password));
+				socket.getOutputStream().flush();
+
+				while (true) {
+					Object packet = socket.getInputStream().readObject();
+					if (packet instanceof RegisterResponse response) {
+						Platform.runLater(() -> showRegisterResult(response));
+						return;
+					}
+				}
+			} catch (IOException | ClassNotFoundException e) {
+				Platform.runLater(() -> showError("Verbindung zum Server fehlgeschlagen: " + e.getMessage()));
+			}
+		});
+		t.setDaemon(true);
+		t.start();
+	}
+
+	private void showRegisterResult(RegisterResponse response) {
+		if (response.getStatus() == Status.SUCCESS) {
+			Alert alert = new Alert(Alert.AlertType.INFORMATION);
+			alert.setHeaderText("Registrierung erfolgreich");
+			alert.setContentText(response.getMessage());
+			alert.show();
+		} else {
+			Alert alert = new Alert(Alert.AlertType.ERROR);
+			alert.setHeaderText("Registrierung fehlgeschlagen");
+			alert.setContentText(response.getMessage());
+			alert.show();
 		}
 	}
 
@@ -52,7 +96,9 @@ public class ControllerRegister {
 
 	private void showError(String message) {
 		System.err.println("Fehler: " + message);
-		// TODO: Fehlermeldung in der UI anzeigen
+		Alert alert = new Alert(Alert.AlertType.ERROR);
+		alert.setHeaderText("Fehler");
+		alert.setContentText(message);
+		alert.show();
 	}
 }
-
