@@ -289,6 +289,10 @@ public class Controller {
 	}
 
 	private void handleRegisterResponse(RegisterResponse response) {
+		if (response.getStatus() == Status.SUCCESS) {
+			this.localUser = response.getUser();
+		}
+
 		if (onRegisterResult != null) {
 			onRegisterResult.accept(response);
 		}

@@ -57,13 +57,13 @@ public class AuthHandler {
 		if (!LoginValidator.validateUsername(request.getUsername())
 			|| !LoginValidator.validateDisplayname(request.getDisplayname())
 			|| !LoginValidator.validatePassword(request.getPassword())) {
-			sender.tryEnqueuePacket(new RegisterResponse(Status.INVALID_INPUT, "Ungültige Eingabe"));
+			sender.tryEnqueuePacket(new RegisterResponse(Status.INVALID_INPUT, "Ungültige Eingabe", null));
 			return;
 		}
 
 		try {
 			if (userRepository.usernameExists(request.getUsername())) {
-				sender.tryEnqueuePacket(new RegisterResponse(Status.USERNAME_TAKEN, "Username bereits vergeben"));
+				sender.tryEnqueuePacket(new RegisterResponse(Status.USERNAME_TAKEN, "Username bereits vergeben", null));
 				return;
 			}
 
@@ -75,12 +75,12 @@ public class AuthHandler {
 
 			userRepository.createUser(user);
 			sender.setUser(user);
-			sender.tryEnqueuePacket(new RegisterResponse(Status.SUCCESS, "Erfolgreich registriert"));
+			sender.tryEnqueuePacket(new RegisterResponse(Status.SUCCESS, "Erfolgreich registriert", user));
 		} catch (UsernameAlreadyExistsException e) {
-			sender.tryEnqueuePacket(new RegisterResponse(Status.USERNAME_TAKEN, "Username bereits vergeben"));
+			sender.tryEnqueuePacket(new RegisterResponse(Status.USERNAME_TAKEN, "Username bereits vergeben", null));
 		} catch (RepositoryException e) {
 			System.err.println("Register fehlgeschlagen (DB): " + e.getMessage());
-			sender.tryEnqueuePacket(new RegisterResponse(Status.DATABASE_ERROR, "Datenbankfehler"));
+			sender.tryEnqueuePacket(new RegisterResponse(Status.DATABASE_ERROR, "Datenbankfehler", null));
 		}
 	}
 }
