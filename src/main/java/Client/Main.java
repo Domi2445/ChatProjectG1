@@ -16,7 +16,6 @@ public class Main extends Application {
 
 	@Override
 	public void start(Stage primaryStage) throws IOException {
-		// Chat-View vorab laden + Server-Verbindung aufbauen (eine persistente Verbindung)
 		FXMLLoader chatLoader = new FXMLLoader(Main.class.getResource("/Client/chat-view.fxml"));
 		Parent chatRoot = chatLoader.load();
 		Controller chatController = chatLoader.getController();
@@ -24,7 +23,6 @@ public class Main extends Application {
 		chatController.connectAndRun("127.0.0.1", 6969);
 		Scene chatScene = new Scene(chatRoot, 1280, 720);
 
-		// Login-Bildschirm laden
 		FXMLLoader loginLoader = new FXMLLoader(Main.class.getResource("/Client/loginScreen.fxml"));
 		Parent loginRoot = loginLoader.load();
 		ControllerLogin loginController = loginLoader.getController();
