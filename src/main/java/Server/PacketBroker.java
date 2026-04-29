@@ -6,6 +6,7 @@ import Util.Network.Auth.LoginRequest;
 import Util.Network.Auth.RegisterRequest;
 import Util.Network.Messages.FileMessage;
 import Util.Network.Messages.Message;
+import Util.Network.Notifications.JoinNotification;
 import Util.Network.Notifications.LeaveNotification;
 import Util.Network.Packet;
 import Util.Network.SocketProxy;
@@ -51,7 +52,20 @@ public class PacketBroker implements Runnable {
 				ClientProxy sender = incoming.sender();
 
 				switch (packet) {
-					case LoginRequest req -> authHandler.handleLogin(req, sender);
+					case LoginRequest req -> {
+						if (authHandler.handleLogin(req, sender)) {
+							User user = sender.getUser();
+
+							try {
+								if (!broadcast(new JoinNotification(user))) {
+									System.err.println("broadcastPacketQueue ist voll, JoinNotification wurde verworfen");
+								}
+							} catch (InterruptedException e) {
+								Thread.currentThread().interrupt();
+								return;
+							}
+						}
+					}
 					case RegisterRequest req -> authHandler.handleRegister(req, sender);
 					case FileMessage file -> {
 						if (sender != null && sender.getUser() != null) {
@@ -65,7 +79,7 @@ public class PacketBroker implements Runnable {
 					}
 					case Message msg -> {
 						if (sender != null && sender.getUser() != null) {
-							broadcastToAll(packet);
+							broadcastToAll(msg);
 						}
 					}
 					default -> broadcastToAll(packet);
@@ -85,7 +99,9 @@ public class PacketBroker implements Runnable {
 
 		synchronized (clients) {
 			for (var client : clients) {
-				if (client.shouldStop()) {
+				if (client.getUser() == null) {
+					continue;
+				} else if (client.shouldStop()) {
 					clientsToUnregister.add(client);
 				} else if (!client.tryEnqueuePacket(packet)) {
 					System.err.println("Client outPacketQueue ist voll");
