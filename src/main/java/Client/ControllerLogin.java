@@ -5,11 +5,7 @@ import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
-import javafx.scene.control.Alert;
-import javafx.scene.control.Button;
-import javafx.scene.control.Label;
-import javafx.scene.control.PasswordField;
-import javafx.scene.control.TextField;
+import javafx.scene.control.*;
 import javafx.stage.Stage;
 
 import java.io.IOException;
@@ -34,7 +30,10 @@ public class ControllerLogin {
 
 	@FXML
 	private void initialize() {
-		loginButton.setOnAction(e -> handleLogin());
+		loginButton.setOnAction(e -> {
+			loginButton.setDisable(true);
+			handleLogin();
+		});
 		registerLink.setOnMouseClicked(e -> handleRegisterClick());
 	}
 
@@ -61,6 +60,7 @@ public class ControllerLogin {
 				stage.setTitle("Socket Chat");
 				stage.setScene(chatScene);
 			} else {
+				loginButton.setDisable(false);
 				showError(response.getMessage());
 			}
 		});
