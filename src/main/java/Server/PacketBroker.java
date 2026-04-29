@@ -68,6 +68,17 @@ public class PacketBroker implements Runnable {
 							broadcastToAll(packet);
 						}
 					}
+
+
+					//Audio
+					case Util.Network.Notifications.CallNotification call -> {
+						if (sender != null) {
+							call.setSenderIp(sender.getIpAddress());
+						}
+						broadcastToAll(call);
+					}
+
+
 					default -> broadcastToAll(packet);
 				}
 
