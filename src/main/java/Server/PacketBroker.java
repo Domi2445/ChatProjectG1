@@ -2,7 +2,10 @@ package Server;
 
 import User.Model.User;
 import Util.FileUtil;
+import Util.Network.Auth.LoginRequest;
+import Util.Network.Auth.RegisterRequest;
 import Util.Network.Messages.FileMessage;
+import Util.Network.Messages.Message;
 import Util.Network.Notifications.LeaveNotification;
 import Util.Network.Packet;
 import Util.Network.SocketProxy;
@@ -22,15 +25,17 @@ public class PacketBroker implements Runnable {
 	public static final int MAX_CLIENTS = 16;
 
 	private final ExecutorService threadExecutor;
+	private final AuthHandler authHandler;
 
 	/// Queue für Pakete, die an alle verbundenen Clients gesendet werden sollen.
-	private final BlockingQueue<Packet> broadcastPacketQueue;
+	private final BlockingQueue<IncomingPacket> broadcastPacketQueue;
 	/// Liste aller aktuell verbundenen Clients.
 	private final List<ClientProxy> clients;
 	private final AtomicBoolean stopFlag;
 
-	public PacketBroker(ExecutorService threadExecutor) {
+	public PacketBroker(ExecutorService threadExecutor, AuthHandler authHandler) {
 		this.threadExecutor = threadExecutor;
+		this.authHandler = authHandler;
 
 		this.broadcastPacketQueue = new ArrayBlockingQueue<>(MAX_INCOMING_PACKETS);
 		this.clients = new ArrayList<>(MAX_CLIENTS);
@@ -39,52 +44,32 @@ public class PacketBroker implements Runnable {
 
 	@Override
 	public void run() {
-		ArrayList<ClientProxy> clientsToUnregister = new ArrayList<>();
-
 		while (!stopFlag.get() && !Thread.currentThread().isInterrupted()) {
 			try {
-				Packet packet = broadcastPacketQueue.take();
+				IncomingPacket incoming = broadcastPacketQueue.take();
+				Packet packet = incoming.packet();
+				ClientProxy sender = incoming.sender();
 
-				if (packet instanceof FileMessage file) {
-					try {
-						FileUtil.saveFile(file.getContent(), file.getFileExtension());
-					} catch (IOException e) {
-						System.err.println("Fehler beim Speichern einer Datei: " + e);
-						continue;
-					}
-				}
-
-				synchronized (clients) {
-					for (var client : clients) {
-						if (client.shouldStop()) {
-							clientsToUnregister.add(client);
-						} else if (!client.tryEnqueuePacket(packet)) {
-							System.err.println("Client outPacketQueue ist voll");
-							clientsToUnregister.add(client);
+				switch (packet) {
+					case LoginRequest req -> authHandler.handleLogin(req, sender);
+					case RegisterRequest req -> authHandler.handleRegister(req, sender);
+					case FileMessage file -> {
+						if (sender != null && sender.getUser() != null) {
+							try {
+								FileUtil.saveFile(file.getContent(), file.getFileExtension());
+								broadcastToAll(packet);
+							} catch (IOException e) {
+								System.err.println("Fehler beim Speichern einer Datei: " + e);
+							}
 						}
 					}
-				}
-
-				for (var client : clientsToUnregister) {
-					if (!unregister(client)) {
-						System.err.println("Zu entfernenden Client nicht gefunden");
+					case Message msg -> {
+						if (sender != null && sender.getUser() != null) {
+							broadcastToAll(packet);
+						}
 					}
+					default -> broadcastToAll(packet);
 				}
-
-				for (var client : clientsToUnregister) {
-					User user = client.getUser();
-					// todo: Benutzernamen des Clients übergeben oder keine Benachrichtigung senden wenn nicht eingeloggt
-					if (user == null) {
-						user = new User();
-						user.setUsername("Platzhalter");
-					}
-
-					if (!broadcast(new LeaveNotification(user))) {
-						System.err.println("broadcastPacketQueue ist voll, Paket wurde verworfen");
-					}
-				}
-
-				clientsToUnregister.clear();
 
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
@@ -93,6 +78,45 @@ public class PacketBroker implements Runnable {
 		}
 
 		closeAllClients();
+	}
+
+	private void broadcastToAll(Packet packet) {
+		ArrayList<ClientProxy> clientsToUnregister = new ArrayList<>();
+
+		synchronized (clients) {
+			for (var client : clients) {
+				if (client.shouldStop()) {
+					clientsToUnregister.add(client);
+				} else if (!client.tryEnqueuePacket(packet)) {
+					System.err.println("Client outPacketQueue ist voll");
+					clientsToUnregister.add(client);
+				}
+			}
+		}
+
+		for (var client : clientsToUnregister) {
+			if (!unregister(client)) {
+				System.err.println("Zu entfernenden Client nicht gefunden");
+			}
+		}
+
+		for (var client : clientsToUnregister) {
+			User user = client.getUser();
+			// todo: Benutzernamen des Clients übergeben oder keine Benachrichtigung senden wenn nicht eingeloggt
+			if (user == null) {
+				user = new User();
+				user.setUsername("Platzhalter");
+			}
+
+			try {
+				if (!broadcast(new LeaveNotification(user))) {
+					System.err.println("broadcastPacketQueue ist voll, Paket wurde verworfen");
+				}
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+				return;
+			}
+		}
 	}
 
 	/// Fügt einen neuen Client zur Liste der verbundenen Clients hinzu.
@@ -160,7 +184,7 @@ public class PacketBroker implements Runnable {
 			return true;
 		}
 
-		return broadcastPacketQueue.offer(packet);
+		return broadcastPacketQueue.offer(new IncomingPacket(packet, null));
 	}
 
 	public void shutdown() {

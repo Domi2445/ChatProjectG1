@@ -1,9 +1,11 @@
 package Client;
 
+import User.Login.Status;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
+import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.PasswordField;
@@ -27,6 +29,8 @@ public class ControllerLogin {
 	private Label registerLink;
 
 	private Stage stage;
+	private Controller controller;
+	private Scene chatScene;
 
 	@FXML
 	private void initialize() {
@@ -38,14 +42,30 @@ public class ControllerLogin {
 		this.stage = stage;
 	}
 
+	public void setController(Controller controller) {
+		this.controller = controller;
+	}
+
+	public void setChatScene(Scene chatScene) {
+		this.chatScene = chatScene;
+	}
+
 	private void handleLogin() {
 		String username = usernameField.getText().trim();
 		String password = passwordField.getText();
 
-		if (validateInput(username, password)) {
-			System.out.println("Login-Versuch für: " + username);
-			// TODO: Login-Anfrage an den Server senden
-		}
+		if (!validateInput(username, password)) return;
+
+		controller.setOnLoginResult(response -> {
+			if (response.getStatus() == Status.SUCCESS) {
+				stage.setTitle("Socket Chat");
+				stage.setScene(chatScene);
+			} else {
+				showError(response.getMessage());
+			}
+		});
+
+		controller.sendLoginRequest(username, password);
 	}
 
 	private void handleRegisterClick() {
@@ -55,13 +75,13 @@ public class ControllerLogin {
 
 			ControllerRegister registerController = registerLoader.getController();
 			registerController.setStage(stage);
+			registerController.setController(controller);
+			registerController.setChatScene(chatScene);
 
-			Scene scene = new Scene(registerRoot, 1280, 720);
 			stage.setTitle("Socket Chat - Registrierung");
-			stage.setScene(scene);
+			stage.setScene(new Scene(registerRoot, 1280, 720));
 		} catch (IOException e) {
-			System.err.println("Fehler beim Laden des Registrierungsbildschirms: " + e.getMessage());
-			e.printStackTrace();
+			showError("Fehler beim Laden des Registrierungsbildschirms: " + e.getMessage());
 		}
 	}
 
@@ -78,7 +98,9 @@ public class ControllerLogin {
 	}
 
 	private void showError(String message) {
-		System.err.println("Fehler: " + message);
-		// TODO: Fehlermeldung in der UI anzeigen
+		Alert alert = new Alert(Alert.AlertType.ERROR);
+		alert.setHeaderText("Fehler");
+		alert.setContentText(message);
+		alert.show();
 	}
 }
