@@ -16,11 +16,12 @@ public class Main extends Application {
 
 	@Override
 	public void start(Stage primaryStage) throws IOException {
-		FXMLLoader loader = new FXMLLoader(Main.class.getResource("/DBUtil/db-Tabelle.fxml"));
+		String databaseLabel = Connection.getActiveDatabaseLabel();
+		FXMLLoader loader = new FXMLLoader(Main.class.getResource("/DBUtil/db-tabelle.fxml"));
 		Parent root = loader.load();
 
 		Scene scene = new Scene(root, 430, 300);
-		primaryStage.setTitle("DB Verwaltung");
+		primaryStage.setTitle("DB Verwaltung - " + databaseLabel);
 		primaryStage.setScene(scene);
 		primaryStage.setMinWidth(380);
 		primaryStage.setMinHeight(260);
