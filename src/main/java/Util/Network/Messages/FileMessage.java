@@ -6,33 +6,22 @@ import java.io.Serial;
 
 public class FileMessage extends Message {
 	@Serial
-	private static final long serialVersionUID = 1L;
+	private static final long serialVersionUID = 2L;
 
 	private final byte[] content;
-    private final String fileName;
-    private final FileType fileType;
+	private final String fileExtension;
 
-    public FileMessage(User sender, byte[] content, String fileName, FileType fileType) {
-        super(sender);
-        this.content = content;
-        this.fileName = fileName;
-        this.fileType = fileType;
-    }
+	public FileMessage(User sender, byte[] content, String fileExtension) {
+		super(sender);
+		this.content = content;
+		this.fileExtension = fileExtension;
+	}
 
-    public byte[] getContent() {
-        return content;
-    }
+	public byte[] getContent() {
+		return content;
+	}
 
-    public String getFileName() {
-        return fileName;
-    }
-
-    public FileType getFileType() {
-        return fileType;
-    }
-
-    public enum FileType {
-        FILE,
-        IMAGE,
-    }
+	public String getFileExtension() {
+		return fileExtension;
+	}
 }
