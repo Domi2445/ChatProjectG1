@@ -1,10 +1,6 @@
 package Client;
 
 import User.Login.Status;
-import Util.Network.Auth.LoginRequest;
-import Util.Network.Auth.LoginResponse;
-import Util.Network.SocketProxy;
-import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
@@ -17,7 +13,6 @@ import javafx.scene.control.TextField;
 import javafx.stage.Stage;
 
 import java.io.IOException;
-import java.net.Socket;
 
 public class ControllerLogin {
 
@@ -34,6 +29,8 @@ public class ControllerLogin {
 	private Label registerLink;
 
 	private Stage stage;
+	private Controller controller;
+	private Scene chatScene;
 
 	@FXML
 	private void initialize() {
@@ -45,49 +42,30 @@ public class ControllerLogin {
 		this.stage = stage;
 	}
 
+	public void setController(Controller controller) {
+		this.controller = controller;
+	}
+
+	public void setChatScene(Scene chatScene) {
+		this.chatScene = chatScene;
+	}
+
 	private void handleLogin() {
 		String username = usernameField.getText().trim();
 		String password = passwordField.getText();
 
-		if (validateInput(username, password)) {
-			System.out.println("Login-Versuch für: " + username);
-			sendLoginRequest(username, password);
-		}
-	}
+		if (!validateInput(username, password)) return;
 
-	private void sendLoginRequest(String username, String password) {
-		Thread t = new Thread(() -> {
-			try (SocketProxy socket = new SocketProxy(new Socket("127.0.0.1", 6969))) {
-				socket.getOutputStream().writeObject(new LoginRequest(username, password));
-				socket.getOutputStream().flush();
-
-				while (true) {
-					Object packet = socket.getInputStream().readObject();
-					if (packet instanceof LoginResponse response) {
-						Platform.runLater(() -> showLoginResult(response));
-						return;
-					}
-				}
-			} catch (IOException | ClassNotFoundException e) {
-				Platform.runLater(() -> showError("Verbindung zum Server fehlgeschlagen: " + e.getMessage()));
+		controller.setOnLoginResult(response -> {
+			if (response.getStatus() == Status.SUCCESS) {
+				stage.setTitle("Socket Chat");
+				stage.setScene(chatScene);
+			} else {
+				showError(response.getMessage());
 			}
 		});
-		t.setDaemon(true);
-		t.start();
-	}
 
-	private void showLoginResult(LoginResponse response) {
-		if (response.getStatus() == Status.SUCCESS) {
-			Alert alert = new Alert(Alert.AlertType.INFORMATION);
-			alert.setHeaderText("Login erfolgreich");
-			alert.setContentText(response.getMessage());
-			alert.show();
-		} else {
-			Alert alert = new Alert(Alert.AlertType.ERROR);
-			alert.setHeaderText("Login fehlgeschlagen");
-			alert.setContentText(response.getMessage());
-			alert.show();
-		}
+		controller.sendLoginRequest(username, password);
 	}
 
 	private void handleRegisterClick() {
@@ -97,13 +75,13 @@ public class ControllerLogin {
 
 			ControllerRegister registerController = registerLoader.getController();
 			registerController.setStage(stage);
+			registerController.setController(controller);
+			registerController.setChatScene(chatScene);
 
-			Scene scene = new Scene(registerRoot, 1280, 720);
 			stage.setTitle("Socket Chat - Registrierung");
-			stage.setScene(scene);
+			stage.setScene(new Scene(registerRoot, 1280, 720));
 		} catch (IOException e) {
-			System.err.println("Fehler beim Laden des Registrierungsbildschirms: " + e.getMessage());
-			e.printStackTrace();
+			showError("Fehler beim Laden des Registrierungsbildschirms: " + e.getMessage());
 		}
 	}
 
@@ -120,7 +98,6 @@ public class ControllerLogin {
 	}
 
 	private void showError(String message) {
-		System.err.println("Fehler: " + message);
 		Alert alert = new Alert(Alert.AlertType.ERROR);
 		alert.setHeaderText("Fehler");
 		alert.setContentText(message);

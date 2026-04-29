@@ -74,6 +74,7 @@ public class AuthHandler {
 			user.setPasswordHash(hash);
 
 			userRepository.createUser(user);
+			sender.setUser(user);
 			sender.tryEnqueuePacket(new RegisterResponse(Status.SUCCESS, "Erfolgreich registriert"));
 		} catch (UsernameAlreadyExistsException e) {
 			sender.tryEnqueuePacket(new RegisterResponse(Status.USERNAME_TAKEN, "Username bereits vergeben"));
