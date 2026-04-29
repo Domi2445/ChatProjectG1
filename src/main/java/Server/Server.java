@@ -1,6 +1,8 @@
 package Server;
 
 import User.Model.User;
+import User.Repository.JPAUserRepository;
+import User.Repository.UserRepository;
 import Util.Network.Notifications.JoinNotification;
 import Util.Network.SocketProxy;
 
@@ -21,7 +23,11 @@ public class Server implements Runnable {
 
 	public Server(int port) throws IOException {
 		server = new ServerSocket(port);
-		packetBroker = new PacketBroker(threadExecutor);
+
+		UserRepository userRepository = new JPAUserRepository();
+		AuthHandler authHandler = new AuthHandler(userRepository);
+
+		packetBroker = new PacketBroker(threadExecutor, authHandler);
 		packetBrokerFuture = threadExecutor.submit(packetBroker);
 	}
 
