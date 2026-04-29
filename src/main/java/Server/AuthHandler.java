@@ -16,9 +16,15 @@ import java.util.Optional;
 
 public class AuthHandler {
 	private final UserRepository userRepository;
+	private GroupManager groupManager;
 
 	public AuthHandler(UserRepository userRepository) {
 		this.userRepository = userRepository;
+	}
+
+	// called by PacketBroker to wire up the group manager after construction
+	public void setGroupManager(GroupManager groupManager) {
+		this.groupManager = groupManager;
 	}
 
 	public void handleLogin(LoginRequest request, ClientProxy sender) {
@@ -44,6 +50,8 @@ public class AuthHandler {
 			}
 
 			sender.setUser(user);
+			// register the client in the group manager so they can create/join groups
+			if (groupManager != null) groupManager.registerClient(sender, user);
 			sender.tryEnqueuePacket(new LoginResponse(Status.SUCCESS, "Erfolgreich angemeldet", user));
 		} catch (RepositoryException e) {
 			System.err.println("Login fehlgeschlagen (DB): " + e.getMessage());
