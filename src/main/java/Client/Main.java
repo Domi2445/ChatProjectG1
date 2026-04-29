@@ -1,6 +1,5 @@
 package Client;
 
-import User.Model.User;
 import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
@@ -17,16 +16,22 @@ public class Main extends Application {
 
 	@Override
 	public void start(Stage primaryStage) throws IOException {
-		// Login-Bildschirm laden
+		FXMLLoader chatLoader = new FXMLLoader(Main.class.getResource("/Client/chat-view.fxml"));
+		Parent chatRoot = chatLoader.load();
+		Controller chatController = chatLoader.getController();
+		chatController.configure(primaryStage, null);
+		chatController.connectAndRun("127.0.0.1", 6969);
+		Scene chatScene = new Scene(chatRoot, 1280, 720);
+
 		FXMLLoader loginLoader = new FXMLLoader(Main.class.getResource("/Client/loginScreen.fxml"));
 		Parent loginRoot = loginLoader.load();
-
 		ControllerLogin loginController = loginLoader.getController();
 		loginController.setStage(primaryStage);
+		loginController.setController(chatController);
+		loginController.setChatScene(chatScene);
 
-		Scene scene = new Scene(loginRoot, 1280, 720);
 		primaryStage.setTitle("Socket Chat - Login");
-		primaryStage.setScene(scene);
+		primaryStage.setScene(new Scene(loginRoot, 1280, 720));
 		primaryStage.setMinWidth(350);
 		primaryStage.setMinHeight(400);
 		primaryStage.show();

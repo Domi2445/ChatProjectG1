@@ -1,6 +1,9 @@
 package Client;
 
+import User.Login.Status;
 import javafx.fxml.FXML;
+import javafx.scene.Scene;
+import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextField;
@@ -18,6 +21,8 @@ public class ControllerRegister {
 	private Button registerButton;
 
 	private Stage stage;
+	private Controller controller;
+	private Scene chatScene;
 
 	@FXML
 	private void initialize() {
@@ -28,14 +33,30 @@ public class ControllerRegister {
 		this.stage = stage;
 	}
 
+	public void setController(Controller controller) {
+		this.controller = controller;
+	}
+
+	public void setChatScene(Scene chatScene) {
+		this.chatScene = chatScene;
+	}
+
 	private void handleRegister() {
 		String username = usernameField.getText().trim();
 		String password = passwordField.getText();
 
-		if (validateInput(username, password)) {
-			System.out.println("Registrierungsversuch für: " + username);
-			// TODO: Registrierungs-Anfrage an den Server senden
-		}
+		if (!validateInput(username, password)) return;
+
+		controller.setOnRegisterResult(response -> {
+			if (response.getStatus() == Status.SUCCESS) {
+				stage.setTitle("Socket Chat");
+				stage.setScene(chatScene);
+			} else {
+				showError(response.getMessage());
+			}
+		});
+
+		controller.sendRegisterRequest(username, username, password);
 	}
 
 	private boolean validateInput(String username, String password) {
@@ -51,8 +72,9 @@ public class ControllerRegister {
 	}
 
 	private void showError(String message) {
-		System.err.println("Fehler: " + message);
-		// TODO: Fehlermeldung in der UI anzeigen
+		Alert alert = new Alert(Alert.AlertType.ERROR);
+		alert.setHeaderText("Fehler");
+		alert.setContentText(message);
+		alert.show();
 	}
 }
-

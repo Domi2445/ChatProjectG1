@@ -14,7 +14,7 @@ public final class ClientProxy implements AutoCloseable {
 	/// Der Socket, über den mit diesem Client kommuniziert wird.
 	private final SocketProxy socket;
 	/// Queue für empfangene Pakete von diesem Client.
-	private final BlockingQueue<PacketCarrier> inPacketQueue;
+	private final BlockingQueue<IncomingPacket> inPacketQueue;
 	/// Queue für zu sendende Pakete an diesen Client.
 	private final BlockingQueue<Packet> outPacketQueue;
 	/// Flag, um anzuzeigen, dass die Verbindung zu diesem Client geschlossen werden soll.
@@ -26,7 +26,7 @@ public final class ClientProxy implements AutoCloseable {
 	/// Das zugehörige `User`-Objekt, falls der Client sich bereits angemeldet hat. Ansonsten `null`.
 	private User user;
 
-	public ClientProxy(SocketProxy socket, BlockingQueue<PacketCarrier> inPacketQueue, BlockingQueue<Packet> outPacketQueue, ExecutorService threadExecutor) {
+	public ClientProxy(SocketProxy socket, BlockingQueue<IncomingPacket> inPacketQueue, BlockingQueue<Packet> outPacketQueue, ExecutorService threadExecutor) {
 		this.socket = socket;
 		this.inPacketQueue = inPacketQueue;
 		this.outPacketQueue = outPacketQueue;
@@ -42,7 +42,7 @@ public final class ClientProxy implements AutoCloseable {
 				if (stopFlag.get()) break;
 				try {
 					Packet packet = (Packet) socket.getInputStream().readObject();
-					inPacketQueue.put(new PacketCarrier(packet, this));
+					inPacketQueue.put(new IncomingPacket(packet, this));
 				} catch (IOException e) {
 					if (!stopFlag.get()) {
 						System.err.println("Fehler beim Lesen:\n" + e);

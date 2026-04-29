@@ -1,5 +1,9 @@
 package Server;
 
+import User.Model.User;
+import User.Repository.JPAUserRepository;
+import User.Repository.UserRepository;
+import Util.Network.Notifications.JoinNotification;
 import Util.Network.SocketProxy;
 
 import java.io.IOException;
@@ -19,7 +23,11 @@ public class Server implements Runnable {
 
 	public Server(int port) throws IOException {
 		server = new ServerSocket(port);
-		packetBroker = new PacketBroker(threadExecutor);
+
+		UserRepository userRepository = new JPAUserRepository();
+		AuthHandler authHandler = new AuthHandler(userRepository);
+
+		packetBroker = new PacketBroker(threadExecutor, authHandler);
 		packetBrokerFuture = threadExecutor.submit(packetBroker);
 	}
 
@@ -38,11 +46,19 @@ public class Server implements Runnable {
 					continue;
 				}
 
+				// todo: Wenn es ein Loginsystem gibt, hier das User-Objekt des neu beigetretenen Clients übergeben, sobald dieser sich angemeldet hat
+				User user = new User();
+				user.setUsername("Platzhalter");
+				packetBroker.broadcast(new JoinNotification(user));
+
 			} catch (IOException e) {
 				if (!server.isClosed()) {
 					System.err.println("Fehler beim Akzeptieren eines neuen Clients: " + e);
 				}
 				break;
+
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
 			}
 		}
 	}
