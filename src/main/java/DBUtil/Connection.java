@@ -143,7 +143,6 @@ public final class Connection {
 		}
 
 		if (isOracleUrl(dbUrl)) {
-			// Oracle explizit: Zugangsdaten sind Pflicht.
 			if (isBlank(dbUser) || isBlank(dbPassword)) {
 				throw new IllegalStateException(
 					"Oracle-Zugangsdaten fehlen oder sind Platzhalter. Setze DB_URL, DB_USER und DB_PASSWORD " +
@@ -152,8 +151,15 @@ public final class Connection {
 			}
 			overrides.put("jakarta.persistence.jdbc.driver", "oracle.jdbc.OracleDriver");
 			overrides.put("hibernate.dialect", "org.hibernate.dialect.OracleDialect");
+		} else if (isPostgresUrl(dbUrl)) {
+			if (isBlank(dbUser) || isBlank(dbPassword)) {
+				throw new IllegalStateException(
+					"Postgres-Zugangsdaten fehlen. Setze DB_URL, DB_USER und DB_PASSWORD."
+				);
+			}
+			overrides.put("jakarta.persistence.jdbc.driver", "org.postgresql.Driver");
+			overrides.put("hibernate.dialect", "org.hibernate.dialect.PostgreSQLDialect");
 		} else {
-			// Nicht-Oracle-URL: auf H2 verhalten (inkl. Standard-Credentials).
 			overrides.put("jakarta.persistence.jdbc.driver", "org.h2.Driver");
 			overrides.put("hibernate.dialect", "org.hibernate.dialect.H2Dialect");
 			if (isBlank(dbUser)) {
@@ -213,8 +219,14 @@ public final class Connection {
 
 	private static void setActiveDatabaseLabel(Map<String, Object> overrides) {
 		Object url = overrides.get("jakarta.persistence.jdbc.url");
-		if (url instanceof String urlString && isOracleUrl(urlString)) {
-			activeDatabaseLabel = "Oracle";
+		if (url instanceof String urlString) {
+			if (isOracleUrl(urlString)) {
+				activeDatabaseLabel = "Oracle";
+			} else if (isPostgresUrl(urlString)) {
+				activeDatabaseLabel = "Postgres";
+			} else {
+				activeDatabaseLabel = "H2";
+			}
 		} else {
 			activeDatabaseLabel = "H2";
 		}
@@ -277,6 +289,10 @@ public final class Connection {
 	 */
 	private static boolean isOracleUrl(String dbUrl) {
 		return dbUrl.toLowerCase().startsWith("jdbc:oracle:");
+	}
+
+	private static boolean isPostgresUrl(String dbUrl) {
+		return dbUrl.toLowerCase().startsWith("jdbc:postgresql:");
 	}
 
 	/**
