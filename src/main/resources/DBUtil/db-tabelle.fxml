@@ -14,6 +14,8 @@
 		<Region HBox.hgrow="ALWAYS"/>
 		<Button text="+ Neuer User" onAction="#handleNewUser"
 		        style="-fx-padding: 8 16; -fx-font-size: 12;"/>
+		<Button text="Chat-Nachrichten anzeigen" onAction="#showChatMessages"
+		        style="-fx-padding: 8 16; -fx-font-size: 12;"/>
 	</HBox>
 
 	<TableView fx:id="userTable" VBox.vgrow="ALWAYS">

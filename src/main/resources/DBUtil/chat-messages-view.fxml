@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.geometry.Insets?>
+
+<VBox xmlns:fx="http://javafx.com/fxml"
+      fx:controller="DBUtil.ChatMessagesController" spacing="10">
+    <padding>
+        <Insets top="10" right="10" bottom="10" left="10"/>
+    </padding>
+
+    <Label text="Chat-Nachrichten:" style="-fx-font-size: 14px; -fx-font-weight: bold;"/>
+
+    <TableView fx:id="messagesTable" VBox.vgrow="ALWAYS">
+        <columns>
+            <TableColumn fx:id="senderColumn" text="Sender" prefWidth="120"/>
+            <TableColumn fx:id="receiverColumn" text="Empfänger" prefWidth="120"/>
+            <TableColumn fx:id="chatRoomIdColumn" text="Chat-Raum" prefWidth="120"/>
+            <TableColumn fx:id="contentColumn" text="Inhalt" prefWidth="200"/>
+            <TableColumn fx:id="messageTypeColumn" text="Typ" prefWidth="80"/>
+            <TableColumn fx:id="timestampColumn" text="Zeitstempel" prefWidth="150"/>
+        </columns>
+    </TableView>
+
+    <HBox spacing="10" alignment="CENTER_LEFT">
+        <Button text="Aktualisieren" onAction="#refreshMessages"/>
+        <Region HBox.hgrow="ALWAYS"/>
+        <Button text="Schließen" onAction="#closeWindow"/>
+    </HBox>
+</VBox>
