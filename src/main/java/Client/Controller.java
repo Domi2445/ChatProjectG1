@@ -2,6 +2,9 @@ package Client;
 
 import User.Login.Status;
 import User.Model.User;
+import User.Repository.ChatHistoryService;
+import User.Model.ChatMessage;
+import User.Model.MessageType;
 import Util.FileUtil;
 import Util.Network.Auth.LoginRequest;
 import Util.Network.Auth.LoginResponse;
@@ -33,6 +36,7 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.function.Consumer;
@@ -50,6 +54,7 @@ public class Controller {
 	private User localUser;
 	private Stage stage;
 	private TextMessage isEditingMessage;
+	private ChatHistoryService chatHistoryService = new ChatHistoryService();
 
 	@FXML
 	private ListView<Packet> messageListView;
@@ -253,6 +258,7 @@ public class Controller {
 	private void handleLoginResponse(LoginResponse response) {
 		if (response.getStatus() == Status.SUCCESS) {
 			this.localUser = response.getUser();
+			loadChatHistory(); // Verlauf laden nach erfolgreichem Login
 		}
 		if (onLoginResult != null) {
 			onLoginResult.accept(response);
@@ -267,6 +273,22 @@ public class Controller {
 		if (onRegisterResult != null) {
 			onRegisterResult.accept(response);
 		}
+	}
+
+	private void loadChatHistory() {
+		List<ChatMessage> history = chatHistoryService.getHistory(null, null, "broadcast"); // Für Broadcast
+		for (ChatMessage msg : history) {
+			// Erstelle eine entsprechende Message aus ChatMessage
+			Message message;
+			if (msg.getMessageType() == MessageType.TEXT) {
+				message = new TextMessage(new User(msg.getSender()), msg.getContent());
+			} else {
+				// Für Dateien: Hier musst du die Datei laden, aber für Einfachheit zeige nur den Pfad
+				message = new TextMessage(new User(msg.getSender()), "[Datei: " + msg.getFilePath() + "]");
+			}
+			getMessages().add(message);
+		}
+		messageListView.scrollTo(getMessages().size() - 1);
 	}
 
 	private class MessageCell extends ListCell<Packet> {

@@ -96,4 +96,13 @@ public class ChatMessageRepository {
 			throw new RepositoryException("Nachrichtenanzahl konnte nicht ermittelt werden", e);
 		}
 	}
+
+	public List<ChatMessage> getAllMessages() throws RepositoryException {
+		try (EntityManager entityManager = Connection.createEntityManager()) {
+			return entityManager.createQuery("SELECT m FROM ChatMessage m ORDER BY m.timestamp", ChatMessage.class)
+				.getResultList();
+		} catch (RuntimeException e) {
+			throw new RepositoryException("Alle Nachrichten konnten nicht geladen werden", e);
+		}
+	}
 }
