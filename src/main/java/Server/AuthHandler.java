@@ -11,51 +11,45 @@ import Util.Network.Auth.LoginRequest;
 import Util.Network.Auth.LoginResponse;
 import Util.Network.Auth.RegisterRequest;
 import Util.Network.Auth.RegisterResponse;
-import Util.Network.Notifications.JoinNotification;
 
 import java.util.Optional;
 
 public class AuthHandler {
 	private final UserRepository userRepository;
-	private final PacketBroker packetBroker;
 
-	public AuthHandler(UserRepository userRepository, PacketBroker packetBroker) {
+	public AuthHandler(UserRepository userRepository) {
 		this.userRepository = userRepository;
-		this.packetBroker = packetBroker;
 	}
 
-	public void handleLogin(LoginRequest request, ClientProxy sender) {
-		if (sender == null) return;
+	public boolean handleLogin(LoginRequest request, ClientProxy sender) {
+		if (sender == null) return false;
 
 		if (!LoginValidator.validateUsername(request.getUsername())
 			|| !LoginValidator.validatePassword(request.getPassword())) {
 			sender.tryEnqueuePacket(new LoginResponse(Status.INVALID_INPUT, "Ungültige Eingabe", null));
-			return;
+			return false;
 		}
 
 		try {
 			Optional<User> userOpt = userRepository.findByUsername(request.getUsername());
 			if (userOpt.isEmpty()) {
 				sender.tryEnqueuePacket(new LoginResponse(Status.WRONG_CREDENTIALS, "Username oder Passwort falsch", null));
-				return;
+				return false;
 			}
 
 			User user = userOpt.get();
 			if (!BCryptWrapper.validate(request.getPassword(), user.getPasswordHash())) {
 				sender.tryEnqueuePacket(new LoginResponse(Status.WRONG_CREDENTIALS, "Username oder Passwort falsch", null));
-				return;
+				return false;
 			}
 
 			sender.setUser(user);
 			sender.tryEnqueuePacket(new LoginResponse(Status.SUCCESS, "Erfolgreich angemeldet", user));
-			try {
-				packetBroker.broadcast(new JoinNotification(user));
-			} catch (InterruptedException e) {
-				Thread.currentThread().interrupt();
-			}
+			return true;
 		} catch (RepositoryException e) {
 			System.err.println("Login fehlgeschlagen (DB): " + e.getMessage());
 			sender.tryEnqueuePacket(new LoginResponse(Status.DATABASE_ERROR, "Datenbankfehler", null));
+			return false;
 		}
 	}
 
@@ -84,11 +78,6 @@ public class AuthHandler {
 			userRepository.createUser(user);
 			sender.setUser(user);
 			sender.tryEnqueuePacket(new RegisterResponse(Status.SUCCESS, "Erfolgreich registriert", user));
-			try {
-				packetBroker.broadcast(new JoinNotification(user));
-			} catch (InterruptedException e) {
-				Thread.currentThread().interrupt();
-			}
 		} catch (UsernameAlreadyExistsException e) {
 			sender.tryEnqueuePacket(new RegisterResponse(Status.USERNAME_TAKEN, "Username bereits vergeben", null));
 		} catch (RepositoryException e) {

@@ -7,6 +7,11 @@ import Util.Network.SocketProxy;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.io.InputStream;
+import java.security.KeyStore;
+import javax.net.ssl.KeyManagerFactory;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLServerSocketFactory;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -19,13 +24,26 @@ public class Server implements Runnable {
 	private final PacketBroker packetBroker;
 	private final Future<?> packetBrokerFuture;
 
-	public Server(int port) throws IOException {
-		server = new ServerSocket(port);
+	public Server(int port) throws Exception {
+		SSLContext sslContext = SSLContext.getInstance("TLS");
+		KeyStore keyStore = KeyStore.getInstance("PKCS12");
+		try (InputStream keystoreInput = Server.class.getResourceAsStream("/server.keystore")) {
+			if (keystoreInput == null) {
+				throw new IOException("Server-Keystore (server.keystore) nicht gefunden!");
+			}
+			keyStore.load(keystoreInput, "password".toCharArray());
+		}
+		KeyManagerFactory keyManagerFactory = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+		keyManagerFactory.init(keyStore, "password".toCharArray());
+		sslContext.init(keyManagerFactory.getKeyManagers(), null, null);
+
+		SSLServerSocketFactory ssf = sslContext.getServerSocketFactory();
+		server = ssf.createServerSocket(port);
 
 		UserRepository userRepository = new JPAUserRepository();
-		packetBroker = new PacketBroker(threadExecutor, null);
-		AuthHandler authHandler = new AuthHandler(userRepository, packetBroker);
-		packetBroker.setAuthHandler(authHandler);
+		AuthHandler authHandler = new AuthHandler(userRepository);
+
+		packetBroker = new PacketBroker(threadExecutor, authHandler);
 		packetBrokerFuture = threadExecutor.submit(packetBroker);
 	}
 
@@ -48,7 +66,6 @@ public class Server implements Runnable {
 					System.err.println("Fehler beim Akzeptieren eines neuen Clients: " + e);
 				}
 				break;
-
 			}
 		}
 	}

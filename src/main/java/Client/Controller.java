@@ -96,7 +96,7 @@ public class Controller {
 		this.localUser = user;
 	}
 
-	public void connectAndRun(String ip, int port) {
+	public boolean connectAndRun(String ip, int port) {
 		try {
 			client = new Client(ip, port, outPacketQueue, inPacketQueue);
 			Thread clientThread = new Thread(client, "ClientThread");
@@ -133,15 +133,19 @@ public class Controller {
 			}, "IncomingMessageListener");
 			listener.setDaemon(true);
 			listener.start();
+			return true;
 
-		} catch (IOException e) {
+		} catch (Exception e) {
 			Alert alert = new Alert(Alert.AlertType.ERROR, e.getLocalizedMessage() + "\n\nErneut verbinden?", ButtonType.YES, ButtonType.NO);
+
 			alert.setHeaderText("Verbindung fehlgeschlagen");
-			alert.showAndWait().ifPresent(response -> {
-				if (response == ButtonType.YES) {
-					connectAndRun(ip, port);
-				}
-			});
+
+			var response = alert.showAndWait();
+			if (response.isPresent() && response.get() == ButtonType.YES) {
+				return connectAndRun(ip, port);
+			}
+
+			return false;
 		}
 	}
 
