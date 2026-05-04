@@ -4,10 +4,13 @@ import User.Model.User;
 import Util.FileUtil;
 import Util.Network.Auth.LoginRequest;
 import Util.Network.Auth.RegisterRequest;
+import Util.Network.DeleteMessage;
+import Util.Network.EditMessage;
 import Util.Network.Messages.FileMessage;
 import Util.Network.Messages.Message;
 import Util.Network.Notifications.LeaveNotification;
 import Util.Network.Packet;
+import Util.Network.ReadReceipt;
 import Util.Network.SocketProxy;
 
 import java.io.IOException;
@@ -50,26 +53,29 @@ public class PacketBroker implements Runnable {
 				Packet packet = incoming.packet();
 				ClientProxy sender = incoming.sender();
 
-				switch (packet) {
-					case LoginRequest req -> authHandler.handleLogin(req, sender);
-					case RegisterRequest req -> authHandler.handleRegister(req, sender);
-					case FileMessage file -> {
-						if (sender != null && sender.getUser() != null) {
-							try {
-								FileUtil.saveFile(file.getContent(), file.getFileExtension());
-								broadcastToAll(packet);
-							} catch (IOException e) {
-								System.err.println("Fehler beim Speichern einer Datei: " + e);
-							}
-						}
-					}
-					case Message msg -> {
-						if (sender != null && sender.getUser() != null) {
+			switch (packet) {
+				case LoginRequest req -> authHandler.handleLogin(req, sender);
+				case RegisterRequest req -> authHandler.handleRegister(req, sender);
+				case FileMessage file -> {
+					if (sender != null && sender.getUser() != null) {
+						try {
+							FileUtil.saveFile(file.getContent(), file.getFileExtension());
 							broadcastToAll(packet);
+						} catch (IOException e) {
+							System.err.println("Fehler beim Speichern einer Datei: " + e);
 						}
 					}
-					default -> broadcastToAll(packet);
 				}
+				case Message msg -> {
+					if (sender != null && sender.getUser() != null) {
+						broadcastToAll(packet);
+					}
+				}
+				case ReadReceipt receipt -> broadcastToAll(packet);
+				case EditMessage edit -> broadcastToAll(packet);
+				case DeleteMessage delete -> broadcastToAll(packet);
+				default -> broadcastToAll(packet);
+			}
 
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
