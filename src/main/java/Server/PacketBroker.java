@@ -4,11 +4,14 @@ import User.Model.User;
 import Util.FileUtil;
 import Util.Network.Auth.LoginRequest;
 import Util.Network.Auth.RegisterRequest;
+import Util.Network.DeleteMessage;
+import Util.Network.EditMessage;
 import Util.Network.Messages.FileMessage;
 import Util.Network.Messages.Message;
 import Util.Network.Notifications.JoinNotification;
 import Util.Network.Notifications.LeaveNotification;
 import Util.Network.Packet;
+import Util.Network.ReadReceipt;
 import Util.Network.SocketProxy;
 
 import java.io.IOException;
@@ -79,9 +82,12 @@ public class PacketBroker implements Runnable {
 					}
 					case Message msg -> {
 						if (sender != null && sender.getUser() != null) {
-							broadcastToAll(msg);
+							broadcastToAll(packet);
 						}
 					}
+					case ReadReceipt receipt -> broadcastToAll(packet);
+					case EditMessage edit -> broadcastToAll(packet);
+					case DeleteMessage delete -> broadcastToAll(packet);
 					default -> broadcastToAll(packet);
 				}
 
