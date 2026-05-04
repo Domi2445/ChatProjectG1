@@ -4,7 +4,6 @@ import Util.Network.Packet;
 import User.Model.User;
 
 import java.io.Serial;
-import java.io.Serializable;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -14,7 +13,7 @@ public abstract class Message extends Packet {
 
     private final User sender;
     private final Set<String> readByUsernames;
-    private long messageId;
+    private final long messageId;
 
     public Message(User sender) {
         this.sender = sender;
@@ -32,15 +31,7 @@ public abstract class Message extends Packet {
         return new HashSet<>(readByUsernames);
     }
 
-    public boolean isReadBy(String username) {
-        return readByUsernames.contains(username);
-    }
-
-    public boolean isRead() {
-        return !readByUsernames.isEmpty();
-    }
-
-    public long getMessageId() {
+	public long getMessageId() {
         return messageId;
     }
 }
