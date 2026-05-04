@@ -33,6 +33,11 @@ public class Server implements Runnable {
 
 	@Override
 	public void run() {
+
+			// Audio
+			new Thread(new AudioRelayServer(8000), "AudioRelayServer").start();
+			// Audio
+
 		while (!Thread.currentThread().isInterrupted()) {
 			try {
 				Socket s = server.accept();
