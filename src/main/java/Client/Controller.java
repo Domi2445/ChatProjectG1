@@ -3,10 +3,7 @@ package Client;
 import User.Login.Status;
 import User.Model.User;
 import Util.FileUtil;
-import Util.Network.Auth.LoginRequest;
-import Util.Network.Auth.LoginResponse;
-import Util.Network.Auth.RegisterRequest;
-import Util.Network.Auth.RegisterResponse;
+import Util.Network.Auth.*;
 import Util.Network.Messages.FileMessage;
 import Util.Network.Messages.Message;
 import Util.Network.Messages.TextMessage;
@@ -25,10 +22,9 @@ import javafx.scene.control.*;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.HBox;
-import javafx.scene.layout.VBox;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
-
+import javafx.scene.layout.VBox;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
@@ -45,7 +41,8 @@ public class Controller {
 
 	private Consumer<LoginResponse> onLoginResult;
 	private Consumer<RegisterResponse> onRegisterResult;
-
+	private java.util.List<User> lastSearchResults;
+	private Consumer<UserSearchResponse> onSearchResult;
 	private Client client;
 	private User localUser;
 	private Stage stage;
@@ -59,10 +56,29 @@ public class Controller {
 
 	@FXML
 	private Button sendButton;
-
+	@FXML
+	private Label chatTitle;
 	@FXML
 	private Button uploadButton;
+	@FXML
+	private TextField searchField;
 
+	@FXML
+	private VBox searchPanel;
+
+	@FXML
+	private ListView<String> searchResultsList;
+	@FXML
+	private VBox profilePanel;
+
+	@FXML
+	private Label profileUsername;
+
+	@FXML
+	private Label profileDisplayname;
+
+	@FXML
+	private Label profileStatus;
 	public Controller() {
 		this.outPacketQueue = new ArrayBlockingQueue<>(4);
 		this.inPacketQueue = new ArrayBlockingQueue<>(4);
@@ -76,6 +92,9 @@ public class Controller {
 	public void setOnRegisterResult(Consumer<RegisterResponse> onRegisterResult) {
 		this.onRegisterResult = onRegisterResult;
 	}
+	public void setOnSearchResult(Consumer<UserSearchResponse> onSearchResult) {
+		this.onSearchResult = onSearchResult;
+	}
 
 	@FXML
 	private void initialize() {
@@ -84,6 +103,47 @@ public class Controller {
 		sendButton.setOnAction(e -> sendMessage());
 		messageTextField.setOnAction(e -> sendMessage());
 		uploadButton.setOnAction(e -> sendFile());
+		//USERSUCHFELD
+		searchField.setOnAction(e -> {
+			String query = searchField.getText().trim();
+			if (!query.isEmpty()) {
+				sendUserSearchRequest(query);
+			} else {
+				searchPanel.setVisible(false);
+				searchPanel.setManaged(false);
+			}
+		});
+
+		setOnSearchResult(response -> {
+			lastSearchResults = response.getResults();
+			searchResultsList.getItems().clear();
+			for (User user : response.getResults()) {
+				String display = user.getUsername();
+				if (user.getDisplayname() != null && !user.getDisplayname().equals(user.getUsername())) {
+					display += " (" + user.getDisplayname() + ")";
+				}
+				searchResultsList.getItems().add(display);
+			}
+			searchPanel.setVisible(!response.getResults().isEmpty());
+			searchPanel.setManaged(!response.getResults().isEmpty());
+			profilePanel.setVisible(false);
+			profilePanel.setManaged(false);
+		});
+
+		searchResultsList.setOnMouseClicked(e -> {
+			int idx = searchResultsList.getSelectionModel().getSelectedIndex();
+			if (idx < 0 || lastSearchResults == null || idx >= lastSearchResults.size()) return;
+
+			User user = lastSearchResults.get(idx);
+
+			profileUsername.setText(user.getUsername());
+			profileDisplayname.setText(user.getDisplayname() != null ? user.getDisplayname() : "");
+			profileStatus.setText(user.getStatusMessage() != null ? user.getStatusMessage() : "kein Status");
+			profilePanel.setVisible(true);
+			profilePanel.setManaged(true);
+
+			chatTitle.setText("Schreibst mit: " + user.getUsername());
+		});
 	}
 
 	public void configure(Stage stage, User user) {
@@ -117,6 +177,9 @@ public class Controller {
 							});
 							case RegisterResponse registerResp -> Platform.runLater(() -> {
 								handleRegisterResponse(registerResp);
+							});
+							case UserSearchResponse resp -> Platform.runLater(() -> {
+								handleUserSearchResponse(resp);
 							});
 							case null, default -> throw new IllegalStateException("Unbekanntes Paket empfangen");
 						}
@@ -249,6 +312,14 @@ public class Controller {
 			Thread.currentThread().interrupt();
 		}
 	}
+	public void sendUserSearchRequest(String query){
+		UserSearchRequest request = new UserSearchRequest(query);
+		try {
+			outPacketQueue.put(request);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+		}
+	}
 
 	private void handleLoginResponse(LoginResponse response) {
 		if (response.getStatus() == Status.SUCCESS) {
@@ -266,6 +337,11 @@ public class Controller {
 
 		if (onRegisterResult != null) {
 			onRegisterResult.accept(response);
+		}
+	}
+	private void handleUserSearchResponse(UserSearchResponse response) {
+		if (onSearchResult != null) {
+			onSearchResult.accept(response);
 		}
 	}
 
@@ -419,4 +495,6 @@ public class Controller {
 			messageListView.getItems().set(index, message);
 		}
 	}
+
+
 }

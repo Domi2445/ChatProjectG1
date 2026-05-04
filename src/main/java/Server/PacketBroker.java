@@ -1,9 +1,12 @@
 package Server;
 
 import User.Model.User;
+import User.Repository.RepositoryException;
 import Util.FileUtil;
 import Util.Network.Auth.LoginRequest;
 import Util.Network.Auth.RegisterRequest;
+import Util.Network.Auth.UserSearchRequest;
+import Util.Network.Auth.UserSearchResponse;
 import Util.Network.Messages.FileMessage;
 import Util.Network.Messages.Message;
 import Util.Network.Notifications.LeaveNotification;
@@ -66,6 +69,29 @@ public class PacketBroker implements Runnable {
 					case Message msg -> {
 						if (sender != null && sender.getUser() != null) {
 							broadcastToAll(packet);
+						}
+					}
+					case UserSearchRequest req -> {
+						if (sender != null && sender.getUser() != null) {
+							try {
+								String currentUsername = sender.getUser().getUsername();
+								List<User> raw = authHandler.getUserRepository().searchByUsername(req.getQuery());
+
+								List<User> safe = new ArrayList<>();
+								for (User u : raw) {
+									if (u.getUsername().equals(currentUsername)) continue;
+									User copy = new User();
+									copy.setUsername(u.getUsername());
+									copy.setDisplayname(u.getDisplayname());
+									copy.setStatusMessage(u.getStatusMessage());
+									safe.add(copy);
+									if (safe.size() >= 20) break;
+								}
+								sender.tryEnqueuePacket(new UserSearchResponse(safe));
+							} catch (RepositoryException e) {
+								System.err.println("User-Suche fehlgeschlagen: " + e.getMessage());
+								sender.tryEnqueuePacket(new UserSearchResponse(List.of()));
+							}
 						}
 					}
 					default -> broadcastToAll(packet);

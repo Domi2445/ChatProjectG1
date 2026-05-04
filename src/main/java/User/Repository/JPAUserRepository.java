@@ -149,6 +149,21 @@ public class JPAUserRepository implements UserRepository {
 			throw new RepositoryException("User-Liste konnte nicht geladen werden", e);
 		}
 	}
+	@Override
+	public List<User> searchByUsername(String partial) {
+		if (isBlank(partial)) {
+			return List.of();
+		}
+
+		try (EntityManager entityManager = Connection.createEntityManager()) {
+			return entityManager.createQuery(
+					"SELECT u FROM User u WHERE LOWER(u.username) LIKE LOWER(:partial)", User.class)
+				.setParameter("partial", "%" + partial + "%")
+				.getResultList();
+		} catch (RuntimeException e) {
+			throw new RepositoryException("User-Suche fehlgeschlagen: " + partial, e);
+		}
+	}
 
 	@FunctionalInterface
 	private interface EntityWork {

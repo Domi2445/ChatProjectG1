@@ -83,4 +83,7 @@ public class AuthHandler {
 			sender.tryEnqueuePacket(new RegisterResponse(Status.DATABASE_ERROR, "Datenbankfehler", null));
 		}
 	}
+	public UserRepository getUserRepository() {
+		return userRepository;
+	}
 }

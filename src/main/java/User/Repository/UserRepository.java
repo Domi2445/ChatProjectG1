@@ -2,6 +2,7 @@ package User.Repository;
 
 import User.Model.User;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface UserRepository {
@@ -15,4 +16,6 @@ public interface UserRepository {
 	void deleteUser(String username);
 
 	boolean usernameExists(String username);
+
+	List<User> searchByUsername(String partial);
 }
