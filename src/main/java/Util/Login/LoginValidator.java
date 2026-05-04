@@ -13,7 +13,7 @@ public class LoginValidator {
 			LogHandler.log("LoginValidator", "Displayname muss mindestens drei Zeichen lang sein.");
 			return false;
 		}
-		if (isValid(username)) {
+		if (!isValid(username)) {
 			LogHandler.log("LoginValidator", "Nutzername enthält unzulässige Sonderzeichen.");
 			return false;
 		}
@@ -30,7 +30,7 @@ public class LoginValidator {
 			LogHandler.log("LoginValidator", "Displayname muss mindestens drei Zeichen lang sein.");
 			return false;
 		}
-		if (isValid(displayName)) {
+		if (!isValid(displayName)) {
 			LogHandler.log("LoginValidator", "Nutzername enthält unzulässige Sonderzeichen.");
 			return false;
 		}

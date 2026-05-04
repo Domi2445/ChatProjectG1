@@ -1,6 +1,8 @@
 package Client;
 
 import User.Login.Status;
+import User.Model.User;
+import Util.FileUtil;
 import Util.Network.Auth.LoginRequest;
 import Util.Network.Auth.LoginResponse;
 import Util.Network.Auth.RegisterRequest;
@@ -12,7 +14,6 @@ import Util.Network.Notifications.JoinNotification;
 import Util.Network.Notifications.LeaveNotification;
 import Util.Network.Notifications.Notification;
 import Util.Network.Packet;
-import User.Model.User;
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
 import javafx.collections.ObservableList;
@@ -24,6 +25,7 @@ import javafx.scene.control.*;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.VBox;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
@@ -41,22 +43,13 @@ public class Controller {
 	private final BlockingQueue<Packet> outPacketQueue;
 	private final BlockingQueue<Packet> inPacketQueue;
 
-
-
 	private Consumer<LoginResponse> onLoginResult;
 	private Consumer<RegisterResponse> onRegisterResult;
-
-	// UI registriert hier ihren Handler (z.B. Screen-Wechsel bei Success)
-	public void setOnLoginResult(Consumer<LoginResponse> onLoginResult) {
-		this.onLoginResult = onLoginResult;
-	}
-	public void setOnRegisterResult(Consumer<RegisterResponse> onRegisterResult) {
-		this.onRegisterResult = onRegisterResult;
-	}
 
 	private Client client;
 	private User localUser;
 	private Stage stage;
+	private TextMessage isEditingMessage;
 
 	@FXML
 	private ListView<Packet> messageListView;
@@ -74,10 +67,20 @@ public class Controller {
 		this.outPacketQueue = new ArrayBlockingQueue<>(4);
 		this.inPacketQueue = new ArrayBlockingQueue<>(4);
 	}
+	
+	// UI registriert hier ihren Handler (z.B. Screen-Wechsel bei Success)
+	public void setOnLoginResult(Consumer<LoginResponse> onLoginResult) {
+		this.onLoginResult = onLoginResult;
+	}
+
+	public void setOnRegisterResult(Consumer<RegisterResponse> onRegisterResult) {
+		this.onRegisterResult = onRegisterResult;
+	}
 
 	@FXML
 	private void initialize() {
 		messageListView.setCellFactory(lv -> new MessageCell());
+		
 		sendButton.setOnAction(e -> sendMessage());
 		messageTextField.setOnAction(e -> sendMessage());
 		uploadButton.setOnAction(e -> sendFile());
@@ -112,12 +115,11 @@ public class Controller {
 							case LoginResponse loginResp -> Platform.runLater(() -> { //FÜR UI CALLBACK
 								handleLoginResponse(loginResp);
 							});
-							case RegisterResponse registerResp -> Platform.runLater(()->{
+							case RegisterResponse registerResp -> Platform.runLater(() -> {
 								handleRegisterResponse(registerResp);
 							});
 							case null, default -> throw new IllegalStateException("Unbekanntes Paket empfangen");
 						}
-
 
 					} catch (InterruptedException e) {
 						break;
@@ -128,13 +130,13 @@ public class Controller {
 			listener.start();
 
 		} catch (IOException e) {
-			// todo(team-view): schöner Fehler anzeigen (z. B. Popup) und Möglichkeit zum erneuten Verbinden anbieten
-			User user = new User();
-			user.setUsername("System");
-
-			Platform.runLater(() ->
-				getMessages().add(new TextMessage(user, "Verbindung fehlgeschlagen: " + e.getMessage()))
-			);
+			Alert alert = new Alert(Alert.AlertType.ERROR, e.getLocalizedMessage() + "\n\nErneut verbinden?", ButtonType.YES, ButtonType.NO);
+			alert.setHeaderText("Verbindung fehlgeschlagen");
+			alert.showAndWait().ifPresent(response -> {
+				if (response == ButtonType.YES) {
+					connectAndRun(ip, port);
+				}
+			});
 		}
 	}
 
@@ -145,17 +147,32 @@ public class Controller {
 	private void sendMessage() {
 		String text = messageTextField.getText().trim();
 		if (!text.isEmpty()) {
-			Message message = new TextMessage(localUser, text);
-
-			try {
-				outPacketQueue.put(message);
-			} catch (InterruptedException ex) {
-				throw new RuntimeException(ex);
+			if (isEditingMessage != null) {
+				isEditingMessage.setEditedContent(text);
+				int index = getMessages().indexOf(isEditingMessage);
+				if (index >= 0) {
+					messageListView.getItems().set(index, isEditingMessage);
+					messageListView.refresh();
+				}
+				isEditingMessage = null;
+				resetSendButton();
+			} else {
+				Message message = new TextMessage(localUser, text);
+				try {
+					outPacketQueue.put(message);
+				} catch (InterruptedException ex) {
+					throw new RuntimeException(ex);
+				}
 			}
 
 			messageListView.scrollTo(getMessages().size() - 1);
 			messageTextField.clear();
 		}
+	}
+	
+	private void resetSendButton() {
+		sendButton.setText("Send");
+		sendButton.setStyle("-fx-background-color: #89b4fa; -fx-text-fill: #1e1e2e; -fx-font-size: 14; -fx-background-radius: 20; -fx-min-width: 70; -fx-min-height: 40;");
 	}
 
 	private void sendFile() {
@@ -186,16 +203,9 @@ public class Controller {
 			return;
 		}
 
-		FileMessage.FileType fileType;
 		String fileName = selectedFile.getName();
-
-		if (fileName.endsWith(".png") || fileName.endsWith(".jpg") || fileName.endsWith(".gif") || fileName.endsWith(".bmp")) {
-			fileType = FileMessage.FileType.IMAGE;
-		} else {
-			fileType = FileMessage.FileType.FILE;
-		}
-
-		Message message = new FileMessage(localUser, bytes, fileName, fileType);
+		String fileExt = FileUtil.getFileExtension(fileName).toLowerCase();
+		Message message = new FileMessage(localUser, bytes, fileExt);
 
 		try {
 			outPacketQueue.put(message);
@@ -230,6 +240,7 @@ public class Controller {
 			Thread.currentThread().interrupt();
 		}
 	}
+
 	public void sendRegisterRequest(String username, String displayname, String password) {
 		RegisterRequest request = new RegisterRequest(username, displayname, password);
 		try {
@@ -238,20 +249,25 @@ public class Controller {
 			Thread.currentThread().interrupt();
 		}
 	}
+
 	private void handleLoginResponse(LoginResponse response) {
-		if(response.getStatus() == Status.SUCCESS){
+		if (response.getStatus() == Status.SUCCESS) {
 			this.localUser = response.getUser();
-		} if (onLoginResult != null) {
+		}
+		if (onLoginResult != null) {
 			onLoginResult.accept(response);
 		}
 	}
-	private void handleRegisterResponse(RegisterResponse response){
-		if(onRegisterResult != null){
+
+	private void handleRegisterResponse(RegisterResponse response) {
+		if (onRegisterResult != null) {
 			onRegisterResult.accept(response);
 		}
 	}
 
 	private class MessageCell extends ListCell<Packet> {
+		private TextMessage editingMessage;
+
 		@Override
 		protected void updateItem(Packet item, boolean empty) {
 			super.updateItem(item, empty);
@@ -276,9 +292,18 @@ public class Controller {
 
 			switch (message) {
 				case TextMessage textMessage -> {
-					Label label = new Label(textMessage.getContent());
+					String text = textMessage.isDeleted()
+						? "Diese Nachricht wurde gelöscht"
+						: textMessage.getContent();
+
+					Label label = new Label(text);
 					label.setWrapText(true);
 					label.setMaxWidth(300);
+
+					if (textMessage.isDeleted()) {
+						label.setStyle("-fx-text-fill: #6c7086; -fx-font-style: italic;");
+					}
+
 					node = label;
 				}
 				case FileMessage fileMessage -> node = createFileNode(fileMessage);
@@ -288,30 +313,44 @@ public class Controller {
 			boolean isOwn = localUser != null && localUser.equals(message.getSender());
 			node.setStyle(getBubbleStyle(isOwn));
 
-			HBox container = new HBox(node);
+			VBox messageBox = new VBox(2);
+			messageBox.getChildren().add(node);
+
+			if (message instanceof TextMessage textMessage && textMessage.isEdited() && !textMessage.isDeleted()) {
+				Label editedLabel = new Label("bearbeitet");
+				editedLabel.setStyle("-fx-font-size: 10; -fx-text-fill: #6c7086; -fx-font-style: italic;");
+				messageBox.getChildren().add(editedLabel);
+			}
+
+			HBox container = new HBox(messageBox);
 			container.setAlignment(isOwn ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT);
 			container.setPadding(new Insets(2, 10, 2, 10));
+
+			if (isOwn && message instanceof TextMessage textMessage && !textMessage.isDeleted()) {
+				container.setOnContextMenuRequested(event -> {
+					ContextMenu contextMenu = createMessageContextMenu(textMessage);
+					contextMenu.show(container, event.getScreenX(), event.getScreenY());
+				});
+			}
+
 			return container;
 		}
 
 		private Node createFileNode(FileMessage fileMessage) {
-			return switch (fileMessage.getFileType()) {
-				case FILE -> {
-					Label label = new Label("Datei: " + fileMessage.getFileName());
-					// todo(team-view): Datei herunterladen Button
-					yield label;
-				}
-				case IMAGE -> {
-					Image image = new Image(new ByteArrayInputStream(fileMessage.getContent()));
-					ImageView imageView = new ImageView(image);
-					imageView.setPreserveRatio(true);
-					imageView.fitWidthProperty().bind(Bindings.createDoubleBinding(
-						() -> Math.clamp(getScene().getWidth() - 32, 100.0, image.getWidth()),
-						getScene().widthProperty()
-					));
-					yield imageView;
-				}
-			};
+			if (FileUtil.isImageExtension(fileMessage.getFileExtension())) {
+				Image image = new Image(new ByteArrayInputStream(fileMessage.getContent()));
+				ImageView imageView = new ImageView(image);
+				imageView.setPreserveRatio(true);
+				imageView.fitWidthProperty().bind(Bindings.createDoubleBinding(
+					() -> Math.clamp(getScene().getWidth() - 32, 100.0, image.getWidth()),
+					getScene().widthProperty()
+				));
+				return imageView;
+			} else {
+				Label label = new Label(fileMessage.getFileExtension() + "-Datei");
+				// todo(team-view): Datei herunterladen Button
+				return label;
+			}
 		}
 
 		private String getBubbleStyle(boolean isOwn) {
@@ -329,11 +368,11 @@ public class Controller {
 
 			switch (notification) {
 				case JoinNotification join -> {
-					text = join.getUser() + " ist beigetreten";
+					text = join.getUser().getUsername() + " ist beigetreten";
 					color = "#89b4fa";
 				}
 				case LeaveNotification leave -> {
-					text = leave.getUser() + " hat verlassen";
+					text = leave.getUser().getUsername() + " hat verlassen";
 					color = "#f38ba8";
 				}
 				case null, default -> throw new IllegalStateException("Unerwarteter Wert: " + notification);
@@ -343,6 +382,37 @@ public class Controller {
 			setAlignment(Pos.CENTER);
 			setStyle("-fx-background-color: transparent; -fx-padding: 4 0; "
 				+ "-fx-text-fill: " + color + "; -fx-font-style: italic;");
+		}
+
+		private ContextMenu createMessageContextMenu(TextMessage message) {
+			ContextMenu menu = new ContextMenu();
+			
+			MenuItem editItem = new MenuItem("✏️ Bearbeiten");
+			editItem.setStyle("-fx-font-size: 12;");
+			editItem.setOnAction(event -> Controller.this.startEditMessage(message));
+			
+			MenuItem deleteItem = new MenuItem("🗑️ Löschen");
+			deleteItem.setStyle("-fx-font-size: 12;");
+			deleteItem.setOnAction(event -> Controller.this.deleteMessage(message));
+			
+			menu.getItems().addAll(editItem, deleteItem);
+			return menu;
+		}
+	}
+	
+	private void startEditMessage(TextMessage message) {
+		messageTextField.setText(message.getContent());
+		messageTextField.requestFocus();
+		isEditingMessage = message;
+		sendButton.setText("Speichern");
+		sendButton.setStyle("-fx-background-color: #a6e3a1; -fx-text-fill: #1e1e2e; -fx-font-size: 14; -fx-background-radius: 20; -fx-min-width: 70; -fx-min-height: 40;");
+	}
+
+	private void deleteMessage(TextMessage message) {
+		message.setDeleted();
+		int index = getMessages().indexOf(message);
+		if (index >= 0) {
+			messageListView.getItems().set(index, message);
 		}
 	}
 }
