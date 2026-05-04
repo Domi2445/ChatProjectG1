@@ -1,9 +1,7 @@
 package Server;
 
-import User.Model.User;
 import User.Repository.JPAUserRepository;
 import User.Repository.UserRepository;
-import Util.Network.Notifications.JoinNotification;
 import Util.Network.SocketProxy;
 
 import java.io.IOException;
@@ -25,9 +23,9 @@ public class Server implements Runnable {
 		server = new ServerSocket(port);
 
 		UserRepository userRepository = new JPAUserRepository();
-		AuthHandler authHandler = new AuthHandler(userRepository);
-
-		packetBroker = new PacketBroker(threadExecutor, authHandler);
+		packetBroker = new PacketBroker(threadExecutor, null);
+		AuthHandler authHandler = new AuthHandler(userRepository, packetBroker);
+		packetBroker.setAuthHandler(authHandler);
 		packetBrokerFuture = threadExecutor.submit(packetBroker);
 	}
 
@@ -43,13 +41,7 @@ public class Server implements Runnable {
 				} else {
 					System.err.println("Maximale Anzahl an Clients erreicht, Verbindung abgelehnt");
 					try { socket.close(); } catch (IOException ignored) {}
-					continue;
 				}
-
-				// todo: Wenn es ein Loginsystem gibt, hier das User-Objekt des neu beigetretenen Clients übergeben, sobald dieser sich angemeldet hat
-				User user = new User();
-				user.setUsername("Platzhalter");
-				packetBroker.broadcast(new JoinNotification(user));
 
 			} catch (IOException e) {
 				if (!server.isClosed()) {
@@ -57,8 +49,6 @@ public class Server implements Runnable {
 				}
 				break;
 
-			} catch (InterruptedException e) {
-				Thread.currentThread().interrupt();
 			}
 		}
 	}

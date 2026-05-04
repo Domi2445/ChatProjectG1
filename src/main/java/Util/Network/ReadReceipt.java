@@ -22,4 +22,3 @@ public class ReadReceipt extends Packet {
         return username;
     }
 }
-

@@ -19,6 +19,7 @@ import Util.Network.Packet;
 import Util.Network.ReadReceipt;
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
+import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
 import javafx.geometry.Insets;
@@ -43,6 +44,8 @@ import java.util.function.Consumer;
 
 public class Controller {
 	public static final int MAX_FILE_SIZE = 1_000_000;
+
+	private static final ObservableList<Packet> messages = FXCollections.observableArrayList();
 
 	private final BlockingQueue<Packet> outPacketQueue;
 	private final BlockingQueue<Packet> inPacketQueue;
@@ -84,7 +87,8 @@ public class Controller {
 	@FXML
 	private void initialize() {
 		messageListView.setCellFactory(lv -> new MessageCell());
-		
+		messageListView.setItems(messages);
+
 		sendButton.setOnAction(e -> sendMessage());
 		messageTextField.setOnAction(e -> sendMessage());
 		uploadButton.setOnAction(e -> sendFile());
@@ -108,7 +112,7 @@ public class Controller {
 						Packet packet = inPacketQueue.take();
 						switch (packet) {
 							case Message message -> Platform.runLater(() -> {
-								getMessages().add(message);
+								messages.add(message);
 								if (!message.getSender().equals(localUser)) {
 									try {
 										ReadReceipt receipt = new ReadReceipt(message.getMessageId(), localUser.getUsername());
@@ -117,10 +121,10 @@ public class Controller {
 										throw new RuntimeException(e);
 									}
 								}
-								messageListView.scrollTo(getMessages().size() - 1);
+								messageListView.scrollTo(messages.size() - 1);
 							});
 							case ReadReceipt receipt -> Platform.runLater(() -> {
-								for (Packet p : getMessages()) {
+								for (Packet p : messages) {
 									if (p instanceof Message msg && msg.getMessageId() == receipt.getMessageId()) {
 										msg.markAsReadBy(receipt.getUsername());
 										messageListView.refresh();
@@ -129,30 +133,30 @@ public class Controller {
 								}
 							});
 							case EditMessage edit -> Platform.runLater(() -> {
-								for (int i = 0; i < getMessages().size(); i++) {
-									Packet p = getMessages().get(i);
+								for (int i = 0; i < messages.size(); i++) {
+									Packet p = messages.get(i);
 									if (p instanceof TextMessage msg && msg.getMessageId() == edit.getMessageId()) {
 										msg.setEditedContent(edit.getNewContent());
-										messageListView.getItems().set(i, msg);
+										messages.set(i, msg);
 										messageListView.refresh();
 										break;
 									}
 								}
 							});
 							case DeleteMessage delete -> Platform.runLater(() -> {
-								for (int i = 0; i < getMessages().size(); i++) {
-									Packet p = getMessages().get(i);
+								for (int i = 0; i < messages.size(); i++) {
+									Packet p = messages.get(i);
 									if (p instanceof TextMessage msg && msg.getMessageId() == delete.getMessageId()) {
 										msg.setDeleted();
-										messageListView.getItems().set(i, msg);
+										messages.set(i, msg);
 										messageListView.refresh();
 										break;
 									}
 								}
 							});
 							case Notification notification -> Platform.runLater(() -> {
-								getMessages().add(notification);
-								messageListView.scrollTo(getMessages().size() - 1);
+								messages.add(notification);
+								messageListView.scrollTo(messages.size() - 1);
 								handleNotification(notification);
 							});
 							case LoginResponse loginResp -> Platform.runLater(() -> {
@@ -183,10 +187,6 @@ public class Controller {
 		}
 	}
 
-	private ObservableList<Packet> getMessages() {
-		return messageListView.getItems();
-	}
-
 	private void sendMessage() {
 		String text = messageTextField.getText().trim();
 		if (!text.isEmpty()) {
@@ -208,7 +208,7 @@ public class Controller {
 				}
 			}
 
-			messageListView.scrollTo(getMessages().size() - 1);
+			messageListView.scrollTo(messages.size() - 1);
 			messageTextField.clear();
 		}
 	}
@@ -256,7 +256,7 @@ public class Controller {
 			throw new RuntimeException(e);
 		}
 
-		messageListView.scrollTo(getMessages().size() - 1);
+		messageListView.scrollTo(messages.size() - 1);
 		messageTextField.clear();
 	}
 
@@ -361,6 +361,10 @@ public class Controller {
 			node.setStyle(getBubbleStyle(isOwn));
 
 			VBox messageBox = new VBox(2);
+			// Sender name
+			Label senderLabel = new Label(message.getSender().getDisplayName());
+			senderLabel.setStyle("-fx-font-size: 10; -fx-text-fill: #6c7086;");
+			messageBox.getChildren().add(senderLabel);
 			messageBox.getChildren().add(node);
 
 			if (message instanceof TextMessage textMessage && textMessage.isEdited() && !textMessage.isDeleted()) {

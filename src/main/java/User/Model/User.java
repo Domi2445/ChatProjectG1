@@ -125,4 +125,9 @@ public class User implements Serializable {
 	public int hashCode() {
 		return Objects.hash(username, displayname, passwordHash, statusMessage, profileDescription, profilePictureUUID, contactData);
 	}
+
+    public String getDisplayName()
+	{
+		return username;
+    }
 }

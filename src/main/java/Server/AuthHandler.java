@@ -11,14 +11,17 @@ import Util.Network.Auth.LoginRequest;
 import Util.Network.Auth.LoginResponse;
 import Util.Network.Auth.RegisterRequest;
 import Util.Network.Auth.RegisterResponse;
+import Util.Network.Notifications.JoinNotification;
 
 import java.util.Optional;
 
 public class AuthHandler {
 	private final UserRepository userRepository;
+	private final PacketBroker packetBroker;
 
-	public AuthHandler(UserRepository userRepository) {
+	public AuthHandler(UserRepository userRepository, PacketBroker packetBroker) {
 		this.userRepository = userRepository;
+		this.packetBroker = packetBroker;
 	}
 
 	public void handleLogin(LoginRequest request, ClientProxy sender) {
@@ -45,6 +48,11 @@ public class AuthHandler {
 
 			sender.setUser(user);
 			sender.tryEnqueuePacket(new LoginResponse(Status.SUCCESS, "Erfolgreich angemeldet", user));
+			try {
+				packetBroker.broadcast(new JoinNotification(user));
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+			}
 		} catch (RepositoryException e) {
 			System.err.println("Login fehlgeschlagen (DB): " + e.getMessage());
 			sender.tryEnqueuePacket(new LoginResponse(Status.DATABASE_ERROR, "Datenbankfehler", null));
@@ -76,6 +84,11 @@ public class AuthHandler {
 			userRepository.createUser(user);
 			sender.setUser(user);
 			sender.tryEnqueuePacket(new RegisterResponse(Status.SUCCESS, "Erfolgreich registriert", user));
+			try {
+				packetBroker.broadcast(new JoinNotification(user));
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+			}
 		} catch (UsernameAlreadyExistsException e) {
 			sender.tryEnqueuePacket(new RegisterResponse(Status.USERNAME_TAKEN, "Username bereits vergeben", null));
 		} catch (RepositoryException e) {

@@ -22,4 +22,3 @@ public class EditMessage extends Packet {
 		return newContent;
 	}
 }
-

@@ -28,7 +28,7 @@ public class PacketBroker implements Runnable {
 	public static final int MAX_CLIENTS = 16;
 
 	private final ExecutorService threadExecutor;
-	private final AuthHandler authHandler;
+	private AuthHandler authHandler;
 
 	/// Queue für Pakete, die an alle verbundenen Clients gesendet werden sollen.
 	private final BlockingQueue<IncomingPacket> broadcastPacketQueue;
@@ -109,18 +109,15 @@ public class PacketBroker implements Runnable {
 		for (var client : clientsToUnregister) {
 			User user = client.getUser();
 			// todo: Benutzernamen des Clients übergeben oder keine Benachrichtigung senden wenn nicht eingeloggt
-			if (user == null) {
-				user = new User();
-				user.setUsername("Platzhalter");
-			}
-
-			try {
-				if (!broadcast(new LeaveNotification(user))) {
-					System.err.println("broadcastPacketQueue ist voll, Paket wurde verworfen");
+			if (user != null) {
+				try {
+					if (!broadcast(new LeaveNotification(user))) {
+						System.err.println("broadcastPacketQueue ist voll, Paket wurde verworfen");
+					}
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+					return;
 				}
-			} catch (InterruptedException e) {
-				Thread.currentThread().interrupt();
-				return;
 			}
 		}
 	}
@@ -195,6 +192,10 @@ public class PacketBroker implements Runnable {
 
 	public void shutdown() {
 		stopFlag.set(true);
+	}
+
+	public void setAuthHandler(AuthHandler authHandler) {
+		this.authHandler = authHandler;
 	}
 
 	/// Sammelt alle Clients, die unregistriert werden müssen, in der übergebenen Liste.
