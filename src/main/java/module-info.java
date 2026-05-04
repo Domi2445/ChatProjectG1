@@ -6,6 +6,7 @@ module com.chatproject {
 	requires org.hibernate.orm.core;
 	requires jakarta.transaction;
 	requires java.sql;
+	requires webcam.capture;
 
 
 	requires jbcrypt;
@@ -20,4 +21,5 @@ module com.chatproject {
 
 
 	exports DBUtil;
+	exports VideoCall;
 }
