@@ -6,6 +6,7 @@ import Util.Network.Auth.LoginRequest;
 import Util.Network.Auth.RegisterRequest;
 import Util.Network.Messages.FileMessage;
 import Util.Network.Messages.Message;
+import Util.Network.Messages.TextMessage;
 import Util.Network.Notifications.LeaveNotification;
 import Util.Network.Packet;
 import Util.Network.SocketProxy;
@@ -17,6 +18,10 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
+import User.Repository.ChatHistoryService;
+import User.Model.ChatMessage;
+import User.Model.MessageType;
+
 
 /// Verteilt Pakete an alle angemeldeten Clients.
 public class PacketBroker implements Runnable {
@@ -27,6 +32,7 @@ public class PacketBroker implements Runnable {
 	private final ExecutorService threadExecutor;
 	private final AuthHandler authHandler;
 
+	private final ChatHistoryService chatHistoryService = new ChatHistoryService();
 	/// Queue für Pakete, die an alle verbundenen Clients gesendet werden sollen.
 	private final BlockingQueue<IncomingPacket> broadcastPacketQueue;
 	/// Liste aller aktuell verbundenen Clients.
@@ -53,10 +59,36 @@ public class PacketBroker implements Runnable {
 				switch (packet) {
 					case LoginRequest req -> authHandler.handleLogin(req, sender);
 					case RegisterRequest req -> authHandler.handleRegister(req, sender);
+					case TextMessage txt -> {
+						if (sender != null && sender.getUser() != null) {
+							// Nachricht speichern
+							ChatMessage chatMsg = new ChatMessage(
+								sender.getUser().getUsername(),  // sender
+								null,  // receiver (null für Broadcast)
+								"broadcast",  // chatRoomId
+								txt.getContent(),  // content
+								MessageType.TEXT,  // messageType
+								null  // filePath
+							);
+							chatHistoryService.saveMessage(chatMsg);
+							broadcastToAll(packet);
+						}
+					}
 					case FileMessage file -> {
 						if (sender != null && sender.getUser() != null) {
+							// Datei speichern (wie bisher)
 							try {
-								FileUtil.saveFile(file.getContent(), file.getFileExtension());
+								String filePath = FileUtil.saveFile(file.getContent(), file.getFileExtension()).toString();
+								// Nachricht speichern
+								ChatMessage chatMsg = new ChatMessage(
+									sender.getUser().getUsername(),  // sender
+									null,  // receiver
+									"broadcast",  // chatRoomId
+									file.getFileExtension(),  // content (Dateiname oder Extension)
+									MessageType.FILE,  // messageType
+									filePath  // filePath
+								);
+								chatHistoryService.saveMessage(chatMsg);
 								broadcastToAll(packet);
 							} catch (IOException e) {
 								System.err.println("Fehler beim Speichern einer Datei: " + e);
