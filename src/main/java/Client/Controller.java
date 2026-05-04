@@ -36,6 +36,7 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.function.Consumer;
@@ -370,7 +371,8 @@ public class Controller {
 
 			if (isOwn) {
 				Label readStatus = new Label(getReadCheckmarks(message));
-				readStatus.setStyle("-fx-font-size: 10; -fx-text-fill: #6c7086;");
+				String color = message.getReadByUsernames().isEmpty() ? "#6c7086" : "#89b4fa";
+				readStatus.setStyle("-fx-font-size: 10; -fx-text-fill: " + color + ";");
 				messageBox.getChildren().add(readStatus);
 			}
 
@@ -389,10 +391,12 @@ public class Controller {
 		}
 
 		private String getReadCheckmarks(Message message) {
-			if (message.isRead()) {
-				return "✓✓";
+			Set<String> readBy = message.getReadByUsernames();
+			if (readBy.isEmpty()) {
+				return "✓"; // Grau - nur gesendet
+			} else {
+				return "✓✓"; // Blau - mindestens ein Empfänger hat gelesen
 			}
-			return "✓";
 		}
 
 		private Node createFileNode(FileMessage fileMessage) {
