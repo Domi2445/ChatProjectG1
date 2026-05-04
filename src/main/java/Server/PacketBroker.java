@@ -4,13 +4,11 @@ import User.Model.User;
 import Util.FileUtil;
 import Util.Network.Auth.LoginRequest;
 import Util.Network.Auth.RegisterRequest;
-import Util.Network.DeleteMessage;
-import Util.Network.EditMessage;
 import Util.Network.Messages.FileMessage;
 import Util.Network.Messages.Message;
+import Util.Network.Messages.TextMessage;
 import Util.Network.Notifications.LeaveNotification;
 import Util.Network.Packet;
-import Util.Network.ReadReceipt;
 import Util.Network.SocketProxy;
 
 import java.io.IOException;
@@ -20,6 +18,10 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
+import User.Repository.ChatHistoryService;
+import User.Model.ChatMessage;
+import User.Model.MessageType;
+
 
 /// Verteilt Pakete an alle angemeldeten Clients.
 public class PacketBroker implements Runnable {
@@ -28,8 +30,9 @@ public class PacketBroker implements Runnable {
 	public static final int MAX_CLIENTS = 16;
 
 	private final ExecutorService threadExecutor;
-	private AuthHandler authHandler;
+	private final AuthHandler authHandler;
 
+	private final ChatHistoryService chatHistoryService = new ChatHistoryService();
 	/// Queue für Pakete, die an alle verbundenen Clients gesendet werden sollen.
 	private final BlockingQueue<IncomingPacket> broadcastPacketQueue;
 	/// Liste aller aktuell verbundenen Clients.
@@ -53,29 +56,52 @@ public class PacketBroker implements Runnable {
 				Packet packet = incoming.packet();
 				ClientProxy sender = incoming.sender();
 
-			switch (packet) {
-				case LoginRequest req -> authHandler.handleLogin(req, sender);
-				case RegisterRequest req -> authHandler.handleRegister(req, sender);
-				case FileMessage file -> {
-					if (sender != null && sender.getUser() != null) {
-						try {
-							FileUtil.saveFile(file.getContent(), file.getFileExtension());
+				switch (packet) {
+					case LoginRequest req -> authHandler.handleLogin(req, sender);
+					case RegisterRequest req -> authHandler.handleRegister(req, sender);
+					case TextMessage txt -> {
+						if (sender != null && sender.getUser() != null) {
+							// Nachricht speichern
+							ChatMessage chatMsg = new ChatMessage(
+								sender.getUser().getUsername(),  // sender
+								null,  // receiver (null für Broadcast)
+								"broadcast",  // chatRoomId
+								txt.getContent(),  // content
+								MessageType.TEXT,  // messageType
+								null  // filePath
+							);
+							chatHistoryService.saveMessage(chatMsg);
 							broadcastToAll(packet);
-						} catch (IOException e) {
-							System.err.println("Fehler beim Speichern einer Datei: " + e);
 						}
 					}
-				}
-				case Message msg -> {
-					if (sender != null && sender.getUser() != null) {
-						broadcastToAll(packet);
+					case FileMessage file -> {
+						if (sender != null && sender.getUser() != null) {
+							// Datei speichern (wie bisher)
+							try {
+								String filePath = FileUtil.saveFile(file.getContent(), file.getFileExtension()).toString();
+								// Nachricht speichern
+								ChatMessage chatMsg = new ChatMessage(
+									sender.getUser().getUsername(),  // sender
+									null,  // receiver
+									"broadcast",  // chatRoomId
+									file.getFileExtension(),  // content (Dateiname oder Extension)
+									MessageType.FILE,  // messageType
+									filePath  // filePath
+								);
+								chatHistoryService.saveMessage(chatMsg);
+								broadcastToAll(packet);
+							} catch (IOException e) {
+								System.err.println("Fehler beim Speichern einer Datei: " + e);
+							}
+						}
 					}
+					case Message msg -> {
+						if (sender != null && sender.getUser() != null) {
+							broadcastToAll(packet);
+						}
+					}
+					default -> broadcastToAll(packet);
 				}
-				case ReadReceipt receipt -> broadcastToAll(packet);
-				case EditMessage edit -> broadcastToAll(packet);
-				case DeleteMessage delete -> broadcastToAll(packet);
-				default -> broadcastToAll(packet);
-			}
 
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
@@ -109,15 +135,18 @@ public class PacketBroker implements Runnable {
 		for (var client : clientsToUnregister) {
 			User user = client.getUser();
 			// todo: Benutzernamen des Clients übergeben oder keine Benachrichtigung senden wenn nicht eingeloggt
-			if (user != null) {
-				try {
-					if (!broadcast(new LeaveNotification(user))) {
-						System.err.println("broadcastPacketQueue ist voll, Paket wurde verworfen");
-					}
-				} catch (InterruptedException e) {
-					Thread.currentThread().interrupt();
-					return;
+			if (user == null) {
+				user = new User();
+				user.setUsername("Platzhalter");
+			}
+
+			try {
+				if (!broadcast(new LeaveNotification(user))) {
+					System.err.println("broadcastPacketQueue ist voll, Paket wurde verworfen");
 				}
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+				return;
 			}
 		}
 	}
@@ -192,10 +221,6 @@ public class PacketBroker implements Runnable {
 
 	public void shutdown() {
 		stopFlag.set(true);
-	}
-
-	public void setAuthHandler(AuthHandler authHandler) {
-		this.authHandler = authHandler;
 	}
 
 	/// Sammelt alle Clients, die unregistriert werden müssen, in der übergebenen Liste.

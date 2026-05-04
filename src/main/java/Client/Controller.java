@@ -2,13 +2,14 @@ package Client;
 
 import User.Login.Status;
 import User.Model.User;
+import User.Repository.ChatHistoryService;
+import User.Model.ChatMessage;
+import User.Model.MessageType;
 import Util.FileUtil;
 import Util.Network.Auth.LoginRequest;
 import Util.Network.Auth.LoginResponse;
 import Util.Network.Auth.RegisterRequest;
 import Util.Network.Auth.RegisterResponse;
-import Util.Network.DeleteMessage;
-import Util.Network.EditMessage;
 import Util.Network.Messages.FileMessage;
 import Util.Network.Messages.Message;
 import Util.Network.Messages.TextMessage;
@@ -16,10 +17,8 @@ import Util.Network.Notifications.JoinNotification;
 import Util.Network.Notifications.LeaveNotification;
 import Util.Network.Notifications.Notification;
 import Util.Network.Packet;
-import Util.Network.ReadReceipt;
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
-import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
 import javafx.geometry.Insets;
@@ -37,15 +36,13 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.util.Set;
+import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.function.Consumer;
 
 public class Controller {
 	public static final int MAX_FILE_SIZE = 1_000_000;
-
-	private static final ObservableList<Packet> messages = FXCollections.observableArrayList();
 
 	private final BlockingQueue<Packet> outPacketQueue;
 	private final BlockingQueue<Packet> inPacketQueue;
@@ -57,6 +54,7 @@ public class Controller {
 	private User localUser;
 	private Stage stage;
 	private TextMessage isEditingMessage;
+	private ChatHistoryService chatHistoryService = new ChatHistoryService();
 
 	@FXML
 	private ListView<Packet> messageListView;
@@ -87,8 +85,7 @@ public class Controller {
 	@FXML
 	private void initialize() {
 		messageListView.setCellFactory(lv -> new MessageCell());
-		messageListView.setItems(messages);
-
+		
 		sendButton.setOnAction(e -> sendMessage());
 		messageTextField.setOnAction(e -> sendMessage());
 		uploadButton.setOnAction(e -> sendFile());
@@ -112,54 +109,15 @@ public class Controller {
 						Packet packet = inPacketQueue.take();
 						switch (packet) {
 							case Message message -> Platform.runLater(() -> {
-								messages.add(message);
-								if (!message.getSender().equals(localUser)) {
-									try {
-										ReadReceipt receipt = new ReadReceipt(message.getMessageId(), localUser.getUsername());
-										outPacketQueue.put(receipt);
-									} catch (InterruptedException e) {
-										throw new RuntimeException(e);
-									}
-								}
-								messageListView.scrollTo(messages.size() - 1);
-							});
-							case ReadReceipt receipt -> Platform.runLater(() -> {
-								for (Packet p : messages) {
-									if (p instanceof Message msg && msg.getMessageId() == receipt.getMessageId()) {
-										msg.markAsReadBy(receipt.getUsername());
-										messageListView.refresh();
-										break;
-									}
-								}
-							});
-							case EditMessage edit -> Platform.runLater(() -> {
-								for (int i = 0; i < messages.size(); i++) {
-									Packet p = messages.get(i);
-									if (p instanceof TextMessage msg && msg.getMessageId() == edit.getMessageId()) {
-										msg.setEditedContent(edit.getNewContent());
-										messages.set(i, msg);
-										messageListView.refresh();
-										break;
-									}
-								}
-							});
-							case DeleteMessage delete -> Platform.runLater(() -> {
-								for (int i = 0; i < messages.size(); i++) {
-									Packet p = messages.get(i);
-									if (p instanceof TextMessage msg && msg.getMessageId() == delete.getMessageId()) {
-										msg.setDeleted();
-										messages.set(i, msg);
-										messageListView.refresh();
-										break;
-									}
-								}
+								getMessages().add(message);
+								messageListView.scrollTo(getMessages().size() - 1);
 							});
 							case Notification notification -> Platform.runLater(() -> {
-								messages.add(notification);
-								messageListView.scrollTo(messages.size() - 1);
+								getMessages().add(notification);
+								messageListView.scrollTo(getMessages().size() - 1);
 								handleNotification(notification);
 							});
-							case LoginResponse loginResp -> Platform.runLater(() -> {
+							case LoginResponse loginResp -> Platform.runLater(() -> { //FÜR UI CALLBACK
 								handleLoginResponse(loginResp);
 							});
 							case RegisterResponse registerResp -> Platform.runLater(() -> {
@@ -187,15 +145,19 @@ public class Controller {
 		}
 	}
 
+	private ObservableList<Packet> getMessages() {
+		return messageListView.getItems();
+	}
+
 	private void sendMessage() {
 		String text = messageTextField.getText().trim();
 		if (!text.isEmpty()) {
 			if (isEditingMessage != null) {
-				try {
-					EditMessage editMsg = new EditMessage(isEditingMessage.getMessageId(), text);
-					outPacketQueue.put(editMsg);
-				} catch (InterruptedException ex) {
-					throw new RuntimeException(ex);
+				isEditingMessage.setEditedContent(text);
+				int index = getMessages().indexOf(isEditingMessage);
+				if (index >= 0) {
+					messageListView.getItems().set(index, isEditingMessage);
+					messageListView.refresh();
 				}
 				isEditingMessage = null;
 				resetSendButton();
@@ -208,7 +170,7 @@ public class Controller {
 				}
 			}
 
-			messageListView.scrollTo(messages.size() - 1);
+			messageListView.scrollTo(getMessages().size() - 1);
 			messageTextField.clear();
 		}
 	}
@@ -256,7 +218,7 @@ public class Controller {
 			throw new RuntimeException(e);
 		}
 
-		messageListView.scrollTo(messages.size() - 1);
+		messageListView.scrollTo(getMessages().size() - 1);
 		messageTextField.clear();
 	}
 
@@ -296,6 +258,7 @@ public class Controller {
 	private void handleLoginResponse(LoginResponse response) {
 		if (response.getStatus() == Status.SUCCESS) {
 			this.localUser = response.getUser();
+			loadChatHistory(); // Verlauf laden nach erfolgreichem Login
 		}
 		if (onLoginResult != null) {
 			onLoginResult.accept(response);
@@ -310,6 +273,22 @@ public class Controller {
 		if (onRegisterResult != null) {
 			onRegisterResult.accept(response);
 		}
+	}
+
+	private void loadChatHistory() {
+		List<ChatMessage> history = chatHistoryService.getHistory(null, null, "broadcast"); // Für Broadcast
+		for (ChatMessage msg : history) {
+			// Erstelle eine entsprechende Message aus ChatMessage
+			Message message;
+			if (msg.getMessageType() == MessageType.TEXT) {
+				message = new TextMessage(new User(msg.getSender()), msg.getContent());
+			} else {
+				// Für Dateien: Hier musst du die Datei laden, aber für Einfachheit zeige nur den Pfad
+				message = new TextMessage(new User(msg.getSender()), "[Datei: " + msg.getFilePath() + "]");
+			}
+			getMessages().add(message);
+		}
+		messageListView.scrollTo(getMessages().size() - 1);
 	}
 
 	private class MessageCell extends ListCell<Packet> {
@@ -361,23 +340,12 @@ public class Controller {
 			node.setStyle(getBubbleStyle(isOwn));
 
 			VBox messageBox = new VBox(2);
-			// Sender name
-			Label senderLabel = new Label(message.getSender().getDisplayName());
-			senderLabel.setStyle("-fx-font-size: 10; -fx-text-fill: #6c7086;");
-			messageBox.getChildren().add(senderLabel);
 			messageBox.getChildren().add(node);
 
 			if (message instanceof TextMessage textMessage && textMessage.isEdited() && !textMessage.isDeleted()) {
 				Label editedLabel = new Label("bearbeitet");
 				editedLabel.setStyle("-fx-font-size: 10; -fx-text-fill: #6c7086; -fx-font-style: italic;");
 				messageBox.getChildren().add(editedLabel);
-			}
-
-			if (isOwn) {
-				Label readStatus = new Label(getReadCheckmarks(message));
-				String color = message.getReadByUsernames().isEmpty() ? "#6c7086" : "#89b4fa";
-				readStatus.setStyle("-fx-font-size: 10; -fx-text-fill: " + color + ";");
-				messageBox.getChildren().add(readStatus);
 			}
 
 			HBox container = new HBox(messageBox);
@@ -392,15 +360,6 @@ public class Controller {
 			}
 
 			return container;
-		}
-
-		private String getReadCheckmarks(Message message) {
-			Set<String> readBy = message.getReadByUsernames();
-			if (readBy.isEmpty()) {
-				return "✓"; // Grau - nur gesendet
-			} else {
-				return "✓✓"; // Blau - mindestens ein Empfänger hat gelesen
-			}
 		}
 
 		private Node createFileNode(FileMessage fileMessage) {
@@ -476,11 +435,10 @@ public class Controller {
 	}
 
 	private void deleteMessage(TextMessage message) {
-		try {
-			DeleteMessage deleteMsg = new DeleteMessage(message.getMessageId());
-			outPacketQueue.put(deleteMsg);
-		} catch (InterruptedException e) {
-			throw new RuntimeException(e);
+		message.setDeleted();
+		int index = getMessages().indexOf(message);
+		if (index >= 0) {
+			messageListView.getItems().set(index, message);
 		}
 	}
 }

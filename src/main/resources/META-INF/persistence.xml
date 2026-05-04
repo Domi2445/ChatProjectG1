@@ -9,6 +9,8 @@
 
         <class>User.Model.User</class>
         <class>User.Model.ContactData</class>
+		<class>User.Model.ChatMessage</class>
+
 
         <properties>
             <property name="hibernate.hbm2ddl.auto" value="update"/>
