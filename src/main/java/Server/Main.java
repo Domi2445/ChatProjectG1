@@ -10,7 +10,7 @@ public class Main {
 
 		try {
 			server = new Server(PORT);
-		} catch (IOException e) {
+		} catch (Exception e) {
 			System.err.println("Fehler beim Starten des Servers: " + e);
 			return;
 		}
