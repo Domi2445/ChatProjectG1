@@ -3,7 +3,7 @@ package Server;
 import java.io.IOException;
 
 public class Main {
-	private static final int PORT = 433;
+	private static final int PORT = 443;
 
 	public static void main(String[] args) {
 		Server server;
