@@ -27,7 +27,7 @@ public class ChatMessagesController implements Initializable {
     @FXML private TableColumn<ChatMessage, String> messageTypeColumn;
     @FXML private TableColumn<ChatMessage, String> timestampColumn;
 
-    private ChatMessageRepository repository = new ChatMessageRepository();
+    private final ChatMessageRepository repository = new ChatMessageRepository();
 
     @Override
     public void initialize(URL location, ResourceBundle resources) {
@@ -36,17 +36,20 @@ public class ChatMessagesController implements Initializable {
         chatRoomIdColumn.setCellValueFactory(new PropertyValueFactory<>("chatRoomId"));
         contentColumn.setCellValueFactory(new PropertyValueFactory<>("content"));
         messageTypeColumn.setCellValueFactory(cellData ->
-            new javafx.beans.property.SimpleStringProperty(cellData.getValue().getMessageType().toString()));
+            new javafx.beans.property.SimpleStringProperty(
+                cellData.getValue().getMessageType() != null ? cellData.getValue().getMessageType().toString() : ""));
         timestampColumn.setCellValueFactory(cellData ->
             new javafx.beans.property.SimpleStringProperty(
-                cellData.getValue().getTimestamp().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))));
+                cellData.getValue().getTimestamp() != null
+                    ? cellData.getValue().getTimestamp().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+                    : ""));
 
         loadMessages();
     }
 
     private void loadMessages() {
         try {
-            List<ChatMessage> messages = repository.getHistoryForChat(null, null, null); // Alle Nachrichten laden
+            List<ChatMessage> messages = repository.getAllMessages();
             ObservableList<ChatMessage> messageList = FXCollections.observableArrayList(messages);
             messagesTable.setItems(messageList);
         } catch (RepositoryException e) {
