@@ -7,6 +7,8 @@ import Util.Network.Auth.LoginRequest;
 import Util.Network.Auth.LoginResponse;
 import Util.Network.Auth.RegisterRequest;
 import Util.Network.Auth.RegisterResponse;
+import Util.Network.DeleteMessage;
+import Util.Network.EditMessage;
 import Util.Network.Messages.FileMessage;
 import Util.Network.Messages.Message;
 import Util.Network.Messages.TextMessage;
@@ -14,6 +16,7 @@ import Util.Network.Notifications.JoinNotification;
 import Util.Network.Notifications.LeaveNotification;
 import Util.Network.Notifications.Notification;
 import Util.Network.Packet;
+import Util.Network.ReadReceipt;
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
 import javafx.collections.ObservableList;
@@ -105,14 +108,53 @@ public class Controller {
 						switch (packet) {
 							case Message message -> Platform.runLater(() -> {
 								getMessages().add(message);
+								if (!message.getSender().equals(localUser)) {
+									try {
+										ReadReceipt receipt = new ReadReceipt(message.getMessageId(), localUser.getUsername());
+										outPacketQueue.put(receipt);
+									} catch (InterruptedException e) {
+										throw new RuntimeException(e);
+									}
+								}
 								messageListView.scrollTo(getMessages().size() - 1);
+							});
+							case ReadReceipt receipt -> Platform.runLater(() -> {
+								for (Packet p : getMessages()) {
+									if (p instanceof Message msg && msg.getMessageId() == receipt.getMessageId()) {
+										msg.markAsReadBy(receipt.getUsername());
+										messageListView.refresh();
+										break;
+									}
+								}
+							});
+							case EditMessage edit -> Platform.runLater(() -> {
+								for (int i = 0; i < getMessages().size(); i++) {
+									Packet p = getMessages().get(i);
+									if (p instanceof TextMessage msg && msg.getMessageId() == edit.getMessageId()) {
+										msg.setEditedContent(edit.getNewContent());
+										messageListView.getItems().set(i, msg);
+										messageListView.refresh();
+										break;
+									}
+								}
+							});
+							case DeleteMessage delete -> Platform.runLater(() -> {
+								for (int i = 0; i < getMessages().size(); i++) {
+									Packet p = getMessages().get(i);
+									if (p instanceof TextMessage msg && msg.getMessageId() == delete.getMessageId()) {
+										msg.setDeleted();
+										messageListView.getItems().set(i, msg);
+										messageListView.refresh();
+										break;
+									}
+								}
 							});
 							case Notification notification -> Platform.runLater(() -> {
 								getMessages().add(notification);
 								messageListView.scrollTo(getMessages().size() - 1);
 								handleNotification(notification);
 							});
-							case LoginResponse loginResp -> Platform.runLater(() -> { //FÜR UI CALLBACK
+							case LoginResponse loginResp -> Platform.runLater(() -> {
 								handleLoginResponse(loginResp);
 							});
 							case RegisterResponse registerResp -> Platform.runLater(() -> {
@@ -148,11 +190,11 @@ public class Controller {
 		String text = messageTextField.getText().trim();
 		if (!text.isEmpty()) {
 			if (isEditingMessage != null) {
-				isEditingMessage.setEditedContent(text);
-				int index = getMessages().indexOf(isEditingMessage);
-				if (index >= 0) {
-					messageListView.getItems().set(index, isEditingMessage);
-					messageListView.refresh();
+				try {
+					EditMessage editMsg = new EditMessage(isEditingMessage.getMessageId(), text);
+					outPacketQueue.put(editMsg);
+				} catch (InterruptedException ex) {
+					throw new RuntimeException(ex);
 				}
 				isEditingMessage = null;
 				resetSendButton();
@@ -326,6 +368,12 @@ public class Controller {
 				messageBox.getChildren().add(editedLabel);
 			}
 
+			if (isOwn) {
+				Label readStatus = new Label(getReadCheckmarks(message));
+				readStatus.setStyle("-fx-font-size: 10; -fx-text-fill: #6c7086;");
+				messageBox.getChildren().add(readStatus);
+			}
+
 			HBox container = new HBox(messageBox);
 			container.setAlignment(isOwn ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT);
 			container.setPadding(new Insets(2, 10, 2, 10));
@@ -338,6 +386,13 @@ public class Controller {
 			}
 
 			return container;
+		}
+
+		private String getReadCheckmarks(Message message) {
+			if (message.isRead()) {
+				return "✓✓";
+			}
+			return "✓";
 		}
 
 		private Node createFileNode(FileMessage fileMessage) {
@@ -413,10 +468,11 @@ public class Controller {
 	}
 
 	private void deleteMessage(TextMessage message) {
-		message.setDeleted();
-		int index = getMessages().indexOf(message);
-		if (index >= 0) {
-			messageListView.getItems().set(index, message);
+		try {
+			DeleteMessage deleteMsg = new DeleteMessage(message.getMessageId());
+			outPacketQueue.put(deleteMsg);
+		} catch (InterruptedException e) {
+			throw new RuntimeException(e);
 		}
 	}
 }

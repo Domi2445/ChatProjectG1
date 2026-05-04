@@ -3,13 +3,44 @@ package Util.Network.Messages;
 import Util.Network.Packet;
 import User.Model.User;
 
-/// Oberklasse für alle Benutzernachrichten
+import java.io.Serial;
+import java.io.Serializable;
+import java.util.HashSet;
+import java.util.Set;
+
 public abstract class Message extends Packet {
+    @Serial
+    private static final long serialVersionUID = 1L;
+
     private final User sender;
+    private final Set<String> readByUsernames;
+    private long messageId;
 
     public Message(User sender) {
         this.sender = sender;
+        this.readByUsernames = new HashSet<>();
+        this.messageId = System.nanoTime();
     }
 
     public User getSender() { return sender; }
+
+    public void markAsReadBy(String username) {
+        readByUsernames.add(username);
+    }
+
+    public Set<String> getReadByUsernames() {
+        return new HashSet<>(readByUsernames);
+    }
+
+    public boolean isReadBy(String username) {
+        return readByUsernames.contains(username);
+    }
+
+    public boolean isRead() {
+        return !readByUsernames.isEmpty();
+    }
+
+    public long getMessageId() {
+        return messageId;
+    }
 }
