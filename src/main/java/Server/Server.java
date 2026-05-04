@@ -43,7 +43,8 @@ public class Server implements Runnable {
 		UserRepository userRepository = new JPAUserRepository();
 		AuthHandler authHandler = new AuthHandler(userRepository);
 
-		packetBroker = new PacketBroker(threadExecutor, authHandler);
+		GeminiHandler geminiHandler = new GeminiHandler();
+		packetBroker = new PacketBroker(threadExecutor, authHandler, geminiHandler);
 		packetBrokerFuture = threadExecutor.submit(packetBroker);
 	}
 
