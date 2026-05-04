@@ -7,8 +7,7 @@ public class Main {
 
 	public static void main(String[] args) {
 
-		//UDP relay starten
-		new Thread(new AudioRelayServer(8000),"AudioRelayServer").start();
+
 
 
 		Server server;

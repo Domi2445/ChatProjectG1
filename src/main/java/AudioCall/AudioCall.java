@@ -1,76 +1,69 @@
 package AudioCall;
 
 import javax.sound.sampled.*;
+import java.net.*;
 
 public class AudioCall {
-    private volatile boolean running = false;
+	private volatile boolean running = false;
 
-    // relayIp   = Server IP (e.g., 127.0.0.1)
-    // relayPort = 9000
-    // myPort    = Our local port for receiving data (e.g., 7000)
-	public int start(String relayIp, int relayPort, String roomId) throws Exception {
+	public void start(String relayIp, int relayPort, String roomId) throws Exception {
 		running = true;
 
-		UDPSender sender = new UDPSender(relayIp, relayPort);
-		UDPReciever receiver = new UDPReciever(0); // OS wählt freien Port
-		int myPort = receiver.getPort();
+		// Einen Socket für Senden und Empfangen
+		DatagramSocket socket = new DatagramSocket();
+		InetAddress relayAddress = InetAddress.getByName(relayIp);
 
-		// Room registry
-		sender.sendString("JOIN:" + roomId);
+		// Raum beim Relay registrieren
+		byte[] joinMsg = ("JOIN:" + roomId).getBytes();
+		socket.send(new DatagramPacket(joinMsg, joinMsg.length, relayAddress, relayPort));
 
-
+		// Thread 1: Mikrofon → Relay
 		new Thread(() -> {
-			TargetDataLine microphone = null;
+			TargetDataLine mic = null;
 			try {
 				AudioFormat format = new AudioFormat(16000, 16, 1, true, false);
-				microphone = (TargetDataLine) AudioSystem.getLine(
-					new DataLine.Info(TargetDataLine.class, format));
-				microphone.open(format);
-				microphone.start();
+				mic = (TargetDataLine) AudioSystem.getLine(new DataLine.Info(TargetDataLine.class, format));
+				mic.open(format);
+				mic.start();
 
 				byte[] buffer = new byte[1024];
 				while (running) {
-					int bytesRead = microphone.read(buffer, 0, buffer.length);
-					byte[] data = new byte[bytesRead];
-					System.arraycopy(buffer, 0, data, 0, bytesRead);
-					sender.send(data);
+					int bytesRead = mic.read(buffer, 0, buffer.length);
+					if (bytesRead > 0)
+						socket.send(new DatagramPacket(buffer, bytesRead, relayAddress, relayPort));
 				}
 			} catch (Exception e) {
 				e.printStackTrace();
-				running = false; // stop receiver too if mic fails
 			} finally {
-				if (microphone != null) { microphone.stop(); microphone.close(); }
-				sender.close();
-				receiver.close(); // close receiver when sender fails
+				if (mic != null) { mic.stop(); mic.close(); }
 			}
 		}).start();
 
-        // Thread 2: Relay → Speakers
+		// Thread 2: Relay → Lautsprecher
 		new Thread(() -> {
 			SourceDataLine speakers = null;
 			try {
 				AudioFormat format = new AudioFormat(16000, 16, 1, true, false);
-				speakers = (SourceDataLine) AudioSystem.getLine(
-					new DataLine.Info(SourceDataLine.class, format));
+				speakers = (SourceDataLine) AudioSystem.getLine(new DataLine.Info(SourceDataLine.class, format));
 				speakers.open(format);
 				speakers.start();
 
+				byte[] buffer = new byte[2048];
 				while (running) {
-					byte[] data = receiver.receiver();
-					speakers.write(data, 0, data.length);
+					DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+					socket.receive(packet);
+					speakers.write(packet.getData(), 0, packet.getLength());
 				}
 			} catch (Exception e) {
 				if (running) e.printStackTrace();
 			} finally {
 				if (speakers != null) { speakers.stop(); speakers.close(); }
-				receiver.close();
+				socket.close();
 			}
 		}).start();
-
-		return myPort;
 	}
 
-    public void stop() {
-        running = false;
-    }
+	public void stop() {
+		running = false;
+	}
 }

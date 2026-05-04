@@ -59,7 +59,7 @@ public class Controller {
 	private TextMessage isEditingMessage;
 
 	// Audio Call
-	private static final String RELAY_IP = "127.0.0.1";
+	private static final String RELAY_IP = "172.19.1.10";
 	private static final int RELAY_PORT = 8000;
 	private final AudioCall audioCall = new AudioCall();
 	private boolean inCall = false;
