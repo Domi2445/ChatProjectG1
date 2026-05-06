@@ -166,6 +166,17 @@ public final class Connection {
 	private static Map<String, Object> buildPersistenceOverrides() {
 		Map<String, Object> overrides = new HashMap<>();
 
+		// Prefer explicit provider blocks: Oracle first, then PostgreSQL.
+		Map<String, Object> oracleOverrides = buildOracleOverridesIfConfigured();
+		if (oracleOverrides != null) {
+			return oracleOverrides;
+		}
+
+		Map<String, Object> postgresOverrides = buildPostgresOverridesIfConfigured();
+		if (postgresOverrides != null) {
+			return postgresOverrides;
+		}
+
 		String dbUrl = normalize(firstNonBlank(System.getProperty("db.url"), System.getenv("DB_URL"), readEnvFileValue("DB_URL")));
 		String dbUser = normalize(firstNonBlank(System.getProperty("db.user"), System.getenv("DB_USER"), readEnvFileValue("DB_USER")));
 		String dbPassword = normalize(firstNonBlank(System.getProperty("db.password"), System.getenv("DB_PASSWORD"), readEnvFileValue("DB_PASSWORD")));
@@ -268,11 +279,6 @@ public final class Connection {
 		}
 	}
 
-	private static boolean shouldRetryWithH2(Map<String, Object> overrides) {
-		Object url = overrides.get("jakarta.persistence.jdbc.url");
-		return url instanceof String urlString && isOracleUrl(urlString);
-	}
-
 	private static String readEnvFileValue(String key) {
 		for (Path candidate : candidateEnvFiles()) {
 			if (!Files.isRegularFile(candidate)) {
@@ -340,14 +346,14 @@ public final class Connection {
 	 * @return Map mit Oracle-Properties oder {@code null}, wenn keine Oracle-Konfiguration vorhanden/gültig ist
 	 */
 	private static Map<String, Object> buildOracleOverridesIfConfigured() {
-		String url = normalize(firstNonBlank(System.getProperty("db.oracle.url"), System.getenv("DB_ORACLE_URL"), System.getProperty("db.url"), System.getenv("DB_URL"), readEnvFileValue("DB_ORACLE_URL"), readEnvFileValue("DB_URL")));
+		String url = normalize(firstNonBlank(System.getProperty("db.oracle.url"), System.getenv("DB_ORACLE_URL"), readEnvFileValue("DB_ORACLE_URL")));
 		if (isBlank(url) || !isOracleUrl(url)) {
 			return null;
 		}
-		String user = normalize(firstNonBlank(System.getProperty("db.oracle.user"), System.getenv("DB_ORACLE_USER"), System.getProperty("db.user"), System.getenv("DB_USER"), readEnvFileValue("DB_ORACLE_USER"), readEnvFileValue("DB_USER")));
-		String pass = normalize(firstNonBlank(System.getProperty("db.oracle.password"), System.getenv("DB_ORACLE_PASSWORD"), System.getProperty("db.password"), System.getenv("DB_PASSWORD"), readEnvFileValue("DB_ORACLE_PASSWORD"), readEnvFileValue("DB_PASSWORD")));
+		String user = normalize(firstNonBlank(System.getProperty("db.oracle.user"), System.getenv("DB_ORACLE_USER"), readEnvFileValue("DB_ORACLE_USER")));
+		String pass = normalize(firstNonBlank(System.getProperty("db.oracle.password"), System.getenv("DB_ORACLE_PASSWORD"), readEnvFileValue("DB_ORACLE_PASSWORD")));
 		if (isBlank(user) || isBlank(pass)) {
-			// Oracle benötigt üblicherweise Credentials; wenn diese nicht gesetzt sind, skip
+			// Oracle credentials missing -> skip explicit Oracle block.
 			return null;
 		}
 		Map<String, Object> overrides = new HashMap<>();
@@ -366,14 +372,14 @@ public final class Connection {
 	 * @return Map mit Postgres-Properties oder {@code null}, wenn keine Postgres-Konfiguration vorhanden/gültig ist
 	 */
 	private static Map<String, Object> buildPostgresOverridesIfConfigured() {
-		String url = normalize(firstNonBlank(System.getProperty("db.postgres.url"), System.getenv("DB_POSTGRES_URL"), System.getProperty("db.url"), System.getenv("DB_URL"), readEnvFileValue("DB_POSTGRES_URL"), readEnvFileValue("DB_URL")));
+		String url = normalize(firstNonBlank(System.getProperty("db.postgres.url"), System.getenv("DB_POSTGRES_URL"), readEnvFileValue("DB_POSTGRES_URL")));
 		if (isBlank(url) || !isPostgresUrl(url)) {
 			return null;
 		}
-		String user = normalize(firstNonBlank(System.getProperty("db.postgres.user"), System.getenv("DB_POSTGRES_USER"), System.getProperty("db.user"), System.getenv("DB_USER"), readEnvFileValue("DB_POSTGRES_USER"), readEnvFileValue("DB_USER")));
-		String pass = normalize(firstNonBlank(System.getProperty("db.postgres.password"), System.getenv("DB_POSTGRES_PASSWORD"), System.getProperty("db.password"), System.getenv("DB_PASSWORD"), readEnvFileValue("DB_POSTGRES_PASSWORD"), readEnvFileValue("DB_PASSWORD")));
+		String user = normalize(firstNonBlank(System.getProperty("db.postgres.user"), System.getenv("DB_POSTGRES_USER"), readEnvFileValue("DB_POSTGRES_USER")));
+		String pass = normalize(firstNonBlank(System.getProperty("db.postgres.password"), System.getenv("DB_POSTGRES_PASSWORD"), readEnvFileValue("DB_POSTGRES_PASSWORD")));
 		if (isBlank(user) || isBlank(pass)) {
-			// Postgres benötigt Credentials; wenn diese nicht gesetzt sind, skip
+			// Postgres credentials missing -> skip explicit PostgreSQL block.
 			return null;
 		}
 		Map<String, Object> overrides = new HashMap<>();
