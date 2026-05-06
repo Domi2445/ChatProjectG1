@@ -187,7 +187,7 @@ public final class Connection {
 			overrides.put("jakarta.persistence.jdbc.driver", "org.postgresql.Driver");
 			overrides.put("hibernate.dialect", "org.hibernate.dialect.PostgreSQLDialect");
 		} else {
-			// Nicht-Oracle-URL: auf H2 verhalten (inkl. Standard-Credentials).
+			// Nicht-Oracle/PG-URL: auf H2 verhalten (inkl. Standard-Credentials).
 			overrides.put("jakarta.persistence.jdbc.driver", "org.h2.Driver");
 			overrides.put("hibernate.dialect", "org.hibernate.dialect.H2Dialect");
 			if (isBlank(dbUser)) {
