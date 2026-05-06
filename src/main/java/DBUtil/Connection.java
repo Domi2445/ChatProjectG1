@@ -26,9 +26,9 @@ import java.util.Map;
  *
  * <p>Unterstuetzte Parameter:
  * <ul>
- *   <li>{@code db.url} / {@code DB_URL}</li>
- *   <li>{@code db.user} / {@code DB_USER}</li>
- *   <li>{@code db.password} / {@code DB_PASSWORD}</li>
+ *   <li>{@code db.url} / {@code DB_URL} / {@code DB_POSTGRES_URL} / {@code DB_ORACLE_URL}</li>
+ *   <li>{@code db.user} / {@code DB_USER} / {@code DB_POSTGRES_USER} / {@code DB_ORACLE_USER}</li>
+ *   <li>{@code db.password} / {@code DB_PASSWORD} / {@code DB_POSTGRES_PASSWORD} / {@code DB_ORACLE_PASSWORD}</li>
  *   <li>{@code db.ddl} / {@code DB_DDL} (z. B. update, validate)</li>
  *   <li>{@code db.showSql} / {@code DB_SHOW_SQL}</li>
  *   <li>{@code db.formatSql} / {@code DB_FORMAT_SQL}</li>
@@ -125,6 +125,7 @@ public final class Connection {
 	 * <ul>
 	 *   <li>Kein gueltiger {@code db.url} gesetzt -> H2-Defaults</li>
 	 *   <li>Oracle-URL erkannt -> Oracle-Treiber + Dialekt, Credentials erforderlich</li>
+	 *   <li>PostgreSQL-URL erkannt -> PostgreSQL-Treiber + Dialekt</li>
 	 *   <li>Sonst -> H2-Treiber + H2-Dialekt mit ggf. Standard-Credentials</li>
 	 * </ul>
 	 *
@@ -134,9 +135,33 @@ public final class Connection {
 	private static Map<String, Object> buildPersistenceOverrides() {
 		Map<String, Object> overrides = new HashMap<>();
 
-		String dbUrl = normalize(firstNonBlank(System.getProperty("db.url"), System.getenv("DB_URL"), readEnvFileValue("DB_URL")));
-		String dbUser = normalize(firstNonBlank(System.getProperty("db.user"), System.getenv("DB_USER"), readEnvFileValue("DB_USER")));
-		String dbPassword = normalize(firstNonBlank(System.getProperty("db.password"), System.getenv("DB_PASSWORD"), readEnvFileValue("DB_PASSWORD")));
+		String dbUrl = normalize(firstNonBlank(
+			System.getProperty("db.url"),
+			System.getenv("DB_URL"),
+			System.getenv("DB_POSTGRES_URL"),
+			System.getenv("DB_ORACLE_URL"),
+			readEnvFileValue("DB_URL"),
+			readEnvFileValue("DB_POSTGRES_URL"),
+			readEnvFileValue("DB_ORACLE_URL")
+		));
+		String dbUser = normalize(firstNonBlank(
+			System.getProperty("db.user"),
+			System.getenv("DB_USER"),
+			System.getenv("DB_POSTGRES_USER"),
+			System.getenv("DB_ORACLE_USER"),
+			readEnvFileValue("DB_USER"),
+			readEnvFileValue("DB_POSTGRES_USER"),
+			readEnvFileValue("DB_ORACLE_USER")
+		));
+		String dbPassword = normalize(firstNonBlank(
+			System.getProperty("db.password"),
+			System.getenv("DB_PASSWORD"),
+			System.getenv("DB_POSTGRES_PASSWORD"),
+			System.getenv("DB_ORACLE_PASSWORD"),
+			readEnvFileValue("DB_PASSWORD"),
+			readEnvFileValue("DB_POSTGRES_PASSWORD"),
+			readEnvFileValue("DB_ORACLE_PASSWORD")
+		));
 
 		if (isBlank(dbUrl) || dbUrl.contains("${")) {
 			return buildH2Overrides();
@@ -152,6 +177,15 @@ public final class Connection {
 			}
 			overrides.put("jakarta.persistence.jdbc.driver", "oracle.jdbc.OracleDriver");
 			overrides.put("hibernate.dialect", "org.hibernate.dialect.OracleDialect");
+		} else if (isPostgresUrl(dbUrl)) {
+			if (isBlank(dbUser)) {
+				dbUser = "postgres";
+			}
+			if (isBlank(dbPassword)) {
+				dbPassword = "";
+			}
+			overrides.put("jakarta.persistence.jdbc.driver", "org.postgresql.Driver");
+			overrides.put("hibernate.dialect", "org.hibernate.dialect.PostgreSQLDialect");
 		} else {
 			// Nicht-Oracle-URL: auf H2 verhalten (inkl. Standard-Credentials).
 			overrides.put("jakarta.persistence.jdbc.driver", "org.h2.Driver");
@@ -215,6 +249,8 @@ public final class Connection {
 		Object url = overrides.get("jakarta.persistence.jdbc.url");
 		if (url instanceof String urlString && isOracleUrl(urlString)) {
 			activeDatabaseLabel = "Oracle";
+		} else if (url instanceof String urlString && isPostgresUrl(urlString)) {
+			activeDatabaseLabel = "PostgreSQL";
 		} else {
 			activeDatabaseLabel = "H2";
 		}
@@ -277,6 +313,10 @@ public final class Connection {
 	 */
 	private static boolean isOracleUrl(String dbUrl) {
 		return dbUrl.toLowerCase().startsWith("jdbc:oracle:");
+	}
+
+	private static boolean isPostgresUrl(String dbUrl) {
+		return dbUrl.toLowerCase().startsWith("jdbc:postgresql:");
 	}
 
 	/**

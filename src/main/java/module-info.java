@@ -6,6 +6,7 @@ module com.chatproject {
 	requires org.hibernate.orm.core;
 	requires jakarta.transaction;
 	requires java.sql;
+	uses java.sql.Driver;
 
 
 	requires jbcrypt;
