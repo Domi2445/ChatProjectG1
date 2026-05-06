@@ -75,16 +75,48 @@ public final class Connection {
 						entityManagerFactory = local = Persistence.createEntityManagerFactory(PERSISTENCE_UNIT, overrides);
 						System.out.println("Datenbank verbunden: " + activeDatabaseLabel);
 					} catch (RuntimeException firstFailure) {
-						if (!shouldRetryWithH2(overrides) || triedOracleFallback) {
-							throw firstFailure;
-						}
+												// Fallback-Reihenfolge bei Verbindungsfehlern:
+												// 1) Oracle (sofern konfiguriert)
+												// 2) PostgreSQL (sofern konfiguriert)
+												// 3) H2 (immer als letzte Option)
 
-						triedOracleFallback = true;
-						System.err.println("Oracle-Verbindung fehlgeschlagen, wechsle auf H2: " + firstFailure.getMessage());
-						Map<String, Object> h2Overrides = buildH2Overrides();
-						setActiveDatabaseLabel(h2Overrides);
-						entityManagerFactory = local = Persistence.createEntityManagerFactory(PERSISTENCE_UNIT, h2Overrides);
-						System.out.println("Datenbank verbunden: " + activeDatabaseLabel);
+												// Versuche Oracle-Fallback, falls noch nicht versucht
+												if (!triedOracleFallback) {
+													Map<String, Object> oracleOverrides = buildOracleOverridesIfConfigured();
+													if (oracleOverrides != null) {
+														triedOracleFallback = true;
+														try {
+															setActiveDatabaseLabel(oracleOverrides);
+															entityManagerFactory = local = Persistence.createEntityManagerFactory(PERSISTENCE_UNIT, oracleOverrides);
+															System.out.println("Datenbank verbunden (Oracle-Fallback): " + activeDatabaseLabel);
+															return local;
+														} catch (RuntimeException oracleFailure) {
+															System.err.println("Oracle-Fallback fehlgeschlagen: " + oracleFailure.getMessage());
+															// weiter zu Postgres/H2
+														}
+													}
+												}
+
+												// Versuche PostgreSQL-Fallback
+												Map<String, Object> pgOverrides = buildPostgresOverridesIfConfigured();
+												if (pgOverrides != null) {
+													try {
+														setActiveDatabaseLabel(pgOverrides);
+														entityManagerFactory = local = Persistence.createEntityManagerFactory(PERSISTENCE_UNIT, pgOverrides);
+														System.out.println("Datenbank verbunden (Postgres-Fallback): " + activeDatabaseLabel);
+														return local;
+													} catch (RuntimeException pgFailure) {
+														System.err.println("Postgres-Fallback fehlgeschlagen: " + pgFailure.getMessage());
+														// weiter zu H2
+													}
+												}
+
+												// Letzte Option: H2
+												System.err.println("Primäre DB-Verbindung fehlgeschlagen, wechsle auf H2: " + firstFailure.getMessage());
+												Map<String, Object> h2Overrides = buildH2Overrides();
+												setActiveDatabaseLabel(h2Overrides);
+												entityManagerFactory = local = Persistence.createEntityManagerFactory(PERSISTENCE_UNIT, h2Overrides);
+												System.out.println("Datenbank verbunden: " + activeDatabaseLabel);
 					}
 				}
 			}
@@ -152,8 +184,18 @@ public final class Connection {
 			}
 			overrides.put("jakarta.persistence.jdbc.driver", "oracle.jdbc.OracleDriver");
 			overrides.put("hibernate.dialect", "org.hibernate.dialect.OracleDialect");
+		} else if (isPostgresUrl(dbUrl)) {
+			// PostgreSQL: Username/Passwort sind in der Regel erforderlich.
+			if (isBlank(dbUser) || isBlank(dbPassword)) {
+				throw new IllegalStateException(
+					"PostgreSQL-Zugangsdaten fehlen. Setze DB_URL, DB_USER und DB_PASSWORD " +
+						"(oder -Ddb.url/-Ddb.user/-Ddb.password)."
+				);
+			}
+			overrides.put("jakarta.persistence.jdbc.driver", "org.postgresql.Driver");
+			overrides.put("hibernate.dialect", "org.hibernate.dialect.PostgreSQLDialect");
 		} else {
-			// Nicht-Oracle-URL: auf H2 verhalten (inkl. Standard-Credentials).
+			// Nicht-Oracle/PG-URL: auf H2 verhalten (inkl. Standard-Credentials).
 			overrides.put("jakarta.persistence.jdbc.driver", "org.h2.Driver");
 			overrides.put("hibernate.dialect", "org.hibernate.dialect.H2Dialect");
 			if (isBlank(dbUser)) {
@@ -213,10 +255,16 @@ public final class Connection {
 
 	private static void setActiveDatabaseLabel(Map<String, Object> overrides) {
 		Object url = overrides.get("jakarta.persistence.jdbc.url");
-		if (url instanceof String urlString && isOracleUrl(urlString)) {
-			activeDatabaseLabel = "Oracle";
+		if (url instanceof String urlString) {
+			if (isOracleUrl(urlString)) {
+				activeDatabaseLabel = "Oracle";
+			} else if (isPostgresUrl(urlString)) {
+				activeDatabaseLabel = "Postgres";
+			} else {
+				activeDatabaseLabel = "H2";
+			}
 		} else {
-			activeDatabaseLabel = "H2";
+			activeDatabaseLabel = "unbekannt";
 		}
 	}
 
@@ -277,6 +325,65 @@ public final class Connection {
 	 */
 	private static boolean isOracleUrl(String dbUrl) {
 		return dbUrl.toLowerCase().startsWith("jdbc:oracle:");
+	}
+
+	/**
+	 * Erkennt PostgreSQL-JDBC-URLs.
+	 */
+	private static boolean isPostgresUrl(String dbUrl) {
+		return dbUrl.toLowerCase().startsWith("jdbc:postgresql:");
+	}
+
+	/**
+	 * Baut Oracle-Overrides falls Oracle-spezifische Konfiguration gefunden wurde.
+	 *
+	 * @return Map mit Oracle-Properties oder {@code null}, wenn keine Oracle-Konfiguration vorhanden/gültig ist
+	 */
+	private static Map<String, Object> buildOracleOverridesIfConfigured() {
+		String url = normalize(firstNonBlank(System.getProperty("db.oracle.url"), System.getenv("DB_ORACLE_URL"), System.getProperty("db.url"), System.getenv("DB_URL"), readEnvFileValue("DB_ORACLE_URL"), readEnvFileValue("DB_URL")));
+		if (isBlank(url) || !isOracleUrl(url)) {
+			return null;
+		}
+		String user = normalize(firstNonBlank(System.getProperty("db.oracle.user"), System.getenv("DB_ORACLE_USER"), System.getProperty("db.user"), System.getenv("DB_USER"), readEnvFileValue("DB_ORACLE_USER"), readEnvFileValue("DB_USER")));
+		String pass = normalize(firstNonBlank(System.getProperty("db.oracle.password"), System.getenv("DB_ORACLE_PASSWORD"), System.getProperty("db.password"), System.getenv("DB_PASSWORD"), readEnvFileValue("DB_ORACLE_PASSWORD"), readEnvFileValue("DB_PASSWORD")));
+		if (isBlank(user) || isBlank(pass)) {
+			// Oracle benötigt üblicherweise Credentials; wenn diese nicht gesetzt sind, skip
+			return null;
+		}
+		Map<String, Object> overrides = new HashMap<>();
+		overrides.put("jakarta.persistence.jdbc.driver", "oracle.jdbc.OracleDriver");
+		overrides.put("hibernate.dialect", "org.hibernate.dialect.OracleDialect");
+		overrides.put("jakarta.persistence.jdbc.url", url);
+		overrides.put("jakarta.persistence.jdbc.user", user);
+		overrides.put("jakarta.persistence.jdbc.password", pass);
+		overrides.put("hibernate.hbm2ddl.auto", firstNonBlank(System.getProperty("db.ddl"), System.getenv("DB_DDL"), "update"));
+		return overrides;
+	}
+
+	/**
+	 * Baut Postgres-Overrides falls Postgres-spezifische Konfiguration gefunden wurde.
+	 *
+	 * @return Map mit Postgres-Properties oder {@code null}, wenn keine Postgres-Konfiguration vorhanden/gültig ist
+	 */
+	private static Map<String, Object> buildPostgresOverridesIfConfigured() {
+		String url = normalize(firstNonBlank(System.getProperty("db.postgres.url"), System.getenv("DB_POSTGRES_URL"), System.getProperty("db.url"), System.getenv("DB_URL"), readEnvFileValue("DB_POSTGRES_URL"), readEnvFileValue("DB_URL")));
+		if (isBlank(url) || !isPostgresUrl(url)) {
+			return null;
+		}
+		String user = normalize(firstNonBlank(System.getProperty("db.postgres.user"), System.getenv("DB_POSTGRES_USER"), System.getProperty("db.user"), System.getenv("DB_USER"), readEnvFileValue("DB_POSTGRES_USER"), readEnvFileValue("DB_USER")));
+		String pass = normalize(firstNonBlank(System.getProperty("db.postgres.password"), System.getenv("DB_POSTGRES_PASSWORD"), System.getProperty("db.password"), System.getenv("DB_PASSWORD"), readEnvFileValue("DB_POSTGRES_PASSWORD"), readEnvFileValue("DB_PASSWORD")));
+		if (isBlank(user) || isBlank(pass)) {
+			// Postgres benötigt Credentials; wenn diese nicht gesetzt sind, skip
+			return null;
+		}
+		Map<String, Object> overrides = new HashMap<>();
+		overrides.put("jakarta.persistence.jdbc.driver", "org.postgresql.Driver");
+		overrides.put("hibernate.dialect", "org.hibernate.dialect.PostgreSQLDialect");
+		overrides.put("jakarta.persistence.jdbc.url", url);
+		overrides.put("jakarta.persistence.jdbc.user", user);
+		overrides.put("jakarta.persistence.jdbc.password", pass);
+		overrides.put("hibernate.hbm2ddl.auto", firstNonBlank(System.getProperty("db.ddl"), System.getenv("DB_DDL"), "update"));
+		return overrides;
 	}
 
 	/**
