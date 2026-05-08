@@ -10,6 +10,7 @@ import Util.Network.Auth.LoginRequest;
 import Util.Network.Auth.LoginResponse;
 import Util.Network.Auth.RegisterRequest;
 import Util.Network.Auth.RegisterResponse;
+import Util.Network.DeleteMessage;
 import Util.Network.Messages.FileMessage;
 import Util.Network.Messages.Message;
 import Util.Network.Messages.TextMessage;
@@ -110,12 +111,52 @@ public class Controller {
 						switch (packet) {
 							case Message message -> Platform.runLater(() -> {
 								getMessages().add(message);
+								// Sende ReadReceipt, wenn die Nachricht nicht von uns selbst stammt
+								if (localUser != null && message.getSender() != null && !message.getSender().equals(localUser)) {
+									try {
+										Util.Network.ReadReceipt receipt = new Util.Network.ReadReceipt(message.getMessageId(), localUser.getUsername());
+										outPacketQueue.put(receipt);
+									} catch (InterruptedException e) {
+										throw new RuntimeException(e);
+									}
+								}
 								messageListView.scrollTo(getMessages().size() - 1);
 							});
 							case Notification notification -> Platform.runLater(() -> {
 								getMessages().add(notification);
 								messageListView.scrollTo(getMessages().size() - 1);
 								handleNotification(notification);
+							});
+							case Util.Network.ReadReceipt receipt -> Platform.runLater(() -> {
+								for (Packet p : getMessages()) {
+									if (p instanceof Message msg && msg.getMessageId() == receipt.getMessageId()) {
+										msg.markAsReadBy(receipt.getUsername());
+										messageListView.refresh();
+										break;
+									}
+								}
+							});
+							case Util.Network.EditMessage edit -> Platform.runLater(() -> {
+								for (int i = 0; i < getMessages().size(); i++) {
+									Packet p = getMessages().get(i);
+									if (p instanceof TextMessage msg && msg.getMessageId() == edit.getMessageId()) {
+										msg.setEditedContent(edit.getNewContent());
+										messageListView.getItems().set(i, msg);
+										messageListView.refresh();
+										break;
+									}
+								}
+							});
+							case Util.Network.DeleteMessage delete -> Platform.runLater(() -> {
+								for (int i = 0; i < getMessages().size(); i++) {
+									Packet p = getMessages().get(i);
+									if (p instanceof TextMessage msg && msg.getMessageId() == delete.getMessageId()) {
+										msg.setDeleted();
+										messageListView.getItems().set(i, msg);
+										messageListView.refresh();
+										break;
+									}
+								}
 							});
 							case LoginResponse loginResp -> Platform.runLater(() -> { //FÜR UI CALLBACK
 								handleLoginResponse(loginResp);
