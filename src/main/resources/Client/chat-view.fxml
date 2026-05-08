@@ -12,11 +12,8 @@
 			<padding>
 				<Insets top="10" right="14" bottom="10" left="14"/>
 			</padding>
-			<Label style="-fx-text-fill: #cdd6f4; -fx-font-size: 18;" text="Socket Chat"/>
+			<Label style="-fx-text-fill: #cdd6f4; -fx-font-size: 18; -fx-font-weight: bold;" text="FIA11 Chat"/>
 			<Region HBox.hgrow="ALWAYS"/>
-			<Button fx:id="videoCallButton" mnemonicParsing="false"
-			        style="-fx-background-color: #45475a; -fx-text-fill: #cdd6f4; -fx-font-size: 14; -fx-background-radius: 20; -fx-min-width: 70; -fx-min-height: 40;"
-			        text="Call"/>
 		</HBox>
 	</top>
 
@@ -44,4 +41,3 @@
 		</HBox>
 	</bottom>
 </BorderPane>
-
