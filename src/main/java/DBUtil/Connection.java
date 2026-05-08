@@ -74,10 +74,11 @@ public final class Connection {
 						setActiveDatabaseLabel(overrides);
 						entityManagerFactory = local = Persistence.createEntityManagerFactory(PERSISTENCE_UNIT, overrides);
 						System.out.println("Datenbank verbunden: " + activeDatabaseLabel);
-				} catch (RuntimeException firstFailure) {
-					// Falls bereits H2-Fallback versucht wurde, keine weiteren Retries
-					if (triedH2Fallback) {
-						throw firstFailure;
+					} catch (RuntimeException firstFailure) {
+						// Falls bereits H2-Fallback versucht wurde, keine weiteren Retries
+						if (triedH2Fallback) {
+							throw firstFailure;
+						}
 					}
 
 					// Fallback auf H2 bei JEDER Datenbankverbindung fehlgeschlagen (außer H2 selbst)
@@ -176,7 +177,6 @@ public final class Connection {
 		}
 
 		if (isOracleUrl(dbUrl)) {
-			// Oracle explizit: Zugangsdaten sind Pflicht.
 			if (isBlank(dbUser) || isBlank(dbPassword)) {
 				throw new IllegalStateException(
 					"Oracle-Zugangsdaten fehlen oder sind Platzhalter. Setze DB_URL, DB_USER und DB_PASSWORD " +
@@ -195,7 +195,6 @@ public final class Connection {
 			overrides.put("jakarta.persistence.jdbc.driver", "org.postgresql.Driver");
 			overrides.put("hibernate.dialect", "org.hibernate.dialect.PostgreSQLDialect");
 		} else {
-			// Nicht-Oracle/PG-URL: auf H2 verhalten (inkl. Standard-Credentials).
 			overrides.put("jakarta.persistence.jdbc.driver", "org.h2.Driver");
 			overrides.put("hibernate.dialect", "org.hibernate.dialect.H2Dialect");
 			if (isBlank(dbUser)) {
@@ -269,7 +268,6 @@ public final class Connection {
 			activeDatabaseLabel = "H2";
 		}
 	}
-
 
 	private static String readEnvFileValue(String key) {
 		for (Path candidate : candidateEnvFiles()) {
