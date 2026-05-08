@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+
 /**
  * Zentrale Fabrik/Verwaltung für JPA-Zugriffe.
  *
@@ -79,22 +80,21 @@ public final class Connection {
 						if (triedH2Fallback) {
 							throw firstFailure;
 						}
-					}
 
-					// Fallback auf H2 bei JEDER Datenbankverbindung fehlgeschlagen (außer H2 selbst)
-					Object url = overrides.get("jakarta.persistence.jdbc.url");
-					if (url instanceof String urlString && !urlString.toLowerCase().startsWith("jdbc:h2:")) {
-						triedH2Fallback = true;
-						String dbType = isOracleUrl(urlString) ? "Oracle" : isPostgresUrl(urlString) ? "PostgreSQL" : "Datenbank";
-						System.err.println(dbType + "-Verbindung fehlgeschlagen, wechsle auf H2: " + firstFailure.getMessage());
-						Map<String, Object> h2Overrides = buildH2Overrides();
-						setActiveDatabaseLabel(h2Overrides);
-						entityManagerFactory = local = Persistence.createEntityManagerFactory(PERSISTENCE_UNIT, h2Overrides);
-						System.out.println("Datenbank verbunden: " + activeDatabaseLabel);
-					} else {
-						throw firstFailure;
+						// Fallback auf H2 bei jeder fehlgeschlagenen Remote-Verbindung (außer H2 selbst)
+						Object url = overrides.get("jakarta.persistence.jdbc.url");
+						if (url instanceof String urlString && !urlString.toLowerCase().startsWith("jdbc:h2:")) {
+							triedH2Fallback = true;
+							String dbType = isOracleUrl(urlString) ? "Oracle" : isPostgresUrl(urlString) ? "PostgreSQL" : "Datenbank";
+							System.err.println(dbType + "-Verbindung fehlgeschlagen, wechsle auf H2: " + firstFailure.getMessage());
+							Map<String, Object> h2Overrides = buildH2Overrides();
+							setActiveDatabaseLabel(h2Overrides);
+							entityManagerFactory = local = Persistence.createEntityManagerFactory(PERSISTENCE_UNIT, h2Overrides);
+							System.out.println("Datenbank verbunden: " + activeDatabaseLabel);
+						} else {
+							throw firstFailure;
+						}
 					}
-				}
 				}
 			}
 		}
