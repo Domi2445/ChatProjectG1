@@ -4971,7 +4971,7 @@ Text {
 }
 
 .login-image-bg {
-    -fx-background-image: url("/Client/assets/registerImage2.jpg");
+    -fx-background-image: url("assets/registerImage2.jpg");
     -fx-background-size: cover;
     -fx-background-position: center;
 }
