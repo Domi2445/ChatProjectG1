@@ -128,6 +128,6 @@ public class User implements Serializable {
 
     public String getDisplayName()
 	{
-		return username;
+		return displayname;
     }
 }

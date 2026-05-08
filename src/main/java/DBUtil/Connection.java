@@ -44,7 +44,7 @@ public final class Connection {
 	 * {@code volatile} ist fuer korrektes Double-Checked-Locking notwendig.
 	 */
 	private static volatile EntityManagerFactory entityManagerFactory;
-	private static volatile boolean triedOracleFallback;
+	private static volatile boolean triedH2Fallback;
 	private static volatile String activeDatabaseLabel = "uninitialisiert";
 
 	static {
@@ -74,18 +74,26 @@ public final class Connection {
 						setActiveDatabaseLabel(overrides);
 						entityManagerFactory = local = Persistence.createEntityManagerFactory(PERSISTENCE_UNIT, overrides);
 						System.out.println("Datenbank verbunden: " + activeDatabaseLabel);
-					} catch (RuntimeException firstFailure) {
-						if (!shouldRetryWithH2(overrides) || triedOracleFallback) {
-							throw firstFailure;
-						}
+				} catch (RuntimeException firstFailure) {
+					// Falls bereits H2-Fallback versucht wurde, keine weiteren Retries
+					if (triedH2Fallback) {
+						throw firstFailure;
+					}
 
-						triedOracleFallback = true;
-						System.err.println("Oracle-Verbindung fehlgeschlagen, wechsle auf H2: " + firstFailure.getMessage());
+					// Fallback auf H2 bei JEDER Datenbankverbindung fehlgeschlagen (außer H2 selbst)
+					Object url = overrides.get("jakarta.persistence.jdbc.url");
+					if (url instanceof String urlString && !urlString.toLowerCase().startsWith("jdbc:h2:")) {
+						triedH2Fallback = true;
+						String dbType = isOracleUrl(urlString) ? "Oracle" : isPostgresUrl(urlString) ? "PostgreSQL" : "Datenbank";
+						System.err.println(dbType + "-Verbindung fehlgeschlagen, wechsle auf H2: " + firstFailure.getMessage());
 						Map<String, Object> h2Overrides = buildH2Overrides();
 						setActiveDatabaseLabel(h2Overrides);
 						entityManagerFactory = local = Persistence.createEntityManagerFactory(PERSISTENCE_UNIT, h2Overrides);
 						System.out.println("Datenbank verbunden: " + activeDatabaseLabel);
+					} else {
+						throw firstFailure;
 					}
+				}
 				}
 			}
 		}
@@ -115,7 +123,7 @@ public final class Connection {
 		if (entityManagerFactory != null && entityManagerFactory.isOpen()) {
 			entityManagerFactory.close();
 		}
-		triedOracleFallback = false;
+		triedH2Fallback = false;
 	}
 
 	/**
@@ -221,7 +229,13 @@ public final class Connection {
 	private static Map<String, Object> buildH2Overrides() {
 		Map<String, Object> overrides = new HashMap<>();
 		overrides.put("jakarta.persistence.jdbc.driver", "org.h2.Driver");
-		overrides.put("jakarta.persistence.jdbc.url", "jdbc:h2:./data/chatdb;MODE=Oracle;AUTO_SERVER=TRUE");
+
+		// Absoluter Pfad zur Datenbank zur Vermeidung von Pfadproblemen
+		Path dbPath = Path.of("").toAbsolutePath().resolve("data/chatdb");
+		String h2Url = "jdbc:h2:" + dbPath + ";MODE=Oracle;AUTO_SERVER=TRUE";
+		System.out.println("H2-Datenbankpfad: " + h2Url);
+
+		overrides.put("jakarta.persistence.jdbc.url", h2Url);
 		overrides.put("jakarta.persistence.jdbc.user", "sa");
 		overrides.put("jakarta.persistence.jdbc.password", "");
 		overrides.put("hibernate.dialect", "org.hibernate.dialect.H2Dialect");
@@ -256,10 +270,6 @@ public final class Connection {
 		}
 	}
 
-	private static boolean shouldRetryWithH2(Map<String, Object> overrides) {
-		Object url = overrides.get("jakarta.persistence.jdbc.url");
-		return url instanceof String urlString && isOracleUrl(urlString);
-	}
 
 	private static String readEnvFileValue(String key) {
 		for (Path candidate : candidateEnvFiles()) {
