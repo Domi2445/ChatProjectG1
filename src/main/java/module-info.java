@@ -5,9 +5,9 @@ module com.chatproject {
 	requires javafx.base;
 	requires org.hibernate.orm.core;
 	requires jakarta.transaction;
+	requires jakarta.interceptor;
 	requires java.sql;
 	requires webcam.capture;
-
 
 	requires jbcrypt;
 
@@ -19,7 +19,7 @@ module com.chatproject {
 	opens DBUtil to javafx.fxml;
 	opens User.Model to org.hibernate.orm.core, javafx.base, jakarta.persistence;
 
-
 	exports DBUtil;
 	exports VideoCall;
+	exports Server;
 }
