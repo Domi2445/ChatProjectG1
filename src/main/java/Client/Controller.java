@@ -2,13 +2,15 @@ package Client;
 
 import User.Login.Status;
 import User.Model.User;
+import User.Repository.ChatHistoryService;
+import User.Model.ChatMessage;
+import User.Model.MessageType;
 import Util.FileUtil;
 import Util.Network.Auth.LoginRequest;
 import Util.Network.Auth.LoginResponse;
 import Util.Network.Auth.RegisterRequest;
 import Util.Network.Auth.RegisterResponse;
 import Util.Network.DeleteMessage;
-import Util.Network.EditMessage;
 import Util.Network.Messages.FileMessage;
 import Util.Network.Messages.Message;
 import Util.Network.Messages.TextMessage;
@@ -16,7 +18,6 @@ import Util.Network.Notifications.JoinNotification;
 import Util.Network.Notifications.LeaveNotification;
 import Util.Network.Notifications.Notification;
 import Util.Network.Packet;
-import Util.Network.ReadReceipt;
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
 import javafx.collections.ObservableList;
@@ -36,6 +37,7 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -61,6 +63,7 @@ public class Controller {
 	private User localUser;
 	private Stage stage;
 	private TextMessage isEditingMessage;
+	private ChatHistoryService chatHistoryService = new ChatHistoryService();
 
 	//Audio
 	private static final String RELAY_IP = "217.154.156.40";
@@ -80,6 +83,9 @@ public class Controller {
 
 	@FXML
 	private Button uploadButton;
+
+	@FXML
+	private Button videoCallButton;
 
 	public Controller() {
 		this.outPacketQueue = new ArrayBlockingQueue<>(4);
@@ -102,6 +108,7 @@ public class Controller {
 		sendButton.setOnAction(e -> sendMessage());
 		messageTextField.setOnAction(e -> sendMessage());
 		uploadButton.setOnAction(e -> sendFile());
+
 	}
 
 	public void configure(Stage stage, User user) {
@@ -123,9 +130,10 @@ public class Controller {
 						switch (packet) {
 							case Message message -> Platform.runLater(() -> {
 								getMessages().add(message);
-								if (!message.getSender().equals(localUser)) {
+								// Sende ReadReceipt, wenn die Nachricht nicht von uns selbst stammt
+								if (localUser != null && message.getSender() != null && !message.getSender().equals(localUser)) {
 									try {
-										ReadReceipt receipt = new ReadReceipt(message.getMessageId(), localUser.getUsername());
+										Util.Network.ReadReceipt receipt = new Util.Network.ReadReceipt(message.getMessageId(), localUser.getUsername());
 										outPacketQueue.put(receipt);
 									} catch (InterruptedException e) {
 										throw new RuntimeException(e);
@@ -133,7 +141,12 @@ public class Controller {
 								}
 								messageListView.scrollTo(getMessages().size() - 1);
 							});
-							case ReadReceipt receipt -> Platform.runLater(() -> {
+							case Notification notification -> Platform.runLater(() -> {
+								getMessages().add(notification);
+								messageListView.scrollTo(getMessages().size() - 1);
+								handleNotification(notification);
+							});
+							case Util.Network.ReadReceipt receipt -> Platform.runLater(() -> {
 								for (Packet p : getMessages()) {
 									if (p instanceof Message msg && msg.getMessageId() == receipt.getMessageId()) {
 										msg.markAsReadBy(receipt.getUsername());
@@ -142,7 +155,7 @@ public class Controller {
 									}
 								}
 							});
-							case EditMessage edit -> Platform.runLater(() -> {
+							case Util.Network.EditMessage edit -> Platform.runLater(() -> {
 								for (int i = 0; i < getMessages().size(); i++) {
 									Packet p = getMessages().get(i);
 									if (p instanceof TextMessage msg && msg.getMessageId() == edit.getMessageId()) {
@@ -153,7 +166,7 @@ public class Controller {
 									}
 								}
 							});
-							case DeleteMessage delete -> Platform.runLater(() -> {
+							case Util.Network.DeleteMessage delete -> Platform.runLater(() -> {
 								for (int i = 0; i < getMessages().size(); i++) {
 									Packet p = getMessages().get(i);
 									if (p instanceof TextMessage msg && msg.getMessageId() == delete.getMessageId()) {
@@ -166,12 +179,7 @@ public class Controller {
 							});
 							//Audio
 							case CallNotification call -> Platform.runLater(() -> handleCallNotification(call));
-							case Notification notification -> Platform.runLater(() -> {
-								getMessages().add(notification);
-								messageListView.scrollTo(getMessages().size() - 1);
-								handleNotification(notification);
-							});
-							case LoginResponse loginResp -> Platform.runLater(() -> {
+							case LoginResponse loginResp -> Platform.runLater(() -> { //FÜR UI CALLBACK
 								handleLoginResponse(loginResp);
 							});
 							case RegisterResponse registerResp -> Platform.runLater(() -> {
@@ -213,11 +221,11 @@ public class Controller {
 		String text = messageTextField.getText().trim();
 		if (!text.isEmpty()) {
 			if (isEditingMessage != null) {
-				try {
-					EditMessage editMsg = new EditMessage(isEditingMessage.getMessageId(), text);
-					outPacketQueue.put(editMsg);
-				} catch (InterruptedException ex) {
-					throw new RuntimeException(ex);
+				isEditingMessage.setEditedContent(text);
+				int index = getMessages().indexOf(isEditingMessage);
+				if (index >= 0) {
+					messageListView.getItems().set(index, isEditingMessage);
+					messageListView.refresh();
 				}
 				isEditingMessage = null;
 				resetSendButton();
@@ -318,6 +326,7 @@ public class Controller {
 	private void handleLoginResponse(LoginResponse response) {
 		if (response.getStatus() == Status.SUCCESS) {
 			this.localUser = response.getUser();
+			loadChatHistory(); // Verlauf laden nach erfolgreichem Login
 		}
 		if (onLoginResult != null) {
 			onLoginResult.accept(response);
@@ -332,6 +341,22 @@ public class Controller {
 		if (onRegisterResult != null) {
 			onRegisterResult.accept(response);
 		}
+	}
+
+	private void loadChatHistory() {
+		List<ChatMessage> history = chatHistoryService.getHistory(null, null, "broadcast"); // Für Broadcast
+		for (ChatMessage msg : history) {
+			// Erstelle eine entsprechende Message aus ChatMessage
+			Message message;
+			if (msg.getMessageType() == MessageType.TEXT) {
+				message = new TextMessage(new User(msg.getSender()), msg.getContent());
+			} else {
+				// Für Dateien: Hier musst du die Datei laden, aber für Einfachheit zeige nur den Pfad
+				message = new TextMessage(new User(msg.getSender()), "[Datei: " + msg.getFilePath() + "]");
+			}
+			getMessages().add(message);
+		}
+		messageListView.scrollTo(getMessages().size() - 1);
 	}
 
 	private class MessageCell extends ListCell<Packet> {
@@ -458,11 +483,30 @@ public class Controller {
 
 			switch (notification) {
 				case JoinNotification join -> {
-					text = join.getUser().getUsername() + " ist beigetreten";
+					var u = join.getUser();
+					String name = "Unbekannter Nutzer";
+					if (u != null) {
+						// Bevorzuge den Displayname, fallback auf Username
+						if (u.getDisplayname() != null && !u.getDisplayname().isBlank()) {
+							name = u.getDisplayname();
+						} else if (u.getUsername() != null && !u.getUsername().isBlank()) {
+							name = u.getUsername();
+						}
+					}
+					text = name + " ist beigetreten";
 					color = "#89b4fa";
 				}
 				case LeaveNotification leave -> {
-					text = leave.getUser().getUsername() + " hat verlassen";
+					var u = leave.getUser();
+					String name = "Unbekannter Nutzer";
+					if (u != null) {
+						if (u.getDisplayname() != null && !u.getDisplayname().isBlank()) {
+							name = u.getDisplayname();
+						} else if (u.getUsername() != null && !u.getUsername().isBlank()) {
+							name = u.getUsername();
+						}
+					}
+					text = name + " hat verlassen";
 					color = "#f38ba8";
 				}
 				case null, default -> {}
@@ -553,11 +597,12 @@ public class Controller {
 	}
 
 	private void deleteMessage(TextMessage message) {
-		try {
-			DeleteMessage deleteMsg = new DeleteMessage(message.getMessageId());
-			outPacketQueue.put(deleteMsg);
-		} catch (InterruptedException e) {
-			throw new RuntimeException(e);
+		message.setDeleted();
+		int index = getMessages().indexOf(message);
+		if (index >= 0) {
+			messageListView.getItems().set(index, message);
 		}
 	}
+
+
 }

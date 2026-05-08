@@ -16,4 +16,3 @@ public class DeleteMessage extends Packet {
 		return messageId;
 	}
 }
-
