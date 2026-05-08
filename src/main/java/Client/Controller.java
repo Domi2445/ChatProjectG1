@@ -94,10 +94,7 @@ public class Controller {
 		sendButton.setOnAction(e -> sendMessage());
 		messageTextField.setOnAction(e -> sendMessage());
 		uploadButton.setOnAction(e -> sendFile());
-		// videoCallButton wird optional initialisiert, falls in der FXML definiert
-		if (videoCallButton != null) {
-			videoCallButton.setOnAction(e -> initializeVideoCall());
-		}
+
 	}
 
 	public void configure(Stage stage, User user) {
@@ -530,15 +527,5 @@ public class Controller {
 		}
 	}
 
-	private void initializeVideoCall() {
-		// todo(video-call): Implementière Video-Call-Funktionalität
-		// - Sende VideoCallRequest an den Server
-		// - Öffne ein Fenster für den Video-Stream
-		// - Unterstütze Annehmen/Ablehnen von eingehenden Anrufen
-		System.out.println("Video-Call-Anforderung für: " + (localUser != null ? localUser.getUsername() : "Unbekannter Nutzer"));
-		Alert alert = new Alert(Alert.AlertType.INFORMATION);
-		alert.setHeaderText("Video-Call");
-		alert.setContentText("Video-Call-Funktionalität wird gerade noch entwickelt...");
-		alert.show();
-	}
+
 }
