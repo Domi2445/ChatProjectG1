@@ -10,6 +10,7 @@ import Util.Network.Auth.LoginRequest;
 import Util.Network.Auth.LoginResponse;
 import Util.Network.Auth.RegisterRequest;
 import Util.Network.Auth.RegisterResponse;
+import Util.Network.DeleteMessage;
 import Util.Network.Messages.FileMessage;
 import Util.Network.Messages.Message;
 import Util.Network.Messages.TextMessage;
@@ -37,6 +38,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.function.Consumer;
@@ -68,6 +70,9 @@ public class Controller {
 	@FXML
 	private Button uploadButton;
 
+	@FXML
+	private Button videoCallButton;
+
 	public Controller() {
 		this.outPacketQueue = new ArrayBlockingQueue<>(4);
 		this.inPacketQueue = new ArrayBlockingQueue<>(4);
@@ -89,6 +94,7 @@ public class Controller {
 		sendButton.setOnAction(e -> sendMessage());
 		messageTextField.setOnAction(e -> sendMessage());
 		uploadButton.setOnAction(e -> sendFile());
+
 	}
 
 	public void configure(Stage stage, User user) {
@@ -110,12 +116,52 @@ public class Controller {
 						switch (packet) {
 							case Message message -> Platform.runLater(() -> {
 								getMessages().add(message);
+								// Sende ReadReceipt, wenn die Nachricht nicht von uns selbst stammt
+								if (localUser != null && message.getSender() != null && !message.getSender().equals(localUser)) {
+									try {
+										Util.Network.ReadReceipt receipt = new Util.Network.ReadReceipt(message.getMessageId(), localUser.getUsername());
+										outPacketQueue.put(receipt);
+									} catch (InterruptedException e) {
+										throw new RuntimeException(e);
+									}
+								}
 								messageListView.scrollTo(getMessages().size() - 1);
 							});
 							case Notification notification -> Platform.runLater(() -> {
 								getMessages().add(notification);
 								messageListView.scrollTo(getMessages().size() - 1);
 								handleNotification(notification);
+							});
+							case Util.Network.ReadReceipt receipt -> Platform.runLater(() -> {
+								for (Packet p : getMessages()) {
+									if (p instanceof Message msg && msg.getMessageId() == receipt.getMessageId()) {
+										msg.markAsReadBy(receipt.getUsername());
+										messageListView.refresh();
+										break;
+									}
+								}
+							});
+							case Util.Network.EditMessage edit -> Platform.runLater(() -> {
+								for (int i = 0; i < getMessages().size(); i++) {
+									Packet p = getMessages().get(i);
+									if (p instanceof TextMessage msg && msg.getMessageId() == edit.getMessageId()) {
+										msg.setEditedContent(edit.getNewContent());
+										messageListView.getItems().set(i, msg);
+										messageListView.refresh();
+										break;
+									}
+								}
+							});
+							case Util.Network.DeleteMessage delete -> Platform.runLater(() -> {
+								for (int i = 0; i < getMessages().size(); i++) {
+									Packet p = getMessages().get(i);
+									if (p instanceof TextMessage msg && msg.getMessageId() == delete.getMessageId()) {
+										msg.setDeleted();
+										messageListView.getItems().set(i, msg);
+										messageListView.refresh();
+										break;
+									}
+								}
 							});
 							case LoginResponse loginResp -> Platform.runLater(() -> { //FÜR UI CALLBACK
 								handleLoginResponse(loginResp);
@@ -352,6 +398,13 @@ public class Controller {
 				messageBox.getChildren().add(editedLabel);
 			}
 
+			if (isOwn) {
+				Label readStatus = new Label(getReadCheckmarks(message));
+				String color = message.getReadByUsernames().isEmpty() ? "#6c7086" : "#89b4fa";
+				readStatus.setStyle("-fx-font-size: 10; -fx-text-fill: " + color + ";");
+				messageBox.getChildren().add(readStatus);
+			}
+
 			HBox container = new HBox(messageBox);
 			container.setAlignment(isOwn ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT);
 			container.setPadding(new Insets(2, 10, 2, 10));
@@ -364,6 +417,15 @@ public class Controller {
 			}
 
 			return container;
+		}
+
+		private String getReadCheckmarks(Message message) {
+			Set<String> readBy = message.getReadByUsernames();
+			if (readBy.isEmpty()) {
+				return "✓"; // Grau - nur gesendet
+			} else {
+				return "✓✓"; // Blau - mindestens ein Empfänger hat gelesen
+			}
 		}
 
 		private Node createFileNode(FileMessage fileMessage) {
@@ -464,4 +526,6 @@ public class Controller {
 			messageListView.getItems().set(index, message);
 		}
 	}
+
+
 }

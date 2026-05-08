@@ -108,6 +108,7 @@
   -color-chart-7-alpha20: rgba(200, 65, 100, 0.2);
   -color-chart-8-alpha20: rgba(136, 136, 136, 0.2);
   -fx-background-color: -color-bg-default;
+  -fx-background-image: url("assets/loginImage6.jpg");
   -fx-font-size: 14px;
   -fx-background-radius: inherit;
   -fx-background-insets: inherit;
@@ -4971,7 +4972,7 @@ Text {
 }
 
 .login-image-bg {
-    -fx-background-image: url("/Client/assets/loginImage6.jpg");
+    -fx-background-image: url("assets/loginImage6.jpg");
     -fx-background-size: cover;
     -fx-background-position: center;
 }
