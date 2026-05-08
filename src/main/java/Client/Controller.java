@@ -398,11 +398,30 @@ public class Controller {
 
 			switch (notification) {
 				case JoinNotification join -> {
-					text = join.getUser().getUsername() + " ist beigetreten";
+					var u = join.getUser();
+					String name = "Unbekannter Nutzer";
+					if (u != null) {
+						// Bevorzuge den Displayname, fallback auf Username
+						if (u.getDisplayname() != null && !u.getDisplayname().isBlank()) {
+							name = u.getDisplayname();
+						} else if (u.getUsername() != null && !u.getUsername().isBlank()) {
+							name = u.getUsername();
+						}
+					}
+					text = name + " ist beigetreten";
 					color = "#89b4fa";
 				}
 				case LeaveNotification leave -> {
-					text = leave.getUser().getUsername() + " hat verlassen";
+					var u = leave.getUser();
+					String name = "Unbekannter Nutzer";
+					if (u != null) {
+						if (u.getDisplayname() != null && !u.getDisplayname().isBlank()) {
+							name = u.getDisplayname();
+						} else if (u.getUsername() != null && !u.getUsername().isBlank()) {
+							name = u.getUsername();
+						}
+					}
+					text = name + " hat verlassen";
 					color = "#f38ba8";
 				}
 				case null, default -> throw new IllegalStateException("Unerwarteter Wert: " + notification);
