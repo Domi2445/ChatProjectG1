@@ -21,33 +21,35 @@ public class AuthHandler {
 		this.userRepository = userRepository;
 	}
 
-	public void handleLogin(LoginRequest request, ClientProxy sender) {
-		if (sender == null) return;
+	public boolean handleLogin(LoginRequest request, ClientProxy sender) {
+		if (sender == null) return false;
 
 		if (!LoginValidator.validateUsername(request.getUsername())
 			|| !LoginValidator.validatePassword(request.getPassword())) {
 			sender.tryEnqueuePacket(new LoginResponse(Status.INVALID_INPUT, "Ungültige Eingabe", null));
-			return;
+			return false;
 		}
 
 		try {
 			Optional<User> userOpt = userRepository.findByUsername(request.getUsername());
 			if (userOpt.isEmpty()) {
 				sender.tryEnqueuePacket(new LoginResponse(Status.WRONG_CREDENTIALS, "Username oder Passwort falsch", null));
-				return;
+				return false;
 			}
 
 			User user = userOpt.get();
 			if (!BCryptWrapper.validate(request.getPassword(), user.getPasswordHash())) {
 				sender.tryEnqueuePacket(new LoginResponse(Status.WRONG_CREDENTIALS, "Username oder Passwort falsch", null));
-				return;
+				return false;
 			}
 
 			sender.setUser(user);
 			sender.tryEnqueuePacket(new LoginResponse(Status.SUCCESS, "Erfolgreich angemeldet", user));
+			return true;
 		} catch (RepositoryException e) {
 			System.err.println("Login fehlgeschlagen (DB): " + e.getMessage());
 			sender.tryEnqueuePacket(new LoginResponse(Status.DATABASE_ERROR, "Datenbankfehler", null));
+			return false;
 		}
 	}
 

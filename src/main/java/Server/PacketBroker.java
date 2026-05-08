@@ -4,10 +4,14 @@ import User.Model.User;
 import Util.FileUtil;
 import Util.Network.Auth.LoginRequest;
 import Util.Network.Auth.RegisterRequest;
+import Util.Network.DeleteMessage;
+import Util.Network.EditMessage;
 import Util.Network.Messages.FileMessage;
 import Util.Network.Messages.Message;
+import Util.Network.Notifications.JoinNotification;
 import Util.Network.Notifications.LeaveNotification;
 import Util.Network.Packet;
+import Util.Network.ReadReceipt;
 import Util.Network.SocketProxy;
 
 import java.io.IOException;
@@ -51,7 +55,20 @@ public class PacketBroker implements Runnable {
 				ClientProxy sender = incoming.sender();
 
 				switch (packet) {
-					case LoginRequest req -> authHandler.handleLogin(req, sender);
+					case LoginRequest req -> {
+						if (authHandler.handleLogin(req, sender)) {
+							User user = sender.getUser();
+
+							try {
+								if (!broadcast(new JoinNotification(user))) {
+									System.err.println("broadcastPacketQueue ist voll, JoinNotification wurde verworfen");
+								}
+							} catch (InterruptedException e) {
+								Thread.currentThread().interrupt();
+								return;
+							}
+						}
+					}
 					case RegisterRequest req -> authHandler.handleRegister(req, sender);
 					case FileMessage file -> {
 						if (sender != null && sender.getUser() != null) {
@@ -68,17 +85,9 @@ public class PacketBroker implements Runnable {
 							broadcastToAll(packet);
 						}
 					}
-
-
-					//Audio
-					case Util.Network.Notifications.CallNotification call -> {
-						if (sender != null) {
-							call.setSenderIp(sender.getIpAddress());
-						}
-						broadcastToAll(call);
-					}
-
-
+					case ReadReceipt receipt -> broadcastToAll(packet);
+					case EditMessage edit -> broadcastToAll(packet);
+					case DeleteMessage delete -> broadcastToAll(packet);
 					default -> broadcastToAll(packet);
 				}
 
@@ -96,7 +105,9 @@ public class PacketBroker implements Runnable {
 
 		synchronized (clients) {
 			for (var client : clients) {
-				if (client.shouldStop()) {
+				if (client.getUser() == null) {
+					continue;
+				} else if (client.shouldStop()) {
 					clientsToUnregister.add(client);
 				} else if (!client.tryEnqueuePacket(packet)) {
 					System.err.println("Client outPacketQueue ist voll");

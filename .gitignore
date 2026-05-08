@@ -30,8 +30,6 @@ bin/
 
 ### Local environment ###
 .env
-.env
-!.env
 data/*.mv.db  # Ignoriert alle .mv.db-Dateien im data-Ordner
 
 data/chatdb.mv.db
