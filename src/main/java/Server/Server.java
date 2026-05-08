@@ -62,10 +62,10 @@ public class Server implements Runnable {
 				}
 
 			} catch (IOException e) {
-				if (!server.isClosed()) {
-					System.err.println("Fehler beim Akzeptieren eines neuen Clients: " + e);
+				if (server.isClosed()) {
+					break;
 				}
-				break;
+				System.err.println("Fehler beim Akzeptieren eines neuen Clients: " + e);
 			}
 		}
 	}
