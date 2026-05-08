@@ -88,6 +88,14 @@ public class PacketBroker implements Runnable {
 					case ReadReceipt receipt -> broadcastToAll(packet);
 					case EditMessage edit -> broadcastToAll(packet);
 					case DeleteMessage delete -> broadcastToAll(packet);
+					//Audio
+					case Util.Network.Notifications.CallNotification call -> {
+						if (sender != null) {
+							call.setSenderIp(sender.getIpAddress());
+						}
+						broadcastToAll(call);
+					}
+
 					default -> broadcastToAll(packet);
 				}
 
