@@ -50,6 +50,12 @@ public class Server implements Runnable {
 
 	@Override
 	public void run() {
+
+		// Audio
+		new Thread(new AudioRelayServer(3298), "AudioRelayServer").start();
+		// Video
+		new Thread(new VideoRelayServer(9001), "VideoRelayServer").start();
+
 		while (!Thread.currentThread().isInterrupted()) {
 			try {
 				Socket s = server.accept();
