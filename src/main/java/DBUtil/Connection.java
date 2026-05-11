@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+
 /**
  * Zentrale Fabrik/Verwaltung für JPA-Zugriffe.
  *
@@ -26,9 +27,9 @@ import java.util.Map;
  *
  * <p>Unterstuetzte Parameter:
  * <ul>
- *   <li>{@code db.url} / {@code DB_URL}</li>
- *   <li>{@code db.user} / {@code DB_USER}</li>
- *   <li>{@code db.password} / {@code DB_PASSWORD}</li>
+ *   <li>{@code db.url} / {@code DB_URL} / {@code DB_POSTGRES_URL} / {@code DB_ORACLE_URL}</li>
+ *   <li>{@code db.user} / {@code DB_USER} / {@code DB_POSTGRES_USER} / {@code DB_ORACLE_USER}</li>
+ *   <li>{@code db.password} / {@code DB_PASSWORD} / {@code DB_POSTGRES_PASSWORD} / {@code DB_ORACLE_PASSWORD}</li>
  *   <li>{@code db.ddl} / {@code DB_DDL} (z. B. update, validate)</li>
  *   <li>{@code db.showSql} / {@code DB_SHOW_SQL}</li>
  *   <li>{@code db.formatSql} / {@code DB_FORMAT_SQL}</li>
@@ -44,7 +45,7 @@ public final class Connection {
 	 * {@code volatile} ist fuer korrektes Double-Checked-Locking notwendig.
 	 */
 	private static volatile EntityManagerFactory entityManagerFactory;
-	private static volatile boolean triedOracleFallback;
+	private static volatile boolean triedH2Fallback;
 	private static volatile String activeDatabaseLabel = "uninitialisiert";
 
 	static {
@@ -75,16 +76,24 @@ public final class Connection {
 						entityManagerFactory = local = Persistence.createEntityManagerFactory(PERSISTENCE_UNIT, overrides);
 						System.out.println("Datenbank verbunden: " + activeDatabaseLabel);
 					} catch (RuntimeException firstFailure) {
-						if (!shouldRetryWithH2(overrides) || triedOracleFallback) {
+						// Falls bereits H2-Fallback versucht wurde, keine weiteren Retries
+						if (triedH2Fallback) {
 							throw firstFailure;
 						}
 
-						triedOracleFallback = true;
-						System.err.println("Oracle-Verbindung fehlgeschlagen, wechsle auf H2: " + firstFailure.getMessage());
-						Map<String, Object> h2Overrides = buildH2Overrides();
-						setActiveDatabaseLabel(h2Overrides);
-						entityManagerFactory = local = Persistence.createEntityManagerFactory(PERSISTENCE_UNIT, h2Overrides);
-						System.out.println("Datenbank verbunden: " + activeDatabaseLabel);
+						// Fallback auf H2 bei jeder fehlgeschlagenen Remote-Verbindung (außer H2 selbst)
+						Object url = overrides.get("jakarta.persistence.jdbc.url");
+						if (url instanceof String urlString && !urlString.toLowerCase().startsWith("jdbc:h2:")) {
+							triedH2Fallback = true;
+							String dbType = isOracleUrl(urlString) ? "Oracle" : isPostgresUrl(urlString) ? "PostgreSQL" : "Datenbank";
+							System.err.println(dbType + "-Verbindung fehlgeschlagen, wechsle auf H2: " + firstFailure.getMessage());
+							Map<String, Object> h2Overrides = buildH2Overrides();
+							setActiveDatabaseLabel(h2Overrides);
+							entityManagerFactory = local = Persistence.createEntityManagerFactory(PERSISTENCE_UNIT, h2Overrides);
+							System.out.println("Datenbank verbunden: " + activeDatabaseLabel);
+						} else {
+							throw firstFailure;
+						}
 					}
 				}
 			}
@@ -115,7 +124,7 @@ public final class Connection {
 		if (entityManagerFactory != null && entityManagerFactory.isOpen()) {
 			entityManagerFactory.close();
 		}
-		triedOracleFallback = false;
+		triedH2Fallback = false;
 	}
 
 	/**
@@ -125,6 +134,7 @@ public final class Connection {
 	 * <ul>
 	 *   <li>Kein gueltiger {@code db.url} gesetzt -> H2-Defaults</li>
 	 *   <li>Oracle-URL erkannt -> Oracle-Treiber + Dialekt, Credentials erforderlich</li>
+	 *   <li>PostgreSQL-URL erkannt -> PostgreSQL-Treiber + Dialekt</li>
 	 *   <li>Sonst -> H2-Treiber + H2-Dialekt mit ggf. Standard-Credentials</li>
 	 * </ul>
 	 *
@@ -134,16 +144,39 @@ public final class Connection {
 	private static Map<String, Object> buildPersistenceOverrides() {
 		Map<String, Object> overrides = new HashMap<>();
 
-		String dbUrl = normalize(firstNonBlank(System.getProperty("db.url"), System.getenv("DB_URL"), readEnvFileValue("DB_URL")));
-		String dbUser = normalize(firstNonBlank(System.getProperty("db.user"), System.getenv("DB_USER"), readEnvFileValue("DB_USER")));
-		String dbPassword = normalize(firstNonBlank(System.getProperty("db.password"), System.getenv("DB_PASSWORD"), readEnvFileValue("DB_PASSWORD")));
+		String dbUrl = normalize(firstNonBlank(
+			System.getProperty("db.url"),
+			System.getenv("DB_URL"),
+			System.getenv("DB_POSTGRES_URL"),
+			System.getenv("DB_ORACLE_URL"),
+			readEnvFileValue("DB_URL"),
+			readEnvFileValue("DB_POSTGRES_URL"),
+			readEnvFileValue("DB_ORACLE_URL")
+		));
+		String dbUser = normalize(firstNonBlank(
+			System.getProperty("db.user"),
+			System.getenv("DB_USER"),
+			System.getenv("DB_POSTGRES_USER"),
+			System.getenv("DB_ORACLE_USER"),
+			readEnvFileValue("DB_USER"),
+			readEnvFileValue("DB_POSTGRES_USER"),
+			readEnvFileValue("DB_ORACLE_USER")
+		));
+		String dbPassword = normalize(firstNonBlank(
+			System.getProperty("db.password"),
+			System.getenv("DB_PASSWORD"),
+			System.getenv("DB_POSTGRES_PASSWORD"),
+			System.getenv("DB_ORACLE_PASSWORD"),
+			readEnvFileValue("DB_PASSWORD"),
+			readEnvFileValue("DB_POSTGRES_PASSWORD"),
+			readEnvFileValue("DB_ORACLE_PASSWORD")
+		));
 
 		if (isBlank(dbUrl) || dbUrl.contains("${")) {
 			return buildH2Overrides();
 		}
 
 		if (isOracleUrl(dbUrl)) {
-			// Oracle explizit: Zugangsdaten sind Pflicht.
 			if (isBlank(dbUser) || isBlank(dbPassword)) {
 				throw new IllegalStateException(
 					"Oracle-Zugangsdaten fehlen oder sind Platzhalter. Setze DB_URL, DB_USER und DB_PASSWORD " +
@@ -152,8 +185,16 @@ public final class Connection {
 			}
 			overrides.put("jakarta.persistence.jdbc.driver", "oracle.jdbc.OracleDriver");
 			overrides.put("hibernate.dialect", "org.hibernate.dialect.OracleDialect");
+		} else if (isPostgresUrl(dbUrl)) {
+			if (isBlank(dbUser)) {
+				dbUser = "postgres";
+			}
+			if (isBlank(dbPassword)) {
+				dbPassword = "";
+			}
+			overrides.put("jakarta.persistence.jdbc.driver", "org.postgresql.Driver");
+			overrides.put("hibernate.dialect", "org.hibernate.dialect.PostgreSQLDialect");
 		} else {
-			// Nicht-Oracle-URL: auf H2 verhalten (inkl. Standard-Credentials).
 			overrides.put("jakarta.persistence.jdbc.driver", "org.h2.Driver");
 			overrides.put("hibernate.dialect", "org.hibernate.dialect.H2Dialect");
 			if (isBlank(dbUser)) {
@@ -187,7 +228,13 @@ public final class Connection {
 	private static Map<String, Object> buildH2Overrides() {
 		Map<String, Object> overrides = new HashMap<>();
 		overrides.put("jakarta.persistence.jdbc.driver", "org.h2.Driver");
-		overrides.put("jakarta.persistence.jdbc.url", "jdbc:h2:./data/chatdb;MODE=Oracle;AUTO_SERVER=TRUE");
+
+		// Absoluter Pfad zur Datenbank zur Vermeidung von Pfadproblemen
+		Path dbPath = Path.of("").toAbsolutePath().resolve("data/chatdb");
+		String h2Url = "jdbc:h2:" + dbPath + ";MODE=Oracle;AUTO_SERVER=TRUE";
+		System.out.println("H2-Datenbankpfad: " + h2Url);
+
+		overrides.put("jakarta.persistence.jdbc.url", h2Url);
 		overrides.put("jakarta.persistence.jdbc.user", "sa");
 		overrides.put("jakarta.persistence.jdbc.password", "");
 		overrides.put("hibernate.dialect", "org.hibernate.dialect.H2Dialect");
@@ -215,14 +262,11 @@ public final class Connection {
 		Object url = overrides.get("jakarta.persistence.jdbc.url");
 		if (url instanceof String urlString && isOracleUrl(urlString)) {
 			activeDatabaseLabel = "Oracle";
+		} else if (url instanceof String urlString && isPostgresUrl(urlString)) {
+			activeDatabaseLabel = "PostgreSQL";
 		} else {
 			activeDatabaseLabel = "H2";
 		}
-	}
-
-	private static boolean shouldRetryWithH2(Map<String, Object> overrides) {
-		Object url = overrides.get("jakarta.persistence.jdbc.url");
-		return url instanceof String urlString && isOracleUrl(urlString);
 	}
 
 	private static String readEnvFileValue(String key) {
@@ -277,6 +321,10 @@ public final class Connection {
 	 */
 	private static boolean isOracleUrl(String dbUrl) {
 		return dbUrl.toLowerCase().startsWith("jdbc:oracle:");
+	}
+
+	private static boolean isPostgresUrl(String dbUrl) {
+		return dbUrl.toLowerCase().startsWith("jdbc:postgresql:");
 	}
 
 	/**

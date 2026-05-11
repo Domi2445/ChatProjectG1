@@ -20,7 +20,14 @@ public class Main extends Application {
 		Parent chatRoot = chatLoader.load();
 		Controller chatController = chatLoader.getController();
 		chatController.configure(primaryStage, null);
-		chatController.connectAndRun("127.0.0.1", 6969);
+		String host = System.getProperty("server.host",
+			System.getenv().getOrDefault("SERVER_HOST", "217.154.156.40"));
+		int port = Integer.parseInt(System.getProperty("server.port",
+			System.getenv().getOrDefault("SERVER_PORT", "3299")));
+		if (!chatController.connectAndRun(host, port)) {
+			return;
+		}
+
 		Scene chatScene = new Scene(chatRoot, 1280, 720);
 
 		FXMLLoader loginLoader = new FXMLLoader(Main.class.getResource("/Client/loginScreen.fxml"));

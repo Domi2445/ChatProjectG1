@@ -3,20 +3,35 @@ package Util.Network.Messages;
 import Util.Network.Packet;
 import User.Model.User;
 
-import java.util.UUID;
+import java.io.Serial;
+import java.util.HashSet;
+import java.util.Set;
 
-/// Oberklasse für alle Benutzernachrichten
 public abstract class Message extends Packet {
-    private final User sender;
-	private UUID groupId;
+    @Serial
+    private static final long serialVersionUID = 1L;
 
-	public Message(User sender)
-	{
-		this.sender = sender;
-		this.groupId = null;
-	}
+    private final User sender;
+    private final Set<String> readByUsernames;
+    private final long messageId;
+
+    public Message(User sender) {
+        this.sender = sender;
+        this.readByUsernames = new HashSet<>();
+        this.messageId = System.nanoTime();
+    }
 
     public User getSender() { return sender; }
-	public UUID getGroupId() { return groupId; }
-	public void setGroupId(UUID groupId) { this.groupId = groupId; }
+
+    public void markAsReadBy(String username) {
+        readByUsernames.add(username);
+    }
+
+    public Set<String> getReadByUsernames() {
+        return new HashSet<>(readByUsernames);
+    }
+
+	public long getMessageId() {
+        return messageId;
+    }
 }

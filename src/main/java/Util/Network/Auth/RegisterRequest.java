@@ -23,3 +23,4 @@ public class RegisterRequest extends Auth {
 		return password;
 	}
 }
+

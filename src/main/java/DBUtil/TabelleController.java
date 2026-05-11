@@ -119,6 +119,23 @@ public class TabelleController implements Initializable {
 		}
 	}
 
+	@FXML
+	private void showChatMessages() {
+		try {
+			FXMLLoader loader = new FXMLLoader(getClass().getResource("/DBUtil/chat-messages-view.fxml"));
+			Parent root = loader.load();
+
+			Stage stage = new Stage();
+			stage.setTitle("Chat-Nachrichten");
+			stage.setScene(new Scene(root, 800, 600));
+			stage.show();
+		} catch (IOException e) {
+			System.err.println("FXML-Fehler: " + e.getMessage());
+			e.printStackTrace();
+			showError("Chat-Nachrichten-Fenster konnte nicht geöffnet werden: " + e.getMessage());
+		}
+	}
+
 	private void showError(String message) {
 		Alert alert = new Alert(Alert.AlertType.ERROR);
 		alert.setTitle("Fehler");

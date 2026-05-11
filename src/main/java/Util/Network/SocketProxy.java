@@ -18,6 +18,7 @@ public class SocketProxy implements AutoCloseable {
 		this.in = new ObjectInputStream(socket.getInputStream());
 	}
 
+
 	public boolean isClosed() {
 		return socket.isClosed();
 	}
@@ -53,5 +54,12 @@ public class SocketProxy implements AutoCloseable {
 		}
 
 		if (exception != null) throw exception;
+	}
+
+
+	//Audio (fur ip)
+	public Socket getSocket()
+	{
+		return socket;
 	}
 }

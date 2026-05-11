@@ -1,14 +1,17 @@
 package Server;
 
-import User.Model.User;
 import User.Repository.JPAUserRepository;
 import User.Repository.UserRepository;
-import Util.Network.Notifications.JoinNotification;
 import Util.Network.SocketProxy;
 
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.io.InputStream;
+import java.security.KeyStore;
+import javax.net.ssl.KeyManagerFactory;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLServerSocketFactory;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -21,18 +24,38 @@ public class Server implements Runnable {
 	private final PacketBroker packetBroker;
 	private final Future<?> packetBrokerFuture;
 
-	public Server(int port) throws IOException {
-		server = new ServerSocket(port);
+	public Server(int port) throws Exception {
+		SSLContext sslContext = SSLContext.getInstance("TLS");
+		KeyStore keyStore = KeyStore.getInstance("PKCS12");
+		try (InputStream keystoreInput = Server.class.getResourceAsStream("/server.keystore")) {
+			if (keystoreInput == null) {
+				throw new IOException("Server-Keystore (server.keystore) nicht gefunden!");
+			}
+			keyStore.load(keystoreInput, "password".toCharArray());
+		}
+		KeyManagerFactory keyManagerFactory = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+		keyManagerFactory.init(keyStore, "password".toCharArray());
+		sslContext.init(keyManagerFactory.getKeyManagers(), null, null);
+
+		SSLServerSocketFactory ssf = sslContext.getServerSocketFactory();
+		server = ssf.createServerSocket(port);
 
 		UserRepository userRepository = new JPAUserRepository();
 		AuthHandler authHandler = new AuthHandler(userRepository);
 
-		packetBroker = new PacketBroker(threadExecutor, authHandler);
+		GeminiHandler geminiHandler = new GeminiHandler();
+		packetBroker = new PacketBroker(threadExecutor, authHandler, geminiHandler);
 		packetBrokerFuture = threadExecutor.submit(packetBroker);
 	}
 
 	@Override
 	public void run() {
+
+		// Audio
+		new Thread(new AudioRelayServer(3298), "AudioRelayServer").start();
+		// Video
+		new Thread(new VideoRelayServer(9001), "VideoRelayServer").start();
+
 		while (!Thread.currentThread().isInterrupted()) {
 			try {
 				Socket s = server.accept();
@@ -43,22 +66,13 @@ public class Server implements Runnable {
 				} else {
 					System.err.println("Maximale Anzahl an Clients erreicht, Verbindung abgelehnt");
 					try { socket.close(); } catch (IOException ignored) {}
-					continue;
 				}
-
-				// todo: Wenn es ein Loginsystem gibt, hier das User-Objekt des neu beigetretenen Clients übergeben, sobald dieser sich angemeldet hat
-				User user = new User();
-				user.setUsername("Platzhalter");
-				packetBroker.broadcast(new JoinNotification(user));
 
 			} catch (IOException e) {
-				if (!server.isClosed()) {
-					System.err.println("Fehler beim Akzeptieren eines neuen Clients: " + e);
+				if (server.isClosed()) {
+					break;
 				}
-				break;
-
-			} catch (InterruptedException e) {
-				Thread.currentThread().interrupt();
+				System.err.println("Fehler beim Akzeptieren eines neuen Clients: " + e);
 			}
 		}
 	}

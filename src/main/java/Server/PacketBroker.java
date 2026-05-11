@@ -4,16 +4,15 @@ import User.Model.User;
 import Util.FileUtil;
 import Util.Network.Auth.LoginRequest;
 import Util.Network.Auth.RegisterRequest;
-import Util.Network.Groups.CreateGroupPacket;
-import Util.Network.Groups.GroupListRequestPacket;
-import Util.Network.Groups.GroupListResponsePacket;
-import Util.Network.Groups.JoinGroupPacket;
-import Util.Network.Groups.LeaveGroupPacket;
-import Util.Network.Groups.MyGroupsRequestPacket;
+import Util.Network.DeleteMessage;
+import Util.Network.EditMessage;
 import Util.Network.Messages.FileMessage;
 import Util.Network.Messages.Message;
+import Util.Network.Notifications.JoinNotification;
+import Util.Network.Messages.TextMessage;
 import Util.Network.Notifications.LeaveNotification;
 import Util.Network.Packet;
+import Util.Network.ReadReceipt;
 import Util.Network.SocketProxy;
 
 import java.io.IOException;
@@ -32,7 +31,7 @@ public class PacketBroker implements Runnable {
 
 	private final ExecutorService threadExecutor;
 	private final AuthHandler authHandler;
-	private final GroupManager groupManager;
+	private final GeminiHandler geminiHandler;
 
 	/// Queue für Pakete, die an alle verbundenen Clients gesendet werden sollen.
 	private final BlockingQueue<IncomingPacket> broadcastPacketQueue;
@@ -40,12 +39,10 @@ public class PacketBroker implements Runnable {
 	private final List<ClientProxy> clients;
 	private final AtomicBoolean stopFlag;
 
-	public PacketBroker(ExecutorService threadExecutor, AuthHandler authHandler) {
+	public PacketBroker(ExecutorService threadExecutor, AuthHandler authHandler, GeminiHandler geminiHandler) {
 		this.threadExecutor = threadExecutor;
 		this.authHandler = authHandler;
-		this.groupManager = new GroupManager();
-		// wire the group manager into auth so it can register clients on login
-		this.authHandler.setGroupManager(this.groupManager);
+		this.geminiHandler = geminiHandler;
 
 		this.broadcastPacketQueue = new ArrayBlockingQueue<>(MAX_INCOMING_PACKETS);
 		this.clients = new ArrayList<>(MAX_CLIENTS);
@@ -61,29 +58,21 @@ public class PacketBroker implements Runnable {
 				ClientProxy sender = incoming.sender();
 
 				switch (packet) {
-					case LoginRequest req -> authHandler.handleLogin(req, sender);
+					case LoginRequest req -> {
+						if (authHandler.handleLogin(req, sender)) {
+							User user = sender.getUser();
+
+							try {
+								if (!broadcast(new JoinNotification(user))) {
+									System.err.println("broadcastPacketQueue ist voll, JoinNotification wurde verworfen");
+								}
+							} catch (InterruptedException e) {
+								Thread.currentThread().interrupt();
+								return;
+							}
+						}
+					}
 					case RegisterRequest req -> authHandler.handleRegister(req, sender);
-					// group action packets — only logged in clients can use these
-					case CreateGroupPacket cgp -> {
-						if (sender != null && sender.getUser() != null)
-							groupManager.createGroup(cgp.getGroupName(), sender);
-					}
-					case JoinGroupPacket jgp -> {
-						if (sender != null && sender.getUser() != null)
-							groupManager.joinGroup(jgp.getGroupId(), sender);
-					}
-					case LeaveGroupPacket lgp -> {
-						if (sender != null && sender.getUser() != null)
-							groupManager.leaveGroup(lgp.getGroupId(), sender);
-					}
-					case GroupListRequestPacket ignored -> {
-						if (sender != null)
-							sender.tryEnqueuePacket(new GroupListResponsePacket(groupManager.getAllGroups()));
-					}
-					case MyGroupsRequestPacket ignored -> {
-						if (sender != null)
-							sender.tryEnqueuePacket(new GroupListResponsePacket(groupManager.getGroupsForClient(sender)));
-					}
 					case FileMessage file -> {
 						if (sender != null && sender.getUser() != null) {
 							try {
@@ -94,18 +83,58 @@ public class PacketBroker implements Runnable {
 							}
 						}
 					}
-					case Message msg -> {
+					case TextMessage textMessage -> {
 						if (sender != null && sender.getUser() != null) {
-							// if the message has a group id, only send to members of that group
-							if (msg.getGroupId() != null) {
-								for (var member : groupManager.getGroupMembers(msg.getGroupId())) {
-									member.tryEnqueuePacket(msg);
+							String content = textMessage.getContent();
+
+							if (content != null && content.startsWith("/ai ")) {
+								User botUser = new User();
+								botUser.setUsername("KI-Assistent");
+
+								String prompt = content.substring(4).trim();
+								if (prompt.isEmpty()) {
+									sender.tryEnqueuePacket(new TextMessage(botUser, "Bitte gib nach /ai noch eine Frage ein."));
+									break;
 								}
+
+								threadExecutor.submit(() -> {
+									try {
+										String answer = geminiHandler.ask(prompt);
+
+										if (answer == null || answer.isBlank()) {
+											sender.tryEnqueuePacket(new TextMessage(botUser, "Stell deine Frage erneut."));
+											return;
+										}
+
+										sender.tryEnqueuePacket(new TextMessage(botUser, answer));
+
+									} catch (Exception e) {
+										sender.tryEnqueuePacket(new TextMessage(botUser, "Fehler beim Abruf des KI-Assistenten."));
+									}
+								});
+
 							} else {
-								broadcastToAll(packet);
+								broadcastToAll(textMessage);
 							}
 						}
 					}
+
+					case Message msg -> {
+						if (sender != null && sender.getUser() != null) {
+							broadcastToAll(packet);
+						}
+					}
+					case ReadReceipt receipt -> broadcastToAll(packet);
+					case EditMessage edit -> broadcastToAll(packet);
+					case DeleteMessage delete -> broadcastToAll(packet);
+					//Audio
+					case Util.Network.Notifications.CallNotification call -> {
+						if (sender != null) {
+							call.setSenderIp(sender.getIpAddress());
+						}
+						broadcastToAll(call);
+					}
+
 					default -> broadcastToAll(packet);
 				}
 
@@ -123,7 +152,9 @@ public class PacketBroker implements Runnable {
 
 		synchronized (clients) {
 			for (var client : clients) {
-				if (client.shouldStop()) {
+				if (client.getUser() == null) {
+					continue;
+				} else if (client.shouldStop()) {
 					clientsToUnregister.add(client);
 				} else if (!client.tryEnqueuePacket(packet)) {
 					System.err.println("Client outPacketQueue ist voll");
@@ -205,7 +236,6 @@ public class PacketBroker implements Runnable {
 		}
 
 		if (removed) {
-			groupManager.unregisterClient(client);
 			try {
 				client.close();
 			} catch (IOException e) {
