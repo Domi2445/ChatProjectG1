@@ -56,6 +56,7 @@ public class Client implements Runnable {
 			Packet packet = out.poll();
 			if (packet != null) {
 				try {
+					socket.getOutputStream().reset();
 					socket.getOutputStream().writeObject(packet);
 					socket.getOutputStream().flush();
 				} catch (IOException e) {

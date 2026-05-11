@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.util.Arrays;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -25,6 +26,11 @@ public class User implements Serializable {
     private String profileDescription;
     @Column
     private UUID profilePictureUUID;
+    @Lob
+    @Column
+    private byte[] profilePicture;
+    @Column
+    private String profilePictureContentType;
     @OneToOne(cascade = CascadeType.ALL, orphanRemoval = true) //1:1 beziehung ein datensatz gehört genau einem User
     @JoinColumn(name = "contact_data_id") //Nichts anderes wie ein Join
     private ContactData contactData;
@@ -93,6 +99,26 @@ public class User implements Serializable {
         this.profilePictureUUID = profilePictureUUID;
     }
 
+    public void setProfilePictureUUID(UUID profilePictureUUID) {
+        this.profilePictureUUID = profilePictureUUID;
+    }
+
+    public byte[] getProfilePicture() {
+        return profilePicture == null ? null : Arrays.copyOf(profilePicture, profilePicture.length);
+    }
+
+    public void setProfilePicture(byte[] profilePicture) {
+        this.profilePicture = profilePicture == null ? null : Arrays.copyOf(profilePicture, profilePicture.length);
+    }
+
+    public String getProfilePictureContentType() {
+        return profilePictureContentType;
+    }
+
+    public void setProfilePictureContentType(String profilePictureContentType) {
+        this.profilePictureContentType = profilePictureContentType;
+    }
+
     public ContactData getContactData() {
         return contactData;
     }
@@ -109,6 +135,7 @@ public class User implements Serializable {
 			", statusMessage='" + statusMessage + '\'' +
 			", profileDescription='" + profileDescription + '\'' +
 			", profilePictureUUID=" + profilePictureUUID +
+			", hasProfilePicture=" + (profilePicture != null && profilePicture.length > 0) +
 			", contactData=" + contactData +
 			'}';
 	}
@@ -118,12 +145,12 @@ public class User implements Serializable {
 		if (this == o) return true;
 		if (o == null || getClass() != o.getClass()) return false;
 		User user = (User) o;
-		return Objects.equals(username, user.username) && Objects.equals(displayname, user.displayname) && Objects.equals(passwordHash, user.passwordHash) && Objects.equals(statusMessage, user.statusMessage) && Objects.equals(profileDescription, user.profileDescription) && Objects.equals(profilePictureUUID, user.profilePictureUUID) && Objects.equals(contactData, user.contactData);
+		return Objects.equals(username, user.username);
 	}
 
 	@Override
 	public int hashCode() {
-		return Objects.hash(username, displayname, passwordHash, statusMessage, profileDescription, profilePictureUUID, contactData);
+		return Objects.hash(username);
 	}
 
     public String getDisplayName()
