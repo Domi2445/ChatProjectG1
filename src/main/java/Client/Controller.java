@@ -42,6 +42,10 @@ import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.function.Consumer;
+import AudioCall.AudioCall;
+import Util.Network.Notifications.CallNotification;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class Controller {
 	public static final int MAX_FILE_SIZE = 1_000_000;
@@ -57,6 +61,12 @@ public class Controller {
 	private Stage stage;
 	private TextMessage isEditingMessage;
 	private ChatHistoryService chatHistoryService = new ChatHistoryService();
+
+	// Audio Call
+	private static final String RELAY_IP = "127.0.0.1";
+	private static final int RELAY_PORT = 8000;
+	private final AudioCall audioCall = new AudioCall();
+	private boolean inCall = false;
 
 	@FXML
 	private ListView<Packet> messageListView;
@@ -94,7 +104,7 @@ public class Controller {
 		sendButton.setOnAction(e -> sendMessage());
 		messageTextField.setOnAction(e -> sendMessage());
 		uploadButton.setOnAction(e -> sendFile());
-
+		videoCallButton.setOnAction(e -> handleCallButton());
 	}
 
 	public void configure(Stage stage, User user) {
@@ -127,6 +137,7 @@ public class Controller {
 								}
 								messageListView.scrollTo(getMessages().size() - 1);
 							});
+							case CallNotification call -> Platform.runLater(() -> handleCallNotification(call));
 							case Notification notification -> Platform.runLater(() -> {
 								getMessages().add(notification);
 								messageListView.scrollTo(getMessages().size() - 1);
@@ -527,5 +538,60 @@ public class Controller {
 		}
 	}
 
+	//Audio Call
+	public void handleCallButton() {
+		if (!inCall) {
+			TextInputDialog dialog = new TextInputDialog();
+			dialog.setTitle("Anruf starten");
+			dialog.setHeaderText("Benutzername des Empfängers:");
+			String target = dialog.showAndWait().orElse(null);
+			if (target == null || target.isBlank()) return;
+			try {
+				outPacketQueue.put(new CallNotification(
+					CallNotification.CallType.REQUEST, localUser, target, 0));
+			} catch (InterruptedException e) { e.printStackTrace(); }
+		} else {
+			audioCall.stop();
+			inCall = false;
+			videoCallButton.setStyle(
+				"-fx-background-color: #45475a; -fx-text-fill: #cdd6f4; -fx-font-size: 14; " +
+					"-fx-background-radius: 20; -fx-min-width: 70; -fx-min-height: 40;"
+			);
+		}
+	}
 
+	private void handleCallNotification(CallNotification call) {
+		if (localUser == null || !call.getTargetUsername().equals(localUser.getUsername())) return;
+
+		switch (call.getType()) {
+			case REQUEST -> {
+				Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+				alert.setTitle("Eingehender Anruf");
+				alert.setHeaderText("Anruf von: " + call.getSender().getUsername());
+				boolean accepted = alert.showAndWait().orElse(ButtonType.CANCEL) == ButtonType.OK;
+				try {
+					outPacketQueue.put(new CallNotification(
+						accepted ? CallNotification.CallType.ACCEPT : CallNotification.CallType.REJECT,
+						localUser, call.getSender().getUsername(), 0));
+					if (accepted) startAudioCall(call);
+				} catch (InterruptedException e) { e.printStackTrace(); }
+			}
+			case ACCEPT -> startAudioCall(call);
+			case REJECT -> getMessages().add(
+				new TextMessage(localUser, call.getSender().getUsername() + " hat abgelehnt."));
+		}
+	}
+
+	private void startAudioCall(CallNotification call) {
+		String roomId = Stream.of(localUser.getUsername(), call.getSender().getUsername())
+			.sorted().collect(Collectors.joining("-"));
+		try {
+			audioCall.start(RELAY_IP, RELAY_PORT, roomId);
+			inCall = true;
+			videoCallButton.setStyle(
+				"-fx-background-color: #f38ba8; -fx-text-fill: #1e1e2e; -fx-font-size: 14; " +
+					"-fx-background-radius: 20; -fx-min-width: 70; -fx-min-height: 40;"
+			);
+		} catch (Exception e) { e.printStackTrace(); }
+	}
 }
