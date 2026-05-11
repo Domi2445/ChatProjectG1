@@ -521,7 +521,14 @@ public class Controller {
 			return menu;
 		}
 	}
-	
+	//Audio
+	public void stopCall() {
+		if (inCall) {
+			audioCall.stop();
+			inCall = false;
+		}
+	}
+	//Audio
 	private void startEditMessage(TextMessage message) {
 		messageTextField.setText(message.getContent());
 		messageTextField.requestFocus();
