@@ -43,12 +43,19 @@ public class Server implements Runnable {
 		UserRepository userRepository = new JPAUserRepository();
 		AuthHandler authHandler = new AuthHandler(userRepository);
 
-		packetBroker = new PacketBroker(threadExecutor, authHandler);
+		GeminiHandler geminiHandler = new GeminiHandler();
+		packetBroker = new PacketBroker(threadExecutor, authHandler, geminiHandler);
 		packetBrokerFuture = threadExecutor.submit(packetBroker);
 	}
 
 	@Override
 	public void run() {
+
+		// Audio
+		new Thread(new AudioRelayServer(3298), "AudioRelayServer").start();
+		// Video
+		new Thread(new VideoRelayServer(9001), "VideoRelayServer").start();
+
 		while (!Thread.currentThread().isInterrupted()) {
 			try {
 				Socket s = server.accept();
