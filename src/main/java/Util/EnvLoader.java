@@ -10,7 +10,7 @@ public class EnvLoader {
 		if (apiKey != null && !apiKey.isBlank()) {
 			return apiKey;
 		}
-		Path envPath = Path.of(".env");
+		Path envPath = Path.of("env");
 		if (!Files.exists(envPath)) {
 			throw new IllegalStateException("GEMINI_API_KEY nicht gefunden");
 		}

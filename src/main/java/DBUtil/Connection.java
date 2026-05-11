@@ -293,7 +293,7 @@ public final class Connection {
 					}
 				}
 			} catch (IOException ignored) {
-				// Keine .env vorhanden oder nicht lesbar -> normale Env-/Property-Werte werden genutzt.
+				// Keine env vorhanden oder nicht lesbar -> normale Env-/Property-Werte werden genutzt.
 			}
 		}
 		return null;
@@ -304,9 +304,9 @@ public final class Connection {
 		Path parent = cwd.getParent();
 		Path grandParent = parent != null ? parent.getParent() : null;
 		return List.of(
-			cwd.resolve(".env"),
-			parent != null ? parent.resolve(".env") : cwd.resolve(".env"),
-			grandParent != null ? grandParent.resolve(".env") : cwd.resolve(".env")
+			cwd.resolve("env"),
+			parent != null ? parent.resolve("env") : cwd.resolve("env"),
+			grandParent != null ? grandParent.resolve("env") : cwd.resolve("env")
 		);
 	}
 
