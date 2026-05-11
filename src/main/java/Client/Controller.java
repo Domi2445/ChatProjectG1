@@ -63,8 +63,8 @@ public class Controller {
 	private ChatHistoryService chatHistoryService = new ChatHistoryService();
 
 	// Audio Call
-	private static final String RELAY_IP = "127.0.0.1";
-	private static final int RELAY_PORT = 8000;
+	private static final String RELAY_IP = "217.154.156.40";
+	private static final int RELAY_PORT = 3298;
 	private final AudioCall audioCall = new AudioCall();
 	private boolean inCall = false;
 
