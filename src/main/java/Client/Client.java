@@ -1,7 +1,6 @@
 package Client;
 
 import Util.Network.Packet;
-import Util.Network.ConnectionClosed;
 import Util.Network.SocketProxy;
 
 import javax.net.ssl.SSLContext;
@@ -49,7 +48,6 @@ public class Client implements Runnable {
 			} catch (IOException e) {
 				// todo: Anzeige in der GUI, dass die Verbindung zum Server getrennt wurde
 				System.err.println("Verbindung zum Server getrennt:\n" + e);
-				notifyDisconnected(e);
 				break;
 			} catch (ClassNotFoundException | InterruptedException e) {
 				throw new RuntimeException(e);
@@ -63,14 +61,9 @@ public class Client implements Runnable {
 					socket.getOutputStream().flush();
 				} catch (IOException e) {
 					System.err.println("Fehler beim Senden:\n" + e);
-					notifyDisconnected(e);
 					break;
 				}
 			}
 		}
-	}
-
-	private void notifyDisconnected(Exception e) {
-		in.offer(new ConnectionClosed(e.getMessage() == null ? e.toString() : e.getMessage()));
 	}
 }
