@@ -10,11 +10,13 @@ public class FileMessage extends Message {
 
 	private final byte[] content;
 	private final String fileExtension;
+	private boolean isDeleted;
 
 	public FileMessage(User sender, byte[] content, String fileExtension) {
 		super(sender);
 		this.content = content;
 		this.fileExtension = fileExtension;
+		this.isDeleted = false;
 	}
 
 	public byte[] getContent() {
@@ -23,5 +25,13 @@ public class FileMessage extends Message {
 
 	public String getFileExtension() {
 		return fileExtension;
+	}
+
+	public void setDeleted() {
+		this.isDeleted = true;
+	}
+
+	public boolean isDeleted() {
+		return isDeleted;
 	}
 }

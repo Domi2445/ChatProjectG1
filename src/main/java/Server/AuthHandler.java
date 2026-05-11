@@ -11,8 +11,10 @@ import Util.Network.Auth.LoginRequest;
 import Util.Network.Auth.LoginResponse;
 import Util.Network.Auth.RegisterRequest;
 import Util.Network.Auth.RegisterResponse;
+import Util.Network.ProfilePictureUpdate;
 
 import java.util.Optional;
+import java.util.UUID;
 
 public class AuthHandler {
 	private final UserRepository userRepository;
@@ -83,6 +85,35 @@ public class AuthHandler {
 		} catch (RepositoryException e) {
 			System.err.println("Register fehlgeschlagen (DB): " + e.getMessage());
 			sender.tryEnqueuePacket(new RegisterResponse(Status.DATABASE_ERROR, "Datenbankfehler", null));
+		}
+	}
+
+	public ProfilePictureUpdate handleProfilePictureUpdate(ProfilePictureUpdate update, ClientProxy sender) {
+		if (sender == null || sender.getUser() == null || update == null) {
+			return null;
+		}
+
+		String username = sender.getUser().getUsername();
+		if (username == null || !username.equals(update.getUsername())) {
+			return null;
+		}
+
+		byte[] imageBytes = update.getImageBytes();
+		if (imageBytes == null || imageBytes.length == 0) {
+			return null;
+		}
+
+		try {
+			User user = sender.getUser();
+			user.setProfilePicture(imageBytes);
+			user.setProfilePictureContentType(update.getContentType());
+			user.setProfilePictureUUID(UUID.randomUUID());
+			userRepository.updateUser(user);
+			sender.setUser(user);
+			return new ProfilePictureUpdate(username, imageBytes, update.getContentType());
+		} catch (RepositoryException e) {
+			System.err.println("Profilbild konnte nicht gespeichert werden: " + e.getMessage());
+			return null;
 		}
 	}
 }
