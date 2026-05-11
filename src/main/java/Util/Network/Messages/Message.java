@@ -4,6 +4,7 @@ import Util.Network.Packet;
 import User.Model.User;
 
 import java.io.Serial;
+import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -14,11 +15,13 @@ public abstract class Message extends Packet {
     private final User sender;
     private final Set<String> readByUsernames;
     private final long messageId;
+    private final LocalDateTime sentAt;
 
     public Message(User sender) {
         this.sender = sender;
         this.readByUsernames = new HashSet<>();
         this.messageId = System.nanoTime();
+        this.sentAt = LocalDateTime.now();
     }
 
     public User getSender() { return sender; }
@@ -33,5 +36,9 @@ public abstract class Message extends Packet {
 
 	public long getMessageId() {
         return messageId;
+    }
+
+	public LocalDateTime getSentAt() {
+        return sentAt;
     }
 }

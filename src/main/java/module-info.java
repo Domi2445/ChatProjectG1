@@ -3,6 +3,7 @@ module com.chatproject {
 	requires javafx.controls;
 	requires javafx.graphics;
 	requires javafx.base;
+	requires java.desktop;
 	requires org.hibernate.orm.core;
 	requires jakarta.transaction;
 	requires java.sql;

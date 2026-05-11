@@ -70,6 +70,7 @@ public final class ClientProxy implements AutoCloseable {
 				if (stopFlag.get()) break;
 				try {
 					Packet packet = outPacketQueue.take();
+					socket.getOutputStream().reset();
 					socket.getOutputStream().writeObject(packet);
 					if (outPacketQueue.isEmpty() || maxQueuedPackets++ >= 8) {
 						socket.getOutputStream().flush();

@@ -6,6 +6,7 @@ import Util.Network.Auth.LoginRequest;
 import Util.Network.Auth.RegisterRequest;
 import Util.Network.DeleteMessage;
 import Util.Network.EditMessage;
+import Util.Network.ProfilePictureUpdate;
 import Util.Network.Messages.FileMessage;
 import Util.Network.Messages.Message;
 import Util.Network.Notifications.JoinNotification;
@@ -88,6 +89,12 @@ public class PacketBroker implements Runnable {
 					case ReadReceipt receipt -> broadcastToAll(packet);
 					case EditMessage edit -> broadcastToAll(packet);
 					case DeleteMessage delete -> broadcastToAll(packet);
+					case ProfilePictureUpdate update -> {
+						ProfilePictureUpdate savedUpdate = authHandler.handleProfilePictureUpdate(update, sender);
+						if (savedUpdate != null) {
+							broadcastToAll(savedUpdate);
+						}
+					}
 					default -> broadcastToAll(packet);
 				}
 
