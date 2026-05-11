@@ -7,9 +7,9 @@ module com.chatproject {
 	requires jakarta.transaction;
 	requires jakarta.interceptor;
 	requires java.sql;
+	requires webcam.capture;
 	uses java.sql.Driver;
 
-	requires webcam.capture;
 
 	requires jbcrypt;
 

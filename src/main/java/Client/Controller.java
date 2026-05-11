@@ -43,13 +43,6 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.function.Consumer;
 
-//Audio
-import AudioCall.AudioCall;
-import Util.Network.Notifications.CallNotification;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-import javafx.scene.control.TextInputDialog;
-
 public class Controller {
 	public static final int MAX_FILE_SIZE = 1_000_000;
 
@@ -64,13 +57,6 @@ public class Controller {
 	private Stage stage;
 	private TextMessage isEditingMessage;
 	private ChatHistoryService chatHistoryService = new ChatHistoryService();
-
-	//Audio
-	private static final String RELAY_IP = "217.154.156.40";
-	private static final int RELAY_PORT = 3298;
-	private final AudioCall audioCall = new AudioCall();
-	private boolean inCall = false;
-	@FXML private Button videoCallButton;
 
 	@FXML
 	private ListView<Packet> messageListView;
@@ -104,7 +90,7 @@ public class Controller {
 	@FXML
 	private void initialize() {
 		messageListView.setCellFactory(lv -> new MessageCell());
-		videoCallButton.setOnAction(e -> handleCallButton());
+		
 		sendButton.setOnAction(e -> sendMessage());
 		messageTextField.setOnAction(e -> sendMessage());
 		uploadButton.setOnAction(e -> sendFile());
@@ -177,16 +163,12 @@ public class Controller {
 									}
 								}
 							});
-							//Audio
-							case CallNotification call -> Platform.runLater(() -> handleCallNotification(call));
 							case LoginResponse loginResp -> Platform.runLater(() -> { //FÜR UI CALLBACK
 								handleLoginResponse(loginResp);
 							});
 							case RegisterResponse registerResp -> Platform.runLater(() -> {
 								handleRegisterResponse(registerResp);
 							});
-
-
 							case null, default -> throw new IllegalStateException("Unbekanntes Paket empfangen");
 						}
 
@@ -376,11 +358,6 @@ public class Controller {
 
 			switch (item) {
 				case Message message -> setGraphic(renderMessageBubble(message));
-				//Audio
-				//case CallNotification call -> Platform.runLater(() -> handleCallNotification(call));
-				//Audio
-				case CallNotification ignored -> {}
-
 				case Notification notification -> renderNotificationLine(notification);
 				default -> throw new IllegalStateException("Unbekannte Servernachricht: " + item);
 			}
@@ -478,8 +455,8 @@ public class Controller {
 		}
 
 		private void renderNotificationLine(Notification notification) {
-			String text = "";
-			String color = "#cdd6f4";
+			String text;
+			String color;
 
 			switch (notification) {
 				case JoinNotification join -> {
@@ -509,8 +486,7 @@ public class Controller {
 					text = name + " hat verlassen";
 					color = "#f38ba8";
 				}
-				case null, default -> {}
-			//	case null, default -> throw new IllegalStateException("Unerwarteter Wert: " + notification);
+				case null, default -> throw new IllegalStateException("Unerwarteter Wert: " + notification);
 			}
 
 			setText(text);
@@ -534,60 +510,7 @@ public class Controller {
 			return menu;
 		}
 	}
-
-
-
-	//Audio
-	public void handleCallButton() {
-		if (!inCall) {
-			TextInputDialog dialog = new TextInputDialog();
-			dialog.setTitle("Anruf starten");
-			dialog.setHeaderText("Benutzername des Empfängers:");
-			String target = dialog.showAndWait().orElse(null);
-			if (target == null || target.isBlank()) return;
-			try {
-				outPacketQueue.put(new CallNotification(
-					CallNotification.CallType.REQUEST, localUser, target, 0));
-			} catch (InterruptedException e) { e.printStackTrace(); }
-		} else {
-			audioCall.stop();
-			inCall = false;
-		}
-	}
-
-	private void handleCallNotification(CallNotification call) {
-		if (localUser == null || !call.getTargetUsername().equals(localUser.getUsername())) return;
-		switch (call.getType()) {
-			case REQUEST -> {
-				Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
-				alert.setTitle("Eingehender Anruf");
-				alert.setHeaderText("Anruf von: " + call.getSender().getUsername());
-				boolean accepted = alert.showAndWait().orElse(ButtonType.CANCEL) == ButtonType.OK;
-				try {
-					outPacketQueue.put(new CallNotification(
-						accepted ? CallNotification.CallType.ACCEPT : CallNotification.CallType.REJECT,
-						localUser, call.getSender().getUsername(), 0));
-					if (accepted) startAudioCall(call);
-				} catch (InterruptedException e) { e.printStackTrace(); }
-			}
-			case ACCEPT -> startAudioCall(call);
-			case REJECT -> getMessages().add(
-				new TextMessage(localUser, call.getSender().getUsername() + " hat abgelehnt."));
-		}
-	}
-
-	private void startAudioCall(CallNotification call) {
-		String roomId = Stream.of(localUser.getUsername(), call.getSender().getUsername())
-			.sorted().collect(Collectors.joining("-"));
-		try {
-			audioCall.start(RELAY_IP, RELAY_PORT, roomId);
-			inCall = true;
-		} catch (Exception e) { e.printStackTrace(); }
-	}
-//Audio
-
-
-
+	
 	private void startEditMessage(TextMessage message) {
 		messageTextField.setText(message.getContent());
 		messageTextField.requestFocus();

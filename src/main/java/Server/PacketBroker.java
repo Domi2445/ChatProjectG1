@@ -9,6 +9,7 @@ import Util.Network.EditMessage;
 import Util.Network.Messages.FileMessage;
 import Util.Network.Messages.Message;
 import Util.Network.Notifications.JoinNotification;
+import Util.Network.Messages.TextMessage;
 import Util.Network.Notifications.LeaveNotification;
 import Util.Network.Packet;
 import Util.Network.ReadReceipt;
@@ -30,6 +31,7 @@ public class PacketBroker implements Runnable {
 
 	private final ExecutorService threadExecutor;
 	private final AuthHandler authHandler;
+	private final GeminiHandler geminiHandler;
 
 	/// Queue für Pakete, die an alle verbundenen Clients gesendet werden sollen.
 	private final BlockingQueue<IncomingPacket> broadcastPacketQueue;
@@ -37,9 +39,10 @@ public class PacketBroker implements Runnable {
 	private final List<ClientProxy> clients;
 	private final AtomicBoolean stopFlag;
 
-	public PacketBroker(ExecutorService threadExecutor, AuthHandler authHandler) {
+	public PacketBroker(ExecutorService threadExecutor, AuthHandler authHandler, GeminiHandler geminiHandler) {
 		this.threadExecutor = threadExecutor;
 		this.authHandler = authHandler;
+		this.geminiHandler = geminiHandler;
 
 		this.broadcastPacketQueue = new ArrayBlockingQueue<>(MAX_INCOMING_PACKETS);
 		this.clients = new ArrayList<>(MAX_CLIENTS);
@@ -80,6 +83,42 @@ public class PacketBroker implements Runnable {
 							}
 						}
 					}
+					case TextMessage textMessage -> {
+						if (sender != null && sender.getUser() != null) {
+							String content = textMessage.getContent();
+
+							if (content != null && content.startsWith("/ai ")) {
+								User botUser = new User();
+								botUser.setUsername("KI-Assistent");
+
+								String prompt = content.substring(4).trim();
+								if (prompt.isEmpty()) {
+									sender.tryEnqueuePacket(new TextMessage(botUser, "Bitte gib nach /ai noch eine Frage ein."));
+									break;
+								}
+
+								threadExecutor.submit(() -> {
+									try {
+										String answer = geminiHandler.ask(prompt);
+
+										if (answer == null || answer.isBlank()) {
+											sender.tryEnqueuePacket(new TextMessage(botUser, "Stell deine Frage erneut."));
+											return;
+										}
+
+										sender.tryEnqueuePacket(new TextMessage(botUser, answer));
+
+									} catch (Exception e) {
+										sender.tryEnqueuePacket(new TextMessage(botUser, "Fehler beim Abruf des KI-Assistenten."));
+									}
+								});
+
+							} else {
+								broadcastToAll(textMessage);
+							}
+						}
+					}
+
 					case Message msg -> {
 						if (sender != null && sender.getUser() != null) {
 							broadcastToAll(packet);
