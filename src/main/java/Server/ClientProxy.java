@@ -121,4 +121,10 @@ public final class ClientProxy implements AutoCloseable {
 	public void setUser(User user) {
 		this.user = user;
 	}
+
+	//Audio (fur ip)
+	public String getIpAddress()
+	{
+		return socket.getSocket().getInetAddress().getHostAddress();
+	}
 }
