@@ -5,12 +5,12 @@ import java.net.*;
 
 public class AudioCall {
 	private volatile boolean running = false;
+	private DatagramSocket socket;
 
 	public void start(String relayIp, int relayPort, String roomId) throws Exception {
 		running = true;
 
-		// Einen Socket für Senden und Empfangen
-		DatagramSocket socket = new DatagramSocket();
+		socket = new DatagramSocket();
 		InetAddress relayAddress = InetAddress.getByName(relayIp);
 
 		// Raum beim Relay registrieren
@@ -33,7 +33,7 @@ public class AudioCall {
 						socket.send(new DatagramPacket(buffer, bytesRead, relayAddress, relayPort));
 				}
 			} catch (Exception e) {
-				e.printStackTrace();
+				if (running) e.printStackTrace();
 			} finally {
 				if (mic != null) { mic.stop(); mic.close(); }
 			}
@@ -58,12 +58,15 @@ public class AudioCall {
 				if (running) e.printStackTrace();
 			} finally {
 				if (speakers != null) { speakers.stop(); speakers.close(); }
-				socket.close();
+				if (socket != null && !socket.isClosed()) socket.close();
 			}
 		}).start();
 	}
 
 	public void stop() {
 		running = false;
+		if (socket != null && !socket.isClosed()) {
+			socket.close();
+		}
 	}
 }
