@@ -2,7 +2,6 @@ package Client;
 
 import User.Login.Status;
 import User.Model.User;
-import User.Repository.ChatHistoryService;
 import User.Model.ChatMessage;
 import User.Model.MessageType;
 import Util.FileUtil;
@@ -11,6 +10,8 @@ import Util.Network.Auth.LoginResponse;
 import Util.Network.Auth.RegisterRequest;
 import Util.Network.Auth.RegisterResponse;
 import Util.Network.DeleteMessage;
+import Util.Network.HistoryRequest;
+import Util.Network.HistoryResponse;
 import Util.Network.Messages.FileMessage;
 import Util.Network.Messages.Message;
 import Util.Network.Messages.TextMessage;
@@ -56,7 +57,6 @@ public class Controller {
 	private User localUser;
 	private Stage stage;
 	private TextMessage isEditingMessage;
-	private ChatHistoryService chatHistoryService = new ChatHistoryService();
 
 	@FXML
 	private ListView<Packet> messageListView;
@@ -113,8 +113,10 @@ public class Controller {
 				while (true) {
 					try {
 						Packet packet = inPacketQueue.take();
+						System.out.println("📥 Client empfangen: " + packet.getClass().getSimpleName());
 						switch (packet) {
 							case Message message -> Platform.runLater(() -> {
+								System.out.println("  📌 Message zur ListView hinzugefügt: " + (message instanceof TextMessage ? ((TextMessage)message).getContent() : ""));
 								getMessages().add(message);
 								// Sende ReadReceipt, wenn die Nachricht nicht von uns selbst stammt
 								if (localUser != null && message.getSender() != null && !message.getSender().equals(localUser)) {
@@ -163,13 +165,33 @@ public class Controller {
 									}
 								}
 							});
-							case LoginResponse loginResp -> Platform.runLater(() -> { //FÜR UI CALLBACK
-								handleLoginResponse(loginResp);
-							});
-							case RegisterResponse registerResp -> Platform.runLater(() -> {
-								handleRegisterResponse(registerResp);
-							});
-							case null, default -> throw new IllegalStateException("Unbekanntes Paket empfangen");
+						case LoginResponse loginResp -> Platform.runLater(() -> { //FÜR UI CALLBACK
+							handleLoginResponse(loginResp);
+						});
+						case RegisterResponse registerResp -> Platform.runLater(() -> {
+							handleRegisterResponse(registerResp);
+						});
+						case HistoryResponse histResp -> Platform.runLater(() -> {
+							// Laden die Chat-History vom Server
+							if ("success".equals(histResp.getStatus()) && histResp.getMessages() != null) {
+								getMessages().clear();
+								// Konvertiere ChatMessage in Message/TextMessage für die UI
+								for (ChatMessage dbMsg : histResp.getMessages()) {
+									if (dbMsg.getMessageType() == MessageType.TEXT || dbMsg.getMessageType() == MessageType.EMOJI) {
+										Message msg = new TextMessage(new User(dbMsg.getSender()), dbMsg.getContent());
+										getMessages().add(msg);
+									} else if (dbMsg.getMessageType() == MessageType.FILE) {
+										Message msg = new TextMessage(new User(dbMsg.getSender()), "[Datei: " + dbMsg.getFilePath() + "]");
+										getMessages().add(msg);
+									}
+								}
+								messageListView.refresh();
+								System.out.println("✓ Chat-History geladen: " + histResp.getMessages().size() + " Messages");
+							} else {
+								System.err.println("❌ Fehler beim Laden der History: " + histResp.getErrorMessage());
+							}
+						});
+						case null, default -> throw new IllegalStateException("Unbekanntes Paket empfangen");
 						}
 
 					} catch (InterruptedException e) {
@@ -214,6 +236,7 @@ public class Controller {
 			} else {
 				Message message = new TextMessage(localUser, text);
 				try {
+					System.out.println("📤 Sende TextMessage an Server: " + text);
 					outPacketQueue.put(message);
 				} catch (InterruptedException ex) {
 					throw new RuntimeException(ex);
@@ -308,7 +331,17 @@ public class Controller {
 	private void handleLoginResponse(LoginResponse response) {
 		if (response.getStatus() == Status.SUCCESS) {
 			this.localUser = response.getUser();
-			loadChatHistory(); // Verlauf laden nach erfolgreichem Login
+			// Nach erfolgreichem Login: lade Chat-History vom Server
+			try {
+				HistoryRequest histReq = new HistoryRequest();
+				histReq.setSender(localUser.getUsername());  // Sender = aktueller Benutzer
+				histReq.setReceiver(null);                   // Global chat
+				histReq.setChatRoomId("main");               // Standard chat room für globale Nachrichten
+				outPacketQueue.put(histReq);
+				System.out.println("📥 HistoryRequest gesendet: Benutzer=" + localUser.getUsername() + ", ChatRoom=main");
+			} catch (InterruptedException e) {
+				System.err.println("Fehler beim Senden von HistoryRequest: " + e.getMessage());
+			}
 		}
 		if (onLoginResult != null) {
 			onLoginResult.accept(response);
@@ -319,27 +352,11 @@ public class Controller {
 		if (response.getStatus() == Status.SUCCESS) {
 			this.localUser = response.getUser();
 		}
-
 		if (onRegisterResult != null) {
 			onRegisterResult.accept(response);
 		}
 	}
 
-	private void loadChatHistory() {
-		List<ChatMessage> history = chatHistoryService.getHistory(null, null, "broadcast"); // Für Broadcast
-		for (ChatMessage msg : history) {
-			// Erstelle eine entsprechende Message aus ChatMessage
-			Message message;
-			if (msg.getMessageType() == MessageType.TEXT) {
-				message = new TextMessage(new User(msg.getSender()), msg.getContent());
-			} else {
-				// Für Dateien: Hier musst du die Datei laden, aber für Einfachheit zeige nur den Pfad
-				message = new TextMessage(new User(msg.getSender()), "[Datei: " + msg.getFilePath() + "]");
-			}
-			getMessages().add(message);
-		}
-		messageListView.scrollTo(getMessages().size() - 1);
-	}
 
 	private class MessageCell extends ListCell<Packet> {
 		private TextMessage editingMessage;
@@ -386,7 +403,10 @@ public class Controller {
 				case null, default -> throw new IllegalStateException("Unerwarteter Wert: " + message);
 			}
 
-			boolean isOwn = localUser != null && localUser.equals(message.getSender());
+			boolean isOwn = localUser != null
+				&& message.getSender() != null
+				&& localUser.getUsername() != null
+				&& localUser.getUsername().equals(message.getSender().getUsername());
 			node.setStyle(getBubbleStyle(isOwn));
 
 			VBox messageBox = new VBox(2);
