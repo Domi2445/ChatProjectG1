@@ -102,7 +102,9 @@ public class PacketBroker implements Runnable {
 					case TextMessage textMessage -> {
 						if (sender != null && sender.getUser() != null) {
 							String content = textMessage.getContent();
-							System.out.println("📨 TextMessage empfangen von " + sender.getUser().getUsername() + ": " + content);
+							int contentLength = content != null ? content.length() : 0;
+							boolean isAiCommand = content != null && content.startsWith("/ai ");
+							System.out.println("📨 TextMessage empfangen (content redacted, length=" + contentLength + ", aiCommand=" + isAiCommand + ")");
 
 							if (content != null && content.startsWith("/ai ")) {
 								User botUser = new User();
