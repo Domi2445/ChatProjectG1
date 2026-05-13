@@ -80,7 +80,7 @@ public class Controller {
 	private final Map<String, String> profilePictureContentTypesByUsername = new HashMap<>();
 	private boolean profilePictureSyncEnabled;
 	private static final String RELAY_IP = "217.154.156.40";
-	private static final int RELAY_PORT = 3298;
+	private static final int RELAY_PORT = 443;
 	private final AudioCall audioCall = new AudioCall();
 	private boolean inCall = false;
 
