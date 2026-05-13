@@ -20,9 +20,8 @@ module com.chatproject {
 	opens Client to javafx.fxml, javafx.graphics, javafx.base;
 	opens DBUtil to javafx.fxml;
 	opens User.Model to org.hibernate.orm.core, javafx.base, jakarta.persistence;
-	opens VideoCall to javafx.base;
-	opens AudioCall to javafx.base;
 
 	exports DBUtil;
+	exports VideoCall;
 	exports Server;
 }

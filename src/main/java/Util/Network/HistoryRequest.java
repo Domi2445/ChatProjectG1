@@ -3,7 +3,7 @@ package Util.Network;
 import java.io.Serial;
 import java.io.Serializable;
 
-public class HistoryRequest extends Packet implements Serializable {
+public class HistoryRequest implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
 
