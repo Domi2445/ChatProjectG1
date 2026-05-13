@@ -12,23 +12,31 @@ import javafx.stage.Stage;
 public class ControllerRegister {
 
 	@FXML
-	private TextField usernameField;
+	private TextField textFieldUsername;
 
 	@FXML
-	private PasswordField passwordField;
+	private PasswordField textFieldPassword;
 
 	@FXML
-	private Button registerButton;
+	private Button buttonRegister;
+
+	@FXML
+	private Button buttonBack;
 
 	private Stage stage;
 	private Controller controller;
 	private Scene chatScene;
+	private Scene loginScene;
 
 	@FXML
 	private void initialize() {
-		registerButton.setOnAction(e -> {
-			registerButton.setDisable(true);
+		buttonRegister.setOnAction(e -> {
+			buttonRegister.setDisable(true);
 			handleRegister();
+		});
+		buttonBack.setOnAction(e -> {
+			stage.setTitle("Socket Chat - Login");
+			stage.setScene(loginScene);
 		});
 	}
 
@@ -44,9 +52,13 @@ public class ControllerRegister {
 		this.chatScene = chatScene;
 	}
 
+	public void setLoginScene(Scene loginScene) {
+		this.loginScene = loginScene;
+	}
+
 	private void handleRegister() {
-		String username = usernameField.getText().trim();
-		String password = passwordField.getText();
+		String username = textFieldUsername.getText().trim();
+		String password = textFieldPassword.getText();
 
 		if (!validateInput(username, password)) return;
 
@@ -55,7 +67,7 @@ public class ControllerRegister {
 				stage.setTitle("Socket Chat");
 				stage.setScene(chatScene);
 			} else {
-				registerButton.setDisable(false);
+				buttonRegister.setDisable(false);
 				showError(response.getMessage());
 			}
 		});

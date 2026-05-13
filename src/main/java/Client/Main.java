@@ -21,11 +21,7 @@ public class Main extends Application {
 		Parent chatRoot = chatLoader.load();
 		Controller chatController = chatLoader.getController();
 		chatController.configure(primaryStage, null);
-		String host = System.getProperty("server.host",
-			System.getenv().getOrDefault("SERVER_HOST", "217.154.156.40"));
-		int port = Integer.parseInt(System.getProperty("server.port",
-			System.getenv().getOrDefault("SERVER_PORT", "3299")));
-		if (!chatController.connectAndRun(host, port)) {
+		if (!chatController.connectAndRun("127.0.0.1", 6969)) {
 			return;
 		}
 			// Audio - Beim Schließen des Fensters den Anruf beenden
