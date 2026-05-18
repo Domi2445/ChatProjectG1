@@ -14,6 +14,7 @@ import Util.Network.Notifications.LeaveNotification;
 import Util.Network.Packet;
 import Util.Network.ReadReceipt;
 import Util.Network.SocketProxy;
+import Util.Network.TypingStatus;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -125,6 +126,11 @@ public class PacketBroker implements Runnable {
 						}
 					}
 					case ReadReceipt receipt -> broadcastToAll(packet);
+					case TypingStatus typing -> {
+						if (sender != null && sender.getUser() != null) {
+							broadcastToAll(new TypingStatus(createNetworkUser(sender.getUser()), typing.isTyping()));
+						}
+					}
 					case EditMessage edit -> broadcastToAll(packet);
 					case DeleteMessage delete -> broadcastToAll(packet);
 					//Audio
@@ -285,5 +291,19 @@ public class PacketBroker implements Runnable {
 				System.err.println("Fehler beim Schließen eines Clients: " + e);
 			}
 		}
+	}
+
+	private User createNetworkUser(User source) {
+		if (source == null) {
+			return null;
+		}
+
+		User user = new User();
+		user.setUsername(source.getUsername());
+		user.setDisplayname(source.getDisplayname());
+		user.setStatusMessage(source.getStatusMessage());
+		user.setProfileDescription(source.getProfileDescription());
+		user.setProfilePictureUUID(source.getProfilePictureUUID());
+		return user;
 	}
 }
