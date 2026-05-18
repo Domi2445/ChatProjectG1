@@ -177,7 +177,6 @@ public class PacketBroker implements Runnable {
 				if (client.shouldStop()) {
 					clientsToUnregister.add(client);
 				} else if (client.getUser() == null) {
-					System.out.println("     └─ Client hat kein User (nicht eingeloggt)");
 					skippedCount++;
 				} else if (!client.tryEnqueuePacket(packet)) {
 					System.out.println("     └─ Client outPacketQueue ist voll!");
