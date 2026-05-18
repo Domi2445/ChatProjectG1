@@ -182,7 +182,6 @@ public class PacketBroker implements Runnable {
 					System.out.println("     └─ Client outPacketQueue ist voll!");
 					clientsToUnregister.add(client);
 				} else {
-					System.out.println("     ✓ Packet an " + client.getUser().getUsername() + " gesendet");
 					broadcastCount++;
 				}
 			}
