@@ -3,7 +3,6 @@ package Client;
 import AudioCall.AudioCall;
 import User.Login.Status;
 import User.Model.User;
-import User.Repository.ChatHistoryService;
 import User.Model.ChatMessage;
 import User.Model.MessageType;
 import Util.FileUtil;
@@ -13,7 +12,8 @@ import Util.Network.Auth.RegisterRequest;
 import Util.Network.Auth.RegisterResponse;
 import Util.Network.ConnectionClosed;
 import Util.Network.DeleteMessage;
-import Util.Network.EditMessage;
+import Util.Network.HistoryRequest;
+import Util.Network.HistoryResponse;
 import Util.Network.Messages.FileMessage;
 import Util.Network.Messages.Message;
 import Util.Network.Messages.TextMessage;
@@ -75,7 +75,6 @@ public class Controller {
 	private User localUser;
 	private Stage stage;
 	private TextMessage isEditingMessage;
-	private ChatHistoryService chatHistoryService = new ChatHistoryService();
 	private final Map<String, byte[]> profilePicturesByUsername = new HashMap<>();
 	private final Map<String, String> profilePictureContentTypesByUsername = new HashMap<>();
 	private boolean profilePictureSyncEnabled;
@@ -128,7 +127,6 @@ public class Controller {
 		uploadButton.setOnAction(e -> sendFile());
 		profilePictureButton.setOnAction(e -> uploadProfilePicture());
 		videoCallButton.setOnAction(e -> handleCallButton());
-
 	}
 
 	public void configure(Stage stage, User user) {
@@ -212,6 +210,26 @@ public class Controller {
 							case RegisterResponse registerResp -> Platform.runLater(() -> {
 								handleRegisterResponse(registerResp);
 							});
+							case HistoryResponse histResp -> Platform.runLater(() -> {
+								// Laden die Chat-History vom Server
+								if ("success".equals(histResp.getStatus()) && histResp.getMessages() != null) {
+									getMessages().clear();
+									// Konvertiere ChatMessage in Message/TextMessage für die UI
+									for (ChatMessage dbMsg : histResp.getMessages()) {
+										if (dbMsg.getMessageType() == MessageType.TEXT || dbMsg.getMessageType() == MessageType.EMOJI) {
+											Message msg = new TextMessage(new User(dbMsg.getSender()), dbMsg.getContent());
+											getMessages().add(msg);
+										} else if (dbMsg.getMessageType() == MessageType.FILE) {
+											Message msg = new TextMessage(new User(dbMsg.getSender()), "[Datei: " + dbMsg.getFilePath() + "]");
+											getMessages().add(msg);
+										}
+									}
+									messageListView.refresh();
+									System.out.println("✓ Chat-History geladen: " + histResp.getMessages().size() + " Messages");
+								} else {
+									System.err.println("❌ Fehler beim Laden der History: " + histResp.getErrorMessage());
+								}
+							});
 							case null, default -> throw new IllegalStateException("Unbekanntes Paket empfangen");
 						}
 
@@ -257,7 +275,7 @@ public class Controller {
 		String text = messageTextField.getText().trim();
 		if (!text.isEmpty()) {
 			if (isEditingMessage != null) {
-				if (!sendPacket(new EditMessage(isEditingMessage.getMessageId(), text))) {
+				if (!sendPacket(new Util.Network.EditMessage(isEditingMessage.getMessageId(), text))) {
 					return;
 				}
 				isEditingMessage = null;
@@ -454,7 +472,16 @@ public class Controller {
 			this.localUser = response.getUser();
 			cacheProfilePicture(localUser);
 			updateOwnProfilePictureView();
-			loadChatHistory(); // Verlauf laden nach erfolgreichem Login
+			// Nach erfolgreichem Login: lade Chat-History vom Server
+			try {
+				HistoryRequest histReq = new HistoryRequest();
+				histReq.setSender(localUser.getUsername());  // Sender = aktueller Benutzer
+				histReq.setReceiver(null);                   // Global chat
+				histReq.setChatRoomId("main");               // Standard chat room für globale Nachrichten
+				outPacketQueue.put(histReq);
+			} catch (InterruptedException e) {
+				System.err.println("Fehler beim Senden von HistoryRequest: " + e.getMessage());
+			}
 		}
 		if (onLoginResult != null) {
 			onLoginResult.accept(response);
@@ -473,105 +500,6 @@ public class Controller {
 		}
 	}
 
-	private void loadChatHistory() {
-		List<ChatMessage> history = chatHistoryService.getHistory(null, null, "broadcast"); // Für Broadcast
-		for (ChatMessage msg : history) {
-			// Erstelle eine entsprechende Message aus ChatMessage
-			Message message;
-			if (msg.getMessageType() == MessageType.TEXT) {
-				message = new TextMessage(new User(msg.getSender()), msg.getContent());
-			} else {
-				// Für Dateien: Hier musst du die Datei laden, aber für Einfachheit zeige nur den Pfad
-				message = new TextMessage(new User(msg.getSender()), "[Datei: " + msg.getFilePath() + "]");
-			}
-			getMessages().add(message);
-		}
-		messageListView.scrollTo(getMessages().size() - 1);
-	}
-
-	private void applyProfilePictureUpdate(ProfilePictureUpdate update) {
-		if (update.getUsername() == null) {
-			return;
-		}
-
-		if (localUser != null && update.getUsername().equals(localUser.getUsername())) {
-			localUser.setProfilePicture(update.getImageBytes());
-			localUser.setProfilePictureContentType(update.getContentType());
-			updateOwnProfilePictureView();
-		}
-
-		cacheProfilePicture(update.getUsername(), update.getImageBytes(), update.getContentType());
-
-		for (Packet packet : getMessages()) {
-			if (packet instanceof Message message && message.getSender() != null
-				&& update.getUsername().equals(message.getSender().getUsername())) {
-				message.getSender().setProfilePicture(update.getImageBytes());
-				message.getSender().setProfilePictureContentType(update.getContentType());
-			}
-		}
-
-		messageListView.refresh();
-	}
-
-	private void updateOwnProfilePictureView() {
-		if (profilePictureView == null || localUser == null) {
-			return;
-		}
-
-		byte[] imageBytes = localUser.getProfilePicture();
-		if (imageBytes == null || imageBytes.length == 0) {
-			profilePictureView.setImage(null);
-			return;
-		}
-
-		profilePictureView.setImage(new Image(new ByteArrayInputStream(imageBytes)));
-	}
-
-	private void cacheProfilePicture(User user) {
-		if (user == null || user.getUsername() == null) {
-			return;
-		}
-		cacheProfilePicture(user.getUsername(), user.getProfilePicture(), user.getProfilePictureContentType());
-	}
-
-	private void cacheProfilePicture(String username, byte[] imageBytes, String contentType) {
-		if (username == null || imageBytes == null || imageBytes.length == 0) {
-			return;
-		}
-		profilePicturesByUsername.put(username, imageBytes);
-		profilePictureContentTypesByUsername.put(username, contentType);
-	}
-
-	private User createNetworkUser(User source) {
-		if (source == null) {
-			return null;
-		}
-
-		User user = new User();
-		user.setUsername(source.getUsername());
-		user.setDisplayname(source.getDisplayname());
-		user.setStatusMessage(source.getStatusMessage());
-		user.setProfileDescription(source.getProfileDescription());
-		user.setProfilePictureUUID(source.getProfilePictureUUID());
-		return user;
-	}
-
-	private String getDisplayName(User user) {
-		if (user == null) {
-			return "Unbekannt";
-		}
-		if (user.getDisplayname() != null && !user.getDisplayname().isBlank()) {
-			return user.getDisplayname();
-		}
-		if (user.getUsername() != null && !user.getUsername().isBlank()) {
-			return user.getUsername();
-		}
-		return "Unbekannt";
-	}
-
-	private String getMessageTime(Message message) {
-		return message.getSentAt() == null ? "" : message.getSentAt().format(MESSAGE_TIME_FORMAT);
-	}
 
 	private class MessageCell extends ListCell<Packet> {
 		private TextMessage editingMessage;
@@ -628,7 +556,10 @@ public class Controller {
 				case null, default -> throw new IllegalStateException("Unerwarteter Wert: " + message);
 			}
 
-			boolean isOwn = localUser != null && localUser.equals(message.getSender());
+			boolean isOwn = localUser != null
+				&& message.getSender() != null
+				&& localUser.getUsername() != null
+				&& localUser.getUsername().equals(message.getSender().getUsername());
 			node.setStyle(getBubbleStyle(isOwn));
 
 			VBox messageBox = new VBox(2);
@@ -795,7 +726,7 @@ public class Controller {
 				menu.getItems().add(deleteItem);
 				return menu;
 			}
-			
+
 			MenuItem editItem = new MenuItem("✏️ Bearbeiten");
 			editItem.setStyle("-fx-font-size: 12;");
 			editItem.setOnAction(event -> Controller.this.startEditMessage(message));
@@ -808,14 +739,91 @@ public class Controller {
 			return menu;
 		}
 	}
-	//Audio
-	public void stopCall() {
-		if (inCall) {
-			audioCall.stop();
-			inCall = false;
+
+	private void applyProfilePictureUpdate(ProfilePictureUpdate update) {
+		if (update.getUsername() == null) {
+			return;
 		}
+
+		if (localUser != null && update.getUsername().equals(localUser.getUsername())) {
+			localUser.setProfilePicture(update.getImageBytes());
+			localUser.setProfilePictureContentType(update.getContentType());
+			updateOwnProfilePictureView();
+		}
+
+		cacheProfilePicture(update.getUsername(), update.getImageBytes(), update.getContentType());
+
+		for (Packet packet : getMessages()) {
+			if (packet instanceof Message message && message.getSender() != null
+				&& update.getUsername().equals(message.getSender().getUsername())) {
+				message.getSender().setProfilePicture(update.getImageBytes());
+				message.getSender().setProfilePictureContentType(update.getContentType());
+			}
+		}
+
+		messageListView.refresh();
 	}
-	//Audio
+
+	private void updateOwnProfilePictureView() {
+		if (profilePictureView == null || localUser == null) {
+			return;
+		}
+
+		byte[] imageBytes = localUser.getProfilePicture();
+		if (imageBytes == null || imageBytes.length == 0) {
+			profilePictureView.setImage(null);
+			return;
+		}
+
+		profilePictureView.setImage(new Image(new ByteArrayInputStream(imageBytes)));
+	}
+
+	private void cacheProfilePicture(User user) {
+		if (user == null || user.getUsername() == null) {
+			return;
+		}
+		cacheProfilePicture(user.getUsername(), user.getProfilePicture(), user.getProfilePictureContentType());
+	}
+
+	private void cacheProfilePicture(String username, byte[] imageBytes, String contentType) {
+		if (username == null || imageBytes == null || imageBytes.length == 0) {
+			return;
+		}
+		profilePicturesByUsername.put(username, imageBytes);
+		profilePictureContentTypesByUsername.put(username, contentType);
+	}
+
+	private User createNetworkUser(User source) {
+		if (source == null) {
+			return null;
+		}
+
+		User user = new User();
+		user.setUsername(source.getUsername());
+		user.setDisplayname(source.getDisplayname());
+		user.setStatusMessage(source.getStatusMessage());
+		user.setProfileDescription(source.getProfileDescription());
+		user.setProfilePictureUUID(source.getProfilePictureUUID());
+		return user;
+	}
+
+	private String getDisplayName(User user) {
+		if (user == null) {
+			return "Unbekannt";
+		}
+		if (user.getDisplayname() != null && !user.getDisplayname().isBlank()) {
+			return user.getDisplayname();
+		}
+		if (user.getUsername() != null && !user.getUsername().isBlank()) {
+			return user.getUsername();
+		}
+		return "Unbekannt";
+	}
+
+	private String getMessageTime(Message message) {
+		return message.getSentAt() == null ? "" : message.getSentAt().format(MESSAGE_TIME_FORMAT);
+	}
+
 	private void startEditMessage(TextMessage message) {
 		messageTextField.setText(message.getContent());
 		messageTextField.requestFocus();
@@ -836,6 +844,14 @@ public class Controller {
 
 	private void deleteMessage(Message message) {
 		sendPacket(new DeleteMessage(message.getMessageId()));
+	}
+
+	//Audio
+	public void stopCall() {
+		if (inCall) {
+			audioCall.stop();
+			inCall = false;
+		}
 	}
 
 	public void handleCallButton() {
