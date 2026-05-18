@@ -71,30 +71,34 @@ public final class Connection {
 				local = entityManagerFactory;
 				if (local == null || !local.isOpen()) {
 					Map<String, Object> overrides = buildPersistenceOverrides();
-					try {
-						setActiveDatabaseLabel(overrides);
-						entityManagerFactory = local = Persistence.createEntityManagerFactory(PERSISTENCE_UNIT, overrides);
-						System.out.println("Datenbank verbunden: " + activeDatabaseLabel);
-					} catch (RuntimeException firstFailure) {
-						// Falls bereits H2-Fallback versucht wurde, keine weiteren Retries
-						if (triedH2Fallback) {
-							throw firstFailure;
-						}
-
-						// Fallback auf H2 bei jeder fehlgeschlagenen Remote-Verbindung (außer H2 selbst)
-						Object url = overrides.get("jakarta.persistence.jdbc.url");
-						if (url instanceof String urlString && !urlString.toLowerCase().startsWith("jdbc:h2:")) {
-							triedH2Fallback = true;
-							String dbType = isOracleUrl(urlString) ? "Oracle" : isPostgresUrl(urlString) ? "PostgreSQL" : "Datenbank";
-							System.err.println(dbType + "-Verbindung fehlgeschlagen, wechsle auf H2: " + firstFailure.getMessage());
-							Map<String, Object> h2Overrides = buildH2Overrides();
-							setActiveDatabaseLabel(h2Overrides);
-							entityManagerFactory = local = Persistence.createEntityManagerFactory(PERSISTENCE_UNIT, h2Overrides);
-							System.out.println("Datenbank verbunden: " + activeDatabaseLabel);
-						} else {
-							throw firstFailure;
-						}
+				try {
+					System.out.println("Versuche mit Überrides zu verbinden: " + overrides);
+					setActiveDatabaseLabel(overrides);
+					entityManagerFactory = local = Persistence.createEntityManagerFactory(PERSISTENCE_UNIT, overrides);
+				} catch (RuntimeException firstFailure) {
+					// Falls bereits H2-Fallback versucht wurde, keine weiteren Retries
+					if (triedH2Fallback) {
+						throw firstFailure;
 					}
+
+					// Fallback auf H2 bei jeder fehlgeschlagenen Remote-Verbindung (außer H2 selbst)
+					Object url = overrides.get("jakarta.persistence.jdbc.url");
+					System.err.println("❌ Fehler beim Verbinden zu: " + url);
+					System.err.println("Fehlerdetails:");
+					firstFailure.printStackTrace(System.err);
+
+					if (url instanceof String urlString && !urlString.toLowerCase().startsWith("jdbc:h2:")) {
+						triedH2Fallback = true;
+						String dbType = isOracleUrl(urlString) ? "Oracle" : isPostgresUrl(urlString) ? "PostgreSQL" : "Datenbank";
+						System.err.println(dbType + "-Verbindung fehlgeschlagen, wechsle auf H2: " + firstFailure.getMessage());
+						Map<String, Object> h2Overrides = buildH2Overrides();
+						setActiveDatabaseLabel(h2Overrides);
+						entityManagerFactory = local = Persistence.createEntityManagerFactory(PERSISTENCE_UNIT, h2Overrides);
+						System.out.println("⚠️  Datenbank verbunden: " + activeDatabaseLabel + " (FALLBACK!)");
+					} else {
+						throw firstFailure;
+					}
+				}
 				}
 			}
 		}
