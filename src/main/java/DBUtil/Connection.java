@@ -75,7 +75,6 @@ public final class Connection {
 					System.out.println("Versuche mit Überrides zu verbinden: " + overrides);
 					setActiveDatabaseLabel(overrides);
 					entityManagerFactory = local = Persistence.createEntityManagerFactory(PERSISTENCE_UNIT, overrides);
-					System.out.println("✅ Datenbank verbunden: " + activeDatabaseLabel);
 				} catch (RuntimeException firstFailure) {
 					// Falls bereits H2-Fallback versucht wurde, keine weiteren Retries
 					if (triedH2Fallback) {
