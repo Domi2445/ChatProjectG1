@@ -105,7 +105,7 @@
             <Separator prefWidth="200.0" GridPane.valignment="BOTTOM" />
             <ListView fx:id="messageListView" GridPane.rowIndex="1" />
             <Separator prefWidth="200.0" valignment="TOP" GridPane.rowIndex="2" GridPane.valignment="TOP" />
-            <HBox GridPane.rowIndex="2">
+            <HBox alignment="CENTER" GridPane.rowIndex="2">
                <children>
                   <TextField fx:id="messageTextField" minWidth="500.0" promptText="Nachricht eingeben ..." styleClass="rounded">
                      <HBox.margin>
