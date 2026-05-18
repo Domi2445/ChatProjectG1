@@ -34,11 +34,6 @@ public class ChatHistoryHandler {
 			List<ChatMessage> dbMessages = messageRepository.getHistoryForChat(sender, receiver, chatRoomId);
 
 			System.out.println("    🔍 Gefundene Messages in DB: " + (dbMessages != null ? dbMessages.size() : 0));
-			if (dbMessages != null && !dbMessages.isEmpty()) {
-				for (ChatMessage msg : dbMessages) {
-					System.out.println("      └─ " + msg.getSender() + ": " + msg.getContent());
-				}
-			}
 
 			HistoryResponse response = new HistoryResponse(dbMessages);
 			clientProxy.tryEnqueuePacket(response);
