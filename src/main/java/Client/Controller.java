@@ -23,6 +23,7 @@ import Util.Network.Notifications.CallNotification;
 import Util.Network.Notifications.Notification;
 import Util.Network.Packet;
 import Util.Network.ProfilePictureUpdate;
+import Util.Network.TypingIndicator;
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
 import javafx.collections.ObservableList;
@@ -48,10 +49,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.time.format.DateTimeFormatter;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.function.Consumer;
@@ -105,6 +103,14 @@ public class Controller {
 	@FXML
 	private ImageView profilePictureView;
 
+	@FXML
+	private Label typingIndicatorLabel;
+
+	// Typing Indicator Tracking
+	private final Set<String> usersTyping = new HashSet<>();
+	private Timer typingDebounceTimer;
+	private static final long TYPING_DEBOUNCE_MS = 300;
+
 	public Controller() {
 		this.outPacketQueue = new ArrayBlockingQueue<>(PACKET_QUEUE_SIZE);
 		this.inPacketQueue = new ArrayBlockingQueue<>(PACKET_QUEUE_SIZE);
@@ -129,6 +135,23 @@ public class Controller {
 		profilePictureButton.setOnAction(e -> uploadProfilePicture());
 		videoCallButton.setOnAction(e -> handleCallButton());
 
+		// Typing Indicator: TextChangeListener
+		messageTextField.textProperty().addListener((obs, oldVal, newVal) -> {
+			if (!newVal.trim().isEmpty()) {
+				// Benutzer tippt
+				if (newVal.length() > oldVal.length()) {
+					scheduleSendTypingIndicator(true);
+				}
+			} else if (newVal.isEmpty() && !oldVal.isEmpty()) {
+				// Benutzer hat alles gelöscht
+				try {
+					outPacketQueue.put(new TypingIndicator(localUser.getUsername(), false));
+				} catch (InterruptedException ex) {
+					// Ignore
+				}
+				cancelTypingDebounce();
+			}
+		});
 	}
 
 	public void configure(Stage stage, User user) {
@@ -205,6 +228,7 @@ public class Controller {
 								}
 							});
 							case ProfilePictureUpdate update -> Platform.runLater(() -> applyProfilePictureUpdate(update));
+							case TypingIndicator typing -> Platform.runLater(() -> handleTypingIndicator(typing));
 							case ConnectionClosed closed -> Platform.runLater(() -> handleConnectionClosed(closed));
 							case LoginResponse loginResp -> Platform.runLater(() -> { //FÜR UI CALLBACK
 								handleLoginResponse(loginResp);
@@ -911,4 +935,69 @@ public class Controller {
 	}
 
 
+	// Typing Indicator Handler
+	private void scheduleSendTypingIndicator(boolean isTyping) {
+		cancelTypingDebounce();
+		try {
+			outPacketQueue.put(new TypingIndicator(localUser.getUsername(), isTyping));
+		} catch (InterruptedException ex) {
+			// Ignore
+		}
+
+		// Debounce Timer: nach TYPING_DEBOUNCE_MS wird wieder die isTyping=true gesendet (solange weiterhin getippt wird)
+		typingDebounceTimer = new Timer();
+		typingDebounceTimer.schedule(new TimerTask() {
+			@Override
+			public void run() {
+				try {
+					if (!messageTextField.getText().trim().isEmpty()) {
+						outPacketQueue.put(new TypingIndicator(localUser.getUsername(), true));
+						// Plane nächsten Timer
+						scheduleSendTypingIndicator(true);
+					}
+				} catch (InterruptedException ex) {
+					// Ignore
+				}
+			}
+		}, TYPING_DEBOUNCE_MS);
+	}
+
+	private void cancelTypingDebounce() {
+		if (typingDebounceTimer != null) {
+			typingDebounceTimer.cancel();
+			typingDebounceTimer = null;
+		}
+	}
+
+	private void handleTypingIndicator(TypingIndicator typing) {
+		if (typing.getUsername().equals(localUser.getUsername())) {
+			// Ignore eigene Typing-Indikatoren
+			return;
+		}
+
+		if (typing.isTyping()) {
+			usersTyping.add(typing.getUsername());
+		} else {
+			usersTyping.remove(typing.getUsername());
+		}
+
+		updateTypingIndicatorLabel();
+	}
+
+	private void updateTypingIndicatorLabel() {
+		if (usersTyping.isEmpty()) {
+			typingIndicatorLabel.setVisible(false);
+			typingIndicatorLabel.setText("");
+		} else if (usersTyping.size() == 1) {
+			String user = usersTyping.iterator().next();
+			typingIndicatorLabel.setText(user + " schreibt...");
+			typingIndicatorLabel.setVisible(true);
+		} else {
+			String users = String.join(", ", usersTyping);
+			typingIndicatorLabel.setText(users + " schreiben...");
+			typingIndicatorLabel.setVisible(true);
+		}
+	}
+
 }
+
