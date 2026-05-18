@@ -23,7 +23,6 @@ import Util.Network.Notifications.CallNotification;
 import Util.Network.Notifications.Notification;
 import Util.Network.Packet;
 import Util.Network.ProfilePictureUpdate;
-import Util.Network.TypingIndicator;
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
 import javafx.collections.ObservableList;
@@ -50,7 +49,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -107,11 +105,6 @@ public class Controller {
 	@FXML
 	private ImageView profilePictureView;
 
-	@FXML
-	private Label typingIndicatorLabel;
-	
-	private final Set<String> usersTyping = new HashSet<>();
-
 	public Controller() {
 		this.outPacketQueue = new ArrayBlockingQueue<>(PACKET_QUEUE_SIZE);
 		this.inPacketQueue = new ArrayBlockingQueue<>(PACKET_QUEUE_SIZE);
@@ -136,17 +129,6 @@ public class Controller {
 		profilePictureButton.setOnAction(e -> uploadProfilePicture());
 		videoCallButton.setOnAction(e -> handleCallButton());
 
-		// TextChangeListener für Typing Indicator - nur bei Zustandsänderungen
-		messageTextField.textProperty().addListener((obs, oldVal, newVal) -> {
-			boolean wasEmpty = oldVal.trim().isEmpty();
-			boolean isNowEmpty = newVal.trim().isEmpty();
-
-			if (wasEmpty && !isNowEmpty) {
-				sendTypingIndication(true);
-			} else if (!wasEmpty && isNowEmpty) {
-				sendTypingIndication(false);
-			}
-		});
 	}
 
 	public void configure(Stage stage, User user) {
@@ -168,10 +150,7 @@ public class Controller {
 						Packet packet = inPacketQueue.take();
 						switch (packet) {
 							case Message message -> Platform.runLater(() -> {
-								// Nur hinzufügen wenn es nicht die eigene Nachricht ist (Deduplication)
-								if (localUser == null || message.getSender() == null || !message.getSender().equals(localUser)) {
-									getMessages().add(message);
-								}
+								getMessages().add(message);
 								// Sende ReadReceipt, wenn die Nachricht nicht von uns selbst stammt
 								if (localUser != null && message.getSender() != null && !message.getSender().equals(localUser)) {
 									try {
@@ -224,10 +203,9 @@ public class Controller {
 										break;
 									}
 								}
-						});
-						case ProfilePictureUpdate update -> Platform.runLater(() -> applyProfilePictureUpdate(update));
-						case TypingIndicator typing -> Platform.runLater(() -> handleTypingIndicator(typing));
-						case ConnectionClosed closed -> Platform.runLater(() -> handleConnectionClosed(closed));
+							});
+							case ProfilePictureUpdate update -> Platform.runLater(() -> applyProfilePictureUpdate(update));
+							case ConnectionClosed closed -> Platform.runLater(() -> handleConnectionClosed(closed));
 							case LoginResponse loginResp -> Platform.runLater(() -> { //FÜR UI CALLBACK
 								handleLoginResponse(loginResp);
 							});
@@ -286,9 +264,7 @@ public class Controller {
 				resetSendButton();
 			} else {
 				Message message = new TextMessage(createNetworkUser(localUser), text);
-				getMessages().add(message);
 				if (!sendPacket(message)) {
-					getMessages().remove(message);
 					return;
 				}
 			}
@@ -932,45 +908,6 @@ public class Controller {
 			alert.setContentText(e.toString());
 			alert.show();
 		}
-	}
-
-
-	// ========== TYPING INDICATOR METHODS ==========
-
-	private void sendTypingIndication(boolean isTyping) {
-		if (localUser == null) return;
-		sendPacket(new TypingIndicator(localUser.getUsername(), isTyping));
-	}
-
-	private void handleTypingIndicator(TypingIndicator typing) {
-		if (localUser == null || typing.getUsername().equals(localUser.getUsername())) {
-			return; // Nur fremde Benutzer anzeigen, nicht sich selbst
-		}
-
-		if (typing.isTyping()) {
-			usersTyping.add(typing.getUsername());
-		} else {
-			usersTyping.remove(typing.getUsername());
-		}
-
-		updateTypingIndicatorLabel();
-	}
-
-	private void updateTypingIndicatorLabel() {
-		Platform.runLater(() -> {
-			if (usersTyping.isEmpty()) {
-				typingIndicatorLabel.setText("");
-				typingIndicatorLabel.setVisible(false);
-			} else if (usersTyping.size() == 1) {
-				String username = usersTyping.iterator().next();
-				typingIndicatorLabel.setText(username + " schreibt...");
-				typingIndicatorLabel.setVisible(true);
-			} else {
-				String names = String.join(", ", usersTyping);
-				typingIndicatorLabel.setText(names + " schreiben...");
-				typingIndicatorLabel.setVisible(true);
-			}
-		});
 	}
 
 
