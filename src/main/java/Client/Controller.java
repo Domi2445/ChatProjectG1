@@ -479,7 +479,6 @@ public class Controller {
 				histReq.setReceiver(null);                   // Global chat
 				histReq.setChatRoomId("main");               // Standard chat room für globale Nachrichten
 				outPacketQueue.put(histReq);
-				System.out.println("📥 HistoryRequest gesendet: Benutzer=" + localUser.getUsername() + ", ChatRoom=main");
 			} catch (InterruptedException e) {
 				System.err.println("Fehler beim Senden von HistoryRequest: " + e.getMessage());
 			}
