@@ -2,6 +2,7 @@
 
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.*?>
+<?import javafx.scene.image.ImageView?>
 <?import javafx.scene.layout.*?>
 <BorderPane xmlns:fx="http://javafx.com/fxml/1" xmlns="http://javafx.com/javafx/21" fx:controller="Client.Controller"
             style="-fx-background-color: #1e1e2e;">
@@ -14,6 +15,10 @@
 			</padding>
 			<Label style="-fx-text-fill: #cdd6f4; -fx-font-size: 18;" text="Socket Chat"/>
 			<Region HBox.hgrow="ALWAYS"/>
+			<ImageView fx:id="profilePictureView" fitHeight="34" fitWidth="34" preserveRatio="false"/>
+			<Button fx:id="profilePictureButton" mnemonicParsing="false"
+			        style="-fx-background-color: #45475a; -fx-text-fill: #cdd6f4; -fx-font-size: 14; -fx-background-radius: 20; -fx-min-width: 95; -fx-min-height: 40;"
+			        text="Profilbild"/>
 			<Button fx:id="videoCallButton" mnemonicParsing="false"
 			        style="-fx-background-color: #45475a; -fx-text-fill: #cdd6f4; -fx-font-size: 14; -fx-background-radius: 20; -fx-min-width: 70; -fx-min-height: 40;"
 			        text="Call"/>

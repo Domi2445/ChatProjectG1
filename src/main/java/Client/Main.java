@@ -1,6 +1,7 @@
 package Client;
 
 import javafx.application.Application;
+import javafx.application.Platform;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
@@ -27,6 +28,13 @@ public class Main extends Application {
 		if (!chatController.connectAndRun(host, port)) {
 			return;
 		}
+			// Audio - Beim Schließen des Fensters den Anruf beenden
+			primaryStage.setOnCloseRequest(e -> {
+				chatController.stopCall();
+				Platform.exit();
+				System.exit(0);
+			});
+
 
 		Scene chatScene = new Scene(chatRoot, 1280, 720);
 
@@ -42,5 +50,7 @@ public class Main extends Application {
 		primaryStage.setMinWidth(350);
 		primaryStage.setMinHeight(400);
 		primaryStage.show();
+
+
 	}
 }

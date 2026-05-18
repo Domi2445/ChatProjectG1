@@ -1,5 +1,6 @@
 package Client;
 
+import AudioCall.AudioCall;
 import User.Login.Status;
 import User.Model.User;
 import User.Repository.ChatHistoryService;
@@ -10,14 +11,18 @@ import Util.Network.Auth.LoginRequest;
 import Util.Network.Auth.LoginResponse;
 import Util.Network.Auth.RegisterRequest;
 import Util.Network.Auth.RegisterResponse;
+import Util.Network.ConnectionClosed;
 import Util.Network.DeleteMessage;
+import Util.Network.EditMessage;
 import Util.Network.Messages.FileMessage;
 import Util.Network.Messages.Message;
 import Util.Network.Messages.TextMessage;
 import Util.Network.Notifications.JoinNotification;
 import Util.Network.Notifications.LeaveNotification;
+import Util.Network.Notifications.CallNotification;
 import Util.Network.Notifications.Notification;
 import Util.Network.Packet;
+import Util.Network.ProfilePictureUpdate;
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
 import javafx.collections.ObservableList;
@@ -33,22 +38,32 @@ import javafx.scene.layout.VBox;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
+import javax.imageio.ImageIO;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.function.Consumer;
-import AudioCall.AudioCall;
-import Util.Network.Notifications.CallNotification;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class Controller {
 	public static final int MAX_FILE_SIZE = 1_000_000;
+	public static final int MAX_PROFILE_PICTURE_SIZE = 500_000;
+	public static final int PROFILE_PICTURE_SIZE = 96;
+	public static final int PACKET_QUEUE_SIZE = 128;
+	private static final DateTimeFormatter MESSAGE_TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
 
 	private final BlockingQueue<Packet> outPacketQueue;
 	private final BlockingQueue<Packet> inPacketQueue;
@@ -61,10 +76,11 @@ public class Controller {
 	private Stage stage;
 	private TextMessage isEditingMessage;
 	private ChatHistoryService chatHistoryService = new ChatHistoryService();
-
-	// Audio Call
+	private final Map<String, byte[]> profilePicturesByUsername = new HashMap<>();
+	private final Map<String, String> profilePictureContentTypesByUsername = new HashMap<>();
+	private boolean profilePictureSyncEnabled;
 	private static final String RELAY_IP = "217.154.156.40";
-	private static final int RELAY_PORT = 3298;
+	private static final int RELAY_PORT = 443;
 	private final AudioCall audioCall = new AudioCall();
 	private boolean inCall = false;
 
@@ -83,9 +99,15 @@ public class Controller {
 	@FXML
 	private Button videoCallButton;
 
+	@FXML
+	private Button profilePictureButton;
+
+	@FXML
+	private ImageView profilePictureView;
+
 	public Controller() {
-		this.outPacketQueue = new ArrayBlockingQueue<>(4);
-		this.inPacketQueue = new ArrayBlockingQueue<>(4);
+		this.outPacketQueue = new ArrayBlockingQueue<>(PACKET_QUEUE_SIZE);
+		this.inPacketQueue = new ArrayBlockingQueue<>(PACKET_QUEUE_SIZE);
 	}
 	
 	// UI registriert hier ihren Handler (z.B. Screen-Wechsel bei Success)
@@ -104,7 +126,9 @@ public class Controller {
 		sendButton.setOnAction(e -> sendMessage());
 		messageTextField.setOnAction(e -> sendMessage());
 		uploadButton.setOnAction(e -> sendFile());
+		profilePictureButton.setOnAction(e -> uploadProfilePicture());
 		videoCallButton.setOnAction(e -> handleCallButton());
+
 	}
 
 	public void configure(Stage stage, User user) {
@@ -114,6 +138,7 @@ public class Controller {
 
 	public boolean connectAndRun(String ip, int port) {
 		try {
+			profilePictureSyncEnabled = Boolean.parseBoolean(System.getProperty("profile.sync", "false"));
 			client = new Client(ip, port, outPacketQueue, inPacketQueue);
 			Thread clientThread = new Thread(client, "ClientThread");
 			clientThread.setDaemon(true);
@@ -171,9 +196,16 @@ public class Controller {
 										messageListView.getItems().set(i, msg);
 										messageListView.refresh();
 										break;
+									} else if (p instanceof FileMessage msg && msg.getMessageId() == delete.getMessageId()) {
+										msg.setDeleted();
+										messageListView.getItems().set(i, msg);
+										messageListView.refresh();
+										break;
 									}
 								}
 							});
+							case ProfilePictureUpdate update -> Platform.runLater(() -> applyProfilePictureUpdate(update));
+							case ConnectionClosed closed -> Platform.runLater(() -> handleConnectionClosed(closed));
 							case LoginResponse loginResp -> Platform.runLater(() -> { //FÜR UI CALLBACK
 								handleLoginResponse(loginResp);
 							});
@@ -210,24 +242,30 @@ public class Controller {
 		return messageListView.getItems();
 	}
 
+	private boolean sendPacket(Packet packet) {
+		if (!outPacketQueue.offer(packet)) {
+			Alert alert = new Alert(Alert.AlertType.ERROR);
+			alert.setHeaderText("Nachricht konnte nicht gesendet werden");
+			alert.setContentText("Die Verbindung ist gerade ausgelastet. Bitte versuche es gleich nochmal.");
+			alert.show();
+			return false;
+		}
+		return true;
+	}
+
 	private void sendMessage() {
 		String text = messageTextField.getText().trim();
 		if (!text.isEmpty()) {
 			if (isEditingMessage != null) {
-				isEditingMessage.setEditedContent(text);
-				int index = getMessages().indexOf(isEditingMessage);
-				if (index >= 0) {
-					messageListView.getItems().set(index, isEditingMessage);
-					messageListView.refresh();
+				if (!sendPacket(new EditMessage(isEditingMessage.getMessageId(), text))) {
+					return;
 				}
 				isEditingMessage = null;
 				resetSendButton();
 			} else {
-				Message message = new TextMessage(localUser, text);
-				try {
-					outPacketQueue.put(message);
-				} catch (InterruptedException ex) {
-					throw new RuntimeException(ex);
+				Message message = new TextMessage(createNetworkUser(localUser), text);
+				if (!sendPacket(message)) {
+					return;
 				}
 			}
 
@@ -271,16 +309,104 @@ public class Controller {
 
 		String fileName = selectedFile.getName();
 		String fileExt = FileUtil.getFileExtension(fileName).toLowerCase();
-		Message message = new FileMessage(localUser, bytes, fileExt);
+		Message message = new FileMessage(createNetworkUser(localUser), bytes, fileExt);
 
-		try {
-			outPacketQueue.put(message);
-		} catch (InterruptedException e) {
-			throw new RuntimeException(e);
+		if (!sendPacket(message)) {
+			return;
 		}
 
 		messageListView.scrollTo(getMessages().size() - 1);
 		messageTextField.clear();
+	}
+
+	private void uploadProfilePicture() {
+		if (localUser == null) {
+			return;
+		}
+
+		FileChooser fileChooser = new FileChooser();
+		fileChooser.setTitle("Profilbild auswaehlen");
+		fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Bilder", "*.png", "*.jpg", "*.jpeg", "*.gif"));
+		File selectedFile = fileChooser.showOpenDialog(stage);
+
+		if (selectedFile == null || !selectedFile.isFile()) {
+			return;
+		}
+
+		if (selectedFile.length() > MAX_FILE_SIZE) {
+			Alert alert = new Alert(Alert.AlertType.ERROR);
+			alert.setHeaderText("Das Profilbild ist zu gross!");
+			alert.setContentText(selectedFile.length() + " Bytes / " + MAX_FILE_SIZE + " Bytes");
+			alert.show();
+			return;
+		}
+
+		String extension = FileUtil.getFileExtension(selectedFile.getName()).toLowerCase();
+		if (!FileUtil.isImageExtension(extension)) {
+			Alert alert = new Alert(Alert.AlertType.ERROR);
+			alert.setHeaderText("Bitte eine Bilddatei auswaehlen");
+			alert.show();
+			return;
+		}
+
+		try {
+			byte[] bytes = createProfilePictureBytes(selectedFile);
+			if (bytes.length > MAX_PROFILE_PICTURE_SIZE) {
+				Alert alert = new Alert(Alert.AlertType.ERROR);
+				alert.setHeaderText("Profilbild konnte nicht verkleinert werden");
+				alert.setContentText(bytes.length + " Bytes / " + MAX_PROFILE_PICTURE_SIZE + " Bytes");
+				alert.show();
+				return;
+			}
+			localUser.setProfilePicture(bytes);
+			localUser.setProfilePictureContentType("image/jpeg");
+			cacheProfilePicture(localUser.getUsername(), bytes, localUser.getProfilePictureContentType());
+			updateOwnProfilePictureView();
+			messageListView.refresh();
+			if (profilePictureSyncEnabled) {
+				sendPacket(new ProfilePictureUpdate(localUser.getUsername(), bytes, "image/jpeg"));
+			}
+		} catch (IOException e) {
+			Alert alert = new Alert(Alert.AlertType.ERROR);
+			alert.setHeaderText("Profilbild konnte nicht geoeffnet werden");
+			alert.setContentText(e.toString());
+			alert.show();
+		}
+	}
+
+	private String normalizeImageExtension(String extension) {
+		return "jpg".equals(extension) ? "jpeg" : extension;
+	}
+
+	private byte[] createProfilePictureBytes(File selectedFile) throws IOException {
+		BufferedImage original = ImageIO.read(selectedFile);
+		if (original == null) {
+			throw new IOException("Bildformat konnte nicht gelesen werden");
+		}
+
+		BufferedImage scaled = new BufferedImage(PROFILE_PICTURE_SIZE, PROFILE_PICTURE_SIZE, BufferedImage.TYPE_INT_RGB);
+		Graphics2D graphics = scaled.createGraphics();
+		try {
+			graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+			graphics.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+			graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+			graphics.setColor(java.awt.Color.WHITE);
+			graphics.fillRect(0, 0, PROFILE_PICTURE_SIZE, PROFILE_PICTURE_SIZE);
+
+			int sourceSize = Math.min(original.getWidth(), original.getHeight());
+			int sourceX = (original.getWidth() - sourceSize) / 2;
+			int sourceY = (original.getHeight() - sourceSize) / 2;
+			graphics.drawImage(original, 0, 0, PROFILE_PICTURE_SIZE, PROFILE_PICTURE_SIZE,
+				sourceX, sourceY, sourceX + sourceSize, sourceY + sourceSize, null);
+		} finally {
+			graphics.dispose();
+		}
+
+		ByteArrayOutputStream output = new ByteArrayOutputStream();
+		if (!ImageIO.write(scaled, "jpg", output)) {
+			throw new IOException("Profilbild konnte nicht als JPG gespeichert werden");
+		}
+		return output.toByteArray();
 	}
 
 	private void handleNotification(Notification notification) {
@@ -296,6 +422,13 @@ public class Controller {
 			case null, default -> throw new IllegalStateException("Unbekannte Systemnachricht");
 		}
 
+	}
+
+	private void handleConnectionClosed(ConnectionClosed closed) {
+		Alert alert = new Alert(Alert.AlertType.ERROR);
+		alert.setHeaderText("Verbindung zum Server getrennt");
+		alert.setContentText(closed.getReason());
+		alert.show();
 	}
 
 	public void sendLoginRequest(String username, String password) {
@@ -319,6 +452,8 @@ public class Controller {
 	private void handleLoginResponse(LoginResponse response) {
 		if (response.getStatus() == Status.SUCCESS) {
 			this.localUser = response.getUser();
+			cacheProfilePicture(localUser);
+			updateOwnProfilePictureView();
 			loadChatHistory(); // Verlauf laden nach erfolgreichem Login
 		}
 		if (onLoginResult != null) {
@@ -329,6 +464,8 @@ public class Controller {
 	private void handleRegisterResponse(RegisterResponse response) {
 		if (response.getStatus() == Status.SUCCESS) {
 			this.localUser = response.getUser();
+			cacheProfilePicture(localUser);
+			updateOwnProfilePictureView();
 		}
 
 		if (onRegisterResult != null) {
@@ -350,6 +487,90 @@ public class Controller {
 			getMessages().add(message);
 		}
 		messageListView.scrollTo(getMessages().size() - 1);
+	}
+
+	private void applyProfilePictureUpdate(ProfilePictureUpdate update) {
+		if (update.getUsername() == null) {
+			return;
+		}
+
+		if (localUser != null && update.getUsername().equals(localUser.getUsername())) {
+			localUser.setProfilePicture(update.getImageBytes());
+			localUser.setProfilePictureContentType(update.getContentType());
+			updateOwnProfilePictureView();
+		}
+
+		cacheProfilePicture(update.getUsername(), update.getImageBytes(), update.getContentType());
+
+		for (Packet packet : getMessages()) {
+			if (packet instanceof Message message && message.getSender() != null
+				&& update.getUsername().equals(message.getSender().getUsername())) {
+				message.getSender().setProfilePicture(update.getImageBytes());
+				message.getSender().setProfilePictureContentType(update.getContentType());
+			}
+		}
+
+		messageListView.refresh();
+	}
+
+	private void updateOwnProfilePictureView() {
+		if (profilePictureView == null || localUser == null) {
+			return;
+		}
+
+		byte[] imageBytes = localUser.getProfilePicture();
+		if (imageBytes == null || imageBytes.length == 0) {
+			profilePictureView.setImage(null);
+			return;
+		}
+
+		profilePictureView.setImage(new Image(new ByteArrayInputStream(imageBytes)));
+	}
+
+	private void cacheProfilePicture(User user) {
+		if (user == null || user.getUsername() == null) {
+			return;
+		}
+		cacheProfilePicture(user.getUsername(), user.getProfilePicture(), user.getProfilePictureContentType());
+	}
+
+	private void cacheProfilePicture(String username, byte[] imageBytes, String contentType) {
+		if (username == null || imageBytes == null || imageBytes.length == 0) {
+			return;
+		}
+		profilePicturesByUsername.put(username, imageBytes);
+		profilePictureContentTypesByUsername.put(username, contentType);
+	}
+
+	private User createNetworkUser(User source) {
+		if (source == null) {
+			return null;
+		}
+
+		User user = new User();
+		user.setUsername(source.getUsername());
+		user.setDisplayname(source.getDisplayname());
+		user.setStatusMessage(source.getStatusMessage());
+		user.setProfileDescription(source.getProfileDescription());
+		user.setProfilePictureUUID(source.getProfilePictureUUID());
+		return user;
+	}
+
+	private String getDisplayName(User user) {
+		if (user == null) {
+			return "Unbekannt";
+		}
+		if (user.getDisplayname() != null && !user.getDisplayname().isBlank()) {
+			return user.getDisplayname();
+		}
+		if (user.getUsername() != null && !user.getUsername().isBlank()) {
+			return user.getUsername();
+		}
+		return "Unbekannt";
+	}
+
+	private String getMessageTime(Message message) {
+		return message.getSentAt() == null ? "" : message.getSentAt().format(MESSAGE_TIME_FORMAT);
 	}
 
 	private class MessageCell extends ListCell<Packet> {
@@ -393,7 +614,17 @@ public class Controller {
 
 					node = label;
 				}
-				case FileMessage fileMessage -> node = createFileNode(fileMessage);
+				case FileMessage fileMessage -> {
+					if (fileMessage.isDeleted()) {
+						Label label = new Label("Diese Datei wurde geloescht");
+						label.setWrapText(true);
+						label.setMaxWidth(300);
+						label.setStyle("-fx-text-fill: #6c7086; -fx-font-style: italic;");
+						node = label;
+					} else {
+						node = createFileNode(fileMessage);
+					}
+				}
 				case null, default -> throw new IllegalStateException("Unerwarteter Wert: " + message);
 			}
 
@@ -401,6 +632,9 @@ public class Controller {
 			node.setStyle(getBubbleStyle(isOwn));
 
 			VBox messageBox = new VBox(2);
+			Label metaLabel = new Label(getDisplayName(message.getSender()) + "  " + getMessageTime(message));
+			metaLabel.setStyle("-fx-font-size: 11; -fx-text-fill: #9399b2;");
+			messageBox.getChildren().add(metaLabel);
 			messageBox.getChildren().add(node);
 
 			if (message instanceof TextMessage textMessage && textMessage.isEdited() && !textMessage.isDeleted()) {
@@ -416,18 +650,54 @@ public class Controller {
 				messageBox.getChildren().add(readStatus);
 			}
 
-			HBox container = new HBox(messageBox);
+			Node avatar = createAvatarNode(message.getSender());
+			HBox container = isOwn ? new HBox(8, messageBox, avatar) : new HBox(8, avatar, messageBox);
 			container.setAlignment(isOwn ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT);
 			container.setPadding(new Insets(2, 10, 2, 10));
 
-			if (isOwn && message instanceof TextMessage textMessage && !textMessage.isDeleted()) {
+			if (isOwn && canShowContextMenu(message)) {
 				container.setOnContextMenuRequested(event -> {
-					ContextMenu contextMenu = createMessageContextMenu(textMessage);
+					ContextMenu contextMenu = createMessageContextMenu(message);
 					contextMenu.show(container, event.getScreenX(), event.getScreenY());
 				});
 			}
 
 			return container;
+		}
+
+		private Node createAvatarNode(User user) {
+			byte[] imageBytes = getProfilePictureBytes(user);
+			if (imageBytes != null && imageBytes.length > 0) {
+				ImageView imageView = new ImageView(new Image(new ByteArrayInputStream(imageBytes)));
+				imageView.setFitWidth(32);
+				imageView.setFitHeight(32);
+				imageView.setPreserveRatio(false);
+				return imageView;
+			}
+
+			Label fallback = new Label(getAvatarInitial(user));
+			fallback.setAlignment(Pos.CENTER);
+			fallback.setMinSize(32, 32);
+			fallback.setPrefSize(32, 32);
+			fallback.setMaxSize(32, 32);
+			fallback.setStyle("-fx-background-color: #45475a; -fx-text-fill: #cdd6f4; -fx-font-weight: bold; -fx-background-radius: 16;");
+			return fallback;
+		}
+
+		private byte[] getProfilePictureBytes(User user) {
+			if (user == null) {
+				return null;
+			}
+			byte[] imageBytes = user.getProfilePicture();
+			if (imageBytes != null && imageBytes.length > 0) {
+				return imageBytes;
+			}
+			return profilePicturesByUsername.get(user.getUsername());
+		}
+
+		private String getAvatarInitial(User user) {
+			String name = getDisplayName(user);
+			return name.isBlank() ? "?" : name.substring(0, 1).toUpperCase();
 		}
 
 		private String getReadCheckmarks(Message message) {
@@ -506,8 +776,25 @@ public class Controller {
 				+ "-fx-text-fill: " + color + "; -fx-font-style: italic;");
 		}
 
-		private ContextMenu createMessageContextMenu(TextMessage message) {
+		private boolean canShowContextMenu(Message message) {
+			if (message instanceof TextMessage textMessage) {
+				return !textMessage.isDeleted();
+			}
+			if (message instanceof FileMessage fileMessage) {
+				return !fileMessage.isDeleted();
+			}
+			return false;
+		}
+
+		private ContextMenu createMessageContextMenu(Message message) {
 			ContextMenu menu = new ContextMenu();
+			if (message instanceof FileMessage) {
+				MenuItem deleteItem = new MenuItem("Loeschen");
+				deleteItem.setStyle("-fx-font-size: 12;");
+				deleteItem.setOnAction(event -> Controller.this.deleteMessage(message));
+				menu.getItems().add(deleteItem);
+				return menu;
+			}
 			
 			MenuItem editItem = new MenuItem("✏️ Bearbeiten");
 			editItem.setStyle("-fx-font-size: 12;");
@@ -521,7 +808,14 @@ public class Controller {
 			return menu;
 		}
 	}
-	
+	//Audio
+	public void stopCall() {
+		if (inCall) {
+			audioCall.stop();
+			inCall = false;
+		}
+	}
+	//Audio
 	private void startEditMessage(TextMessage message) {
 		messageTextField.setText(message.getContent());
 		messageTextField.requestFocus();
@@ -530,26 +824,36 @@ public class Controller {
 		sendButton.setStyle("-fx-background-color: #a6e3a1; -fx-text-fill: #1e1e2e; -fx-font-size: 14; -fx-background-radius: 20; -fx-min-width: 70; -fx-min-height: 40;");
 	}
 
-	private void deleteMessage(TextMessage message) {
-		message.setDeleted();
-		int index = getMessages().indexOf(message);
-		if (index >= 0) {
-			messageListView.getItems().set(index, message);
+	private void startEditMessage(Message message) {
+		if (message instanceof TextMessage textMessage) {
+			startEditMessage(textMessage);
 		}
 	}
 
-	//Audio Call
+	private void deleteMessage(TextMessage message) {
+		sendPacket(new DeleteMessage(message.getMessageId()));
+	}
+
+	private void deleteMessage(Message message) {
+		sendPacket(new DeleteMessage(message.getMessageId()));
+	}
+
 	public void handleCallButton() {
 		if (!inCall) {
 			TextInputDialog dialog = new TextInputDialog();
 			dialog.setTitle("Anruf starten");
-			dialog.setHeaderText("Benutzername des Empfängers:");
+			dialog.setHeaderText("Benutzername des Empfaengers:");
 			String target = dialog.showAndWait().orElse(null);
-			if (target == null || target.isBlank()) return;
-			try {
-				outPacketQueue.put(new CallNotification(
-					CallNotification.CallType.REQUEST, localUser, target, 0));
-			} catch (InterruptedException e) { e.printStackTrace(); }
+			if (target == null || target.isBlank()) {
+				return;
+			}
+
+			sendPacket(new CallNotification(
+				CallNotification.CallType.REQUEST,
+				createNetworkUser(localUser),
+				target,
+				0
+			));
 		} else {
 			audioCall.stop();
 			inCall = false;
@@ -561,7 +865,9 @@ public class Controller {
 	}
 
 	private void handleCallNotification(CallNotification call) {
-		if (localUser == null || !call.getTargetUsername().equals(localUser.getUsername())) return;
+		if (localUser == null || call.getTargetUsername() == null || !call.getTargetUsername().equals(localUser.getUsername())) {
+			return;
+		}
 
 		switch (call.getType()) {
 			case REQUEST -> {
@@ -569,22 +875,26 @@ public class Controller {
 				alert.setTitle("Eingehender Anruf");
 				alert.setHeaderText("Anruf von: " + call.getSender().getUsername());
 				boolean accepted = alert.showAndWait().orElse(ButtonType.CANCEL) == ButtonType.OK;
-				try {
-					outPacketQueue.put(new CallNotification(
-						accepted ? CallNotification.CallType.ACCEPT : CallNotification.CallType.REJECT,
-						localUser, call.getSender().getUsername(), 0));
-					if (accepted) startAudioCall(call);
-				} catch (InterruptedException e) { e.printStackTrace(); }
+				sendPacket(new CallNotification(
+					accepted ? CallNotification.CallType.ACCEPT : CallNotification.CallType.REJECT,
+					createNetworkUser(localUser),
+					call.getSender().getUsername(),
+					0
+				));
+				if (accepted) {
+					startAudioCall(call);
+				}
 			}
 			case ACCEPT -> startAudioCall(call);
 			case REJECT -> getMessages().add(
-				new TextMessage(localUser, call.getSender().getUsername() + " hat abgelehnt."));
+				new TextMessage(createNetworkUser(localUser), call.getSender().getUsername() + " hat abgelehnt."));
 		}
 	}
 
 	private void startAudioCall(CallNotification call) {
 		String roomId = Stream.of(localUser.getUsername(), call.getSender().getUsername())
-			.sorted().collect(Collectors.joining("-"));
+			.sorted()
+			.collect(Collectors.joining("-"));
 		try {
 			audioCall.start(RELAY_IP, RELAY_PORT, roomId);
 			inCall = true;
@@ -592,6 +902,13 @@ public class Controller {
 				"-fx-background-color: #f38ba8; -fx-text-fill: #1e1e2e; -fx-font-size: 14; " +
 					"-fx-background-radius: 20; -fx-min-width: 70; -fx-min-height: 40;"
 			);
-		} catch (Exception e) { e.printStackTrace(); }
+		} catch (Exception e) {
+			Alert alert = new Alert(Alert.AlertType.ERROR);
+			alert.setHeaderText("Anruf konnte nicht gestartet werden");
+			alert.setContentText(e.toString());
+			alert.show();
+		}
 	}
+
+
 }
