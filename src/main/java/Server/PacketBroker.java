@@ -175,7 +175,6 @@ public class PacketBroker implements Runnable {
 		synchronized (clients) {
 			for (var client : clients) {
 				if (client.shouldStop()) {
-					System.out.println("     └─ Client wird abgebaut (shouldStop=true)");
 					clientsToUnregister.add(client);
 				} else if (client.getUser() == null) {
 					System.out.println("     └─ Client hat kein User (nicht eingeloggt)");
