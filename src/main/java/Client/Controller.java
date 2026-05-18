@@ -23,8 +23,6 @@ import Util.Network.Notifications.CallNotification;
 import Util.Network.Notifications.Notification;
 import Util.Network.Packet;
 import Util.Network.ProfilePictureUpdate;
-import Util.Network.TypingStatus;
-import javafx.animation.PauseTransition;
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
 import javafx.collections.ObservableList;
@@ -39,7 +37,6 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
-import javafx.util.Duration;
 
 import javax.imageio.ImageIO;
 import java.awt.Graphics2D;
@@ -52,7 +49,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -82,25 +78,17 @@ public class Controller {
 	private ChatHistoryService chatHistoryService = new ChatHistoryService();
 	private final Map<String, byte[]> profilePicturesByUsername = new HashMap<>();
 	private final Map<String, String> profilePictureContentTypesByUsername = new HashMap<>();
-	private final Map<String, User> typingUsersByUsername = new LinkedHashMap<>();
-	private final Map<String, PauseTransition> typingTimeoutsByUsername = new HashMap<>();
 	private boolean profilePictureSyncEnabled;
 	private static final String RELAY_IP = "217.154.156.40";
 	private static final int RELAY_PORT = 443;
 	private final AudioCall audioCall = new AudioCall();
 	private boolean inCall = false;
-	private PauseTransition typingStopDelay;
-	private boolean typingStatusSent;
-	private boolean suppressTypingInputEvents;
 
 	@FXML
 	private ListView<Packet> messageListView;
 
 	@FXML
 	private TextField messageTextField;
-
-	@FXML
-	private Label typingIndicatorLabel;
 
 	@FXML
 	private Button sendButton;
@@ -134,20 +122,6 @@ public class Controller {
 	@FXML
 	private void initialize() {
 		messageListView.setCellFactory(lv -> new MessageCell());
-		typingStopDelay = new PauseTransition(Duration.seconds(1.5));
-		typingStopDelay.setOnFinished(e -> stopTypingIndicator());
-		typingIndicatorLabel.setVisible(false);
-		typingIndicatorLabel.setManaged(false);
-		messageTextField.textProperty().addListener((obs, oldText, newText) -> {
-			if (!suppressTypingInputEvents) {
-				handleTypingInputChanged(newText);
-			}
-		});
-		messageTextField.focusedProperty().addListener((obs, oldFocused, focused) -> {
-			if (!focused) {
-				stopTypingIndicator();
-			}
-		});
 		
 		sendButton.setOnAction(e -> sendMessage());
 		messageTextField.setOnAction(e -> sendMessage());
@@ -189,7 +163,6 @@ public class Controller {
 								messageListView.scrollTo(getMessages().size() - 1);
 							});
 							case CallNotification call -> Platform.runLater(() -> handleCallNotification(call));
-							case TypingStatus typing -> Platform.runLater(() -> handleTypingStatus(typing));
 							case Notification notification -> Platform.runLater(() -> {
 								getMessages().add(notification);
 								messageListView.scrollTo(getMessages().size() - 1);
@@ -278,70 +251,6 @@ public class Controller {
 			return false;
 		}
 		return true;
-	}
-
-	private void handleTypingInputChanged(String text) {
-		if (localUser == null) {
-			stopTypingIndicator(false);
-			return;
-		}
-
-		if (text == null || text.isBlank()) {
-			stopTypingIndicator();
-			return;
-		}
-
-		sendTypingIndicator(true);
-	}
-
-	private void sendTypingIndicator(boolean typing) {
-		if (localUser == null || client == null) {
-			return;
-		}
-
-		if (typing) {
-			if (typingStatusSent) {
-				if (typingStopDelay != null) {
-					typingStopDelay.playFromStart();
-				}
-				return;
-			}
-
-			if (sendPacket(new TypingStatus(createNetworkUser(localUser), true))) {
-				typingStatusSent = true;
-				if (typingStopDelay != null) {
-					typingStopDelay.playFromStart();
-				}
-			}
-		} else {
-			if (!typingStatusSent) {
-				if (typingStopDelay != null) {
-					typingStopDelay.stop();
-				}
-				return;
-			}
-
-			sendPacket(new TypingStatus(createNetworkUser(localUser), false));
-			typingStatusSent = false;
-			if (typingStopDelay != null) {
-				typingStopDelay.stop();
-			}
-		}
-	}
-
-	private void stopTypingIndicator() {
-		stopTypingIndicator(true);
-	}
-
-	private void stopTypingIndicator(boolean sendPacket) {
-		if (typingStopDelay != null) {
-			typingStopDelay.stop();
-		}
-		if (sendPacket) {
-			sendTypingIndicator(false);
-		} else {
-			typingStatusSent = false;
-		}
 	}
 
 	private void sendMessage() {
@@ -516,104 +425,10 @@ public class Controller {
 	}
 
 	private void handleConnectionClosed(ConnectionClosed closed) {
-		clearRemoteTypingIndicators();
-		stopTypingIndicator(false);
 		Alert alert = new Alert(Alert.AlertType.ERROR);
 		alert.setHeaderText("Verbindung zum Server getrennt");
 		alert.setContentText(closed.getReason());
 		alert.show();
-	}
-
-	private void handleTypingStatus(TypingStatus typingStatus) {
-		if (typingStatus == null || typingStatus.getSender() == null || localUser == null) {
-			return;
-		}
-
-		String username = typingStatus.getSender().getUsername();
-		if (username == null || username.isBlank() || username.equals(localUser.getUsername())) {
-			return;
-		}
-
-		if (typingStatus.isTyping()) {
-			typingUsersByUsername.put(username, typingStatus.getSender());
-			restartTypingTimeout(username);
-		} else {
-			removeTypingUser(username);
-		}
-
-		updateTypingIndicatorLabel();
-	}
-
-	private void restartTypingTimeout(String username) {
-		PauseTransition previous = typingTimeoutsByUsername.remove(username);
-		if (previous != null) {
-			previous.stop();
-		}
-
-		PauseTransition timeout = new PauseTransition(Duration.seconds(2));
-		timeout.setOnFinished(e -> {
-			typingTimeoutsByUsername.remove(username);
-			typingUsersByUsername.remove(username);
-			updateTypingIndicatorLabel();
-		});
-		typingTimeoutsByUsername.put(username, timeout);
-		timeout.playFromStart();
-	}
-
-	private void removeTypingUser(String username) {
-		PauseTransition timeout = typingTimeoutsByUsername.remove(username);
-		if (timeout != null) {
-			timeout.stop();
-		}
-		typingUsersByUsername.remove(username);
-	}
-
-	private void clearRemoteTypingIndicators() {
-		for (PauseTransition timeout : typingTimeoutsByUsername.values()) {
-			timeout.stop();
-		}
-		typingTimeoutsByUsername.clear();
-		typingUsersByUsername.clear();
-		updateTypingIndicatorLabel();
-	}
-
-	private void updateTypingIndicatorLabel() {
-		if (typingIndicatorLabel == null) {
-			return;
-		}
-
-		if (typingUsersByUsername.isEmpty()) {
-			typingIndicatorLabel.setText("");
-			typingIndicatorLabel.setVisible(false);
-			typingIndicatorLabel.setManaged(false);
-			return;
-		}
-
-		List<String> names = typingUsersByUsername.values().stream()
-			.map(this::getDisplayName)
-			.filter(name -> name != null && !name.isBlank())
-			.distinct()
-			.toList();
-
-		if (names.isEmpty()) {
-			typingIndicatorLabel.setText("");
-			typingIndicatorLabel.setVisible(false);
-			typingIndicatorLabel.setManaged(false);
-			return;
-		}
-
-		String text;
-		if (names.size() == 1) {
-			text = names.get(0) + " schreibt...";
-		} else if (names.size() == 2) {
-			text = names.get(0) + " und " + names.get(1) + " schreiben...";
-		} else {
-			text = names.get(0) + ", " + names.get(1) + " und " + (names.size() - 2) + " weitere schreiben...";
-		}
-
-		typingIndicatorLabel.setText(text);
-		typingIndicatorLabel.setVisible(true);
-		typingIndicatorLabel.setManaged(true);
 	}
 
 	public void sendLoginRequest(String username, String password) {
@@ -1002,12 +817,7 @@ public class Controller {
 	}
 	//Audio
 	private void startEditMessage(TextMessage message) {
-		suppressTypingInputEvents = true;
-		try {
-			messageTextField.setText(message.getContent());
-		} finally {
-			suppressTypingInputEvents = false;
-		}
+		messageTextField.setText(message.getContent());
 		messageTextField.requestFocus();
 		isEditingMessage = message;
 		sendButton.setText("Speichern");
