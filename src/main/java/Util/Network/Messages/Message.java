@@ -7,6 +7,7 @@ import java.io.Serial;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.UUID;
 
 public abstract class Message extends Packet {
     @Serial
@@ -16,13 +17,19 @@ public abstract class Message extends Packet {
     private final Set<String> readByUsernames;
     private final long messageId;
     private final LocalDateTime sentAt;
+    // null = global chat, set this to route the message to a specific group only
+    private UUID groupId;
 
     public Message(User sender) {
         this.sender = sender;
         this.readByUsernames = new HashSet<>();
         this.messageId = System.nanoTime();
         this.sentAt = LocalDateTime.now();
+        this.groupId = null;
     }
+
+    public UUID getGroupId() { return groupId; }
+    public void setGroupId(UUID groupId) { this.groupId = groupId; }
 
     public User getSender() { return sender; }
 
