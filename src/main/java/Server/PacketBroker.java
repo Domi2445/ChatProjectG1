@@ -187,7 +187,6 @@ public class PacketBroker implements Runnable {
 			}
 		}
 
-		System.out.println("  ✓ Broadcast erfolgreich: " + broadcastCount + " Clients, " + skippedCount + " übersprungen");
 
 		for (var client : clientsToUnregister) {
 			if (!unregister(client)) {
