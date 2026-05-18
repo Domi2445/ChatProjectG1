@@ -173,7 +173,6 @@ public class PacketBroker implements Runnable {
 		int skippedCount = 0;
 
 		synchronized (clients) {
-			System.out.println("  🔄 broadcastToAll: Prüfe " + clients.size() + " Clients");
 			for (var client : clients) {
 				if (client.shouldStop()) {
 					System.out.println("     └─ Client wird abgebaut (shouldStop=true)");
