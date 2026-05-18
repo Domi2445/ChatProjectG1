@@ -133,7 +133,6 @@ public class PacketBroker implements Runnable {
 
 							} else {
 								saveHistoryEntry(textMessage, null);
-								System.out.println("  📤 Sende TextMessage an alle Clients");
 								broadcastToAll(textMessage);
 							}
 						}
