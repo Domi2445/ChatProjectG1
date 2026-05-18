@@ -21,10 +21,11 @@ public class AudioCall {
 		new Thread(() -> {
 			TargetDataLine mic = null;
 			try {
-				AudioFormat format = new AudioFormat(16000, 16, 1, true, false);
+				AudioFormat format = new AudioFormat(44100, 16, 1, true, false);
 				mic = (TargetDataLine) AudioSystem.getLine(new DataLine.Info(TargetDataLine.class, format));
 				mic.open(format);
 				mic.start();
+				System.out.println("JOIN отправлен: " + relayIp + ":" + relayPort + " room: " + roomId);
 
 				byte[] buffer = new byte[1024];
 				while (running) {
@@ -43,7 +44,7 @@ public class AudioCall {
 		new Thread(() -> {
 			SourceDataLine speakers = null;
 			try {
-				AudioFormat format = new AudioFormat(16000, 16, 1, true, false);
+				AudioFormat format = new AudioFormat(44100, 16, 1, true, false);
 				speakers = (SourceDataLine) AudioSystem.getLine(new DataLine.Info(SourceDataLine.class, format));
 				speakers.open(format);
 				speakers.start();
@@ -52,6 +53,7 @@ public class AudioCall {
 				while (running) {
 					DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
 					socket.receive(packet);
+					System.out.println("Paket empfangen: " + packet.getLength() + " bytes");
 					speakers.write(packet.getData(), 0, packet.getLength());
 				}
 			} catch (Exception e) {
