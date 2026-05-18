@@ -146,10 +146,8 @@ public class Controller {
 				while (true) {
 					try {
 						Packet packet = inPacketQueue.take();
-						System.out.println("📥 Client empfangen: " + packet.getClass().getSimpleName());
 						switch (packet) {
 							case Message message -> Platform.runLater(() -> {
-								System.out.println("  📌 Message zur ListView hinzugefügt: " + (message instanceof TextMessage ? ((TextMessage)message).getContent() : ""));
 								getMessages().add(message);
 								// Sende ReadReceipt, wenn die Nachricht nicht von uns selbst stammt
 								if (localUser != null && message.getSender() != null && !message.getSender().equals(localUser)) {
