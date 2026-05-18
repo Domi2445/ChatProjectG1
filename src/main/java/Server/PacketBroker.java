@@ -366,7 +366,6 @@ public class PacketBroker implements Runnable {
 		);
 		try {
 			chatHistoryService.saveMessage(dbMessage);
-			System.out.println("💾 Nachricht gespeichert: " + sender.getUsername() + ": " + content);
 		} catch (RuntimeException e) {
 			System.err.println("❌ Fehler beim Speichern der Chat-History: " + e.getMessage());
 		}
