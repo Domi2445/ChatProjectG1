@@ -104,7 +104,6 @@ public class PacketBroker implements Runnable {
 							String content = textMessage.getContent();
 							int contentLength = content != null ? content.length() : 0;
 							boolean isAiCommand = content != null && content.startsWith("/ai ");
-							System.out.println("📨 TextMessage empfangen (content redacted, length=" + contentLength + ", aiCommand=" + isAiCommand + ")");
 
 							if (content != null && content.startsWith("/ai ")) {
 								User botUser = new User();
