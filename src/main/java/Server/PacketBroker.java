@@ -14,6 +14,7 @@ import Util.Network.Notifications.LeaveNotification;
 import Util.Network.Packet;
 import Util.Network.ReadReceipt;
 import Util.Network.SocketProxy;
+import Util.Network.TypingIndicator;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -124,10 +125,11 @@ public class PacketBroker implements Runnable {
 							broadcastToAll(packet);
 						}
 					}
-					case ReadReceipt receipt -> broadcastToAll(packet);
-					case EditMessage edit -> broadcastToAll(packet);
-					case DeleteMessage delete -> broadcastToAll(packet);
-					//Audio
+				case ReadReceipt receipt -> broadcastToAll(packet);
+				case EditMessage edit -> broadcastToAll(packet);
+				case DeleteMessage delete -> broadcastToAll(packet);
+				case TypingIndicator typing -> broadcastToAll(packet);
+				//Audio
 					case Util.Network.Notifications.CallNotification call -> {
 						if (sender != null) {
 							call.setSenderIp(sender.getIpAddress());
