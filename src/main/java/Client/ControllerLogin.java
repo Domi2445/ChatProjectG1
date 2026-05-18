@@ -79,8 +79,11 @@ public class ControllerLogin {
 			registerController.setChatScene(chatScene);
 			registerController.setLoginScene(stage.getScene());
 
+			Scene registerScene = new Scene(registerRoot, 1280, 720);
+			registerScene.getStylesheets().add(Main.CUPERTINO_DARK_CSS);
+
 			stage.setTitle("Socket Chat - Registrierung");
-			stage.setScene(new Scene(registerRoot, 1280, 720));
+			stage.setScene(registerScene);
 		} catch (IOException e) {
 			showError("Fehler beim Laden des Registrierungsbildschirms: " + e.getMessage());
 		}
@@ -102,6 +105,6 @@ public class ControllerLogin {
 		Alert alert = new Alert(Alert.AlertType.ERROR);
 		alert.setHeaderText("Fehler");
 		alert.setContentText(message);
-		alert.show();
+		Main.themed(alert).show();
 	}
 }

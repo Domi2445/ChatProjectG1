@@ -91,6 +91,6 @@ public class ControllerRegister {
 		Alert alert = new Alert(Alert.AlertType.ERROR);
 		alert.setHeaderText("Fehler");
 		alert.setContentText(message);
-		alert.show();
+		Main.themed(alert).show();
 	}
 }

@@ -1,5 +1,5 @@
 .login-image-bg {
-    -fx-background-image: url("/Client/assets/loginImage6.jpg");
+    -fx-background-image: url("assets/loginImage6.jpg");
     -fx-background-size: cover;
     -fx-background-position: center;
 }
