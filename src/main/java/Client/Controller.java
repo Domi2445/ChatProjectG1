@@ -48,6 +48,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -78,6 +79,7 @@ public class Controller {
 	private final Map<String, byte[]> profilePicturesByUsername = new HashMap<>();
 	private final Map<String, String> profilePictureContentTypesByUsername = new HashMap<>();
 	private boolean profilePictureSyncEnabled;
+	private boolean historyLoaded = false;
 	private static final String RELAY_IP = "217.154.156.40";
 	private static final int RELAY_PORT = 3298;
 	private final AudioCall audioCall = new AudioCall();
@@ -211,20 +213,25 @@ public class Controller {
 								handleRegisterResponse(registerResp);
 							});
 							case HistoryResponse histResp -> Platform.runLater(() -> {
-								// Laden die Chat-History vom Server
+								if (historyLoaded) return; // zweite HistoryResponse ignorieren
+								historyLoaded = true;
 								if ("success".equals(histResp.getStatus()) && histResp.getMessages() != null) {
+									// Session-Nachrichten sichern, damit sie nicht durch den Clear verloren gehen
+									List<Packet> sessionMessages = new ArrayList<>(getMessages());
 									getMessages().clear();
-									// Konvertiere ChatMessage in Message/TextMessage für die UI
 									for (ChatMessage dbMsg : histResp.getMessages()) {
+										long msgId = dbMsg.getId() != null ? dbMsg.getId() : System.nanoTime();
+										java.time.LocalDateTime sentAt = dbMsg.getTimestamp() != null ? dbMsg.getTimestamp() : java.time.LocalDateTime.now();
 										if (dbMsg.getMessageType() == MessageType.TEXT || dbMsg.getMessageType() == MessageType.EMOJI) {
-											Message msg = new TextMessage(new User(dbMsg.getSender()), dbMsg.getContent());
-											getMessages().add(msg);
+											getMessages().add(new TextMessage(new User(dbMsg.getSender()), dbMsg.getContent(), msgId, sentAt));
 										} else if (dbMsg.getMessageType() == MessageType.FILE) {
-											Message msg = new TextMessage(new User(dbMsg.getSender()), "[Datei: " + dbMsg.getFilePath() + "]");
-											getMessages().add(msg);
+											getMessages().add(new TextMessage(new User(dbMsg.getSender()), "[Datei: " + dbMsg.getFilePath() + "]", msgId, sentAt));
 										}
 									}
+									// Session-Nachrichten nach der History wieder einfügen
+									getMessages().addAll(sessionMessages);
 									messageListView.refresh();
+									messageListView.scrollTo(getMessages().size() - 1);
 									System.out.println("✓ Chat-History geladen: " + histResp.getMessages().size() + " Messages");
 								} else {
 									System.err.println("❌ Fehler beim Laden der History: " + histResp.getErrorMessage());

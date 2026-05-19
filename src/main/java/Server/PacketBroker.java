@@ -77,6 +77,10 @@ public class PacketBroker implements Runnable {
 						if (authHandler.handleLogin(req, sender)) {
 							User user = sender.getUser();
 
+							// History direkt nach Login senden — zu diesem Zeitpunkt sind
+							// alle vorher verarbeiteten Nachrichten bereits in der DB.
+							chatHistoryHandler.handleHistoryRequest(new HistoryRequest(null, null, "main"), sender);
+
 							try {
 								if (!broadcast(new JoinNotification(user))) {
 									System.err.println("broadcastPacketQueue ist voll, JoinNotification wurde verworfen");
