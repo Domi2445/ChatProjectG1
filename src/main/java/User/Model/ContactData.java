@@ -7,11 +7,16 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
+import java.io.Serial;
+import java.io.Serializable;
 import java.util.Objects;
 
 @Entity
 @Table(name = "contact_data")
-public class ContactData {
+public class ContactData implements Serializable {
+	@Serial
+	private static final long serialVersionUID = 1L;
+
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)

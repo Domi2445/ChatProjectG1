@@ -148,15 +148,15 @@ public class Controller {
 						Packet packet = inPacketQueue.take();
 						switch (packet) {
 							case Message message -> Platform.runLater(() -> {
-								getMessages().add(message);
+								boolean alreadyShown = getMessages().stream()
+									.anyMatch(p -> p instanceof Message m && m.getMessageId() == message.getMessageId());
+								if (!alreadyShown) {
+									getMessages().add(message);
+								}
 								// Sende ReadReceipt, wenn die Nachricht nicht von uns selbst stammt
 								if (localUser != null && message.getSender() != null && !message.getSender().equals(localUser)) {
-									try {
-										Util.Network.ReadReceipt receipt = new Util.Network.ReadReceipt(message.getMessageId(), localUser.getUsername());
-										outPacketQueue.put(receipt);
-									} catch (InterruptedException e) {
-										throw new RuntimeException(e);
-									}
+									Util.Network.ReadReceipt receipt = new Util.Network.ReadReceipt(message.getMessageId(), localUser.getUsername());
+									outPacketQueue.offer(receipt);
 								}
 								messageListView.scrollTo(getMessages().size() - 1);
 							});
@@ -186,7 +186,7 @@ public class Controller {
 									}
 								}
 							});
-							case Util.Network.DeleteMessage delete -> Platform.runLater(() -> {
+							case DeleteMessage delete -> Platform.runLater(() -> {
 								for (int i = 0; i < getMessages().size(); i++) {
 									Packet p = getMessages().get(i);
 									if (p instanceof TextMessage msg && msg.getMessageId() == delete.getMessageId()) {
@@ -230,7 +230,7 @@ public class Controller {
 									System.err.println("❌ Fehler beim Laden der History: " + histResp.getErrorMessage());
 								}
 							});
-							case null, default -> throw new IllegalStateException("Unbekanntes Paket empfangen");
+							case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (packet == null ? "null" : packet.getClass().getName()));
 						}
 
 					} catch (InterruptedException e) {
@@ -285,6 +285,7 @@ public class Controller {
 				if (!sendPacket(message)) {
 					return;
 				}
+				getMessages().add(message);
 			}
 
 			messageListView.scrollTo(getMessages().size() - 1);
@@ -333,6 +334,7 @@ public class Controller {
 			return;
 		}
 
+		getMessages().add(message);
 		messageListView.scrollTo(getMessages().size() - 1);
 		messageTextField.clear();
 	}
@@ -473,14 +475,12 @@ public class Controller {
 			cacheProfilePicture(localUser);
 			updateOwnProfilePictureView();
 			// Nach erfolgreichem Login: lade Chat-History vom Server
-			try {
-				HistoryRequest histReq = new HistoryRequest();
-				histReq.setSender(localUser.getUsername());  // Sender = aktueller Benutzer
-				histReq.setReceiver(null);                   // Global chat
-				histReq.setChatRoomId("main");               // Standard chat room für globale Nachrichten
-				outPacketQueue.put(histReq);
-			} catch (InterruptedException e) {
-				System.err.println("Fehler beim Senden von HistoryRequest: " + e.getMessage());
+			HistoryRequest histReq = new HistoryRequest();
+			histReq.setSender(localUser.getUsername());
+			histReq.setReceiver(null);
+			histReq.setChatRoomId("main");
+			if (!outPacketQueue.offer(histReq)) {
+				System.err.println("Fehler beim Senden von HistoryRequest: Queue voll");
 			}
 		}
 		if (onLoginResult != null) {
