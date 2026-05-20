@@ -1,5 +1,6 @@
 package Client;
 
+import Util.Network.ConnectionClosed;
 import Util.Network.Packet;
 import Util.Network.SocketProxy;
 
@@ -9,7 +10,6 @@ import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 import java.io.IOException;
 import java.net.Socket;
-import java.net.SocketTimeoutException;
 import java.security.cert.X509Certificate;
 import java.util.concurrent.BlockingQueue;
 
@@ -32,38 +32,56 @@ public class Client implements Runnable {
 		SSLSocketFactory ssf = sc.getSocketFactory();
 
 		Socket socket = ssf.createSocket(ip, port);
+		// No setSoTimeout: a timeout on the read socket causes SocketTimeoutException
+		// mid-deserialization of large packets, corrupting the ObjectInputStream state.
 		this.socket = new SocketProxy(socket);
-		socket.setSoTimeout(100);
 		this.out = out;
 		this.in = in;
 	}
 
 	@Override
 	public void run() {
-		while (true) {
+		Thread sender = new Thread(() -> {
 			try {
-				Packet packet = (Packet) socket.getInputStream().readObject();
-				in.put(packet);
-			} catch (SocketTimeoutException ignored) {
-			} catch (IOException e) {
-				// todo: Anzeige in der GUI, dass die Verbindung zum Server getrennt wurde
-				System.err.println("Verbindung zum Server getrennt:\n" + e);
-				break;
-			} catch (ClassNotFoundException | InterruptedException e) {
-				throw new RuntimeException(e);
+				while (!Thread.currentThread().isInterrupted()) {
+					Packet packet = out.take();
+					try {
+						socket.getOutputStream().reset();
+						socket.getOutputStream().writeObject(packet);
+						socket.getOutputStream().flush();
+					} catch (IOException e) {
+						System.err.println("Fehler beim Senden:\n" + e);
+						in.offer(new ConnectionClosed("Verbindung zum Server unterbrochen"));
+						return;
+					}
+				}
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
 			}
+		}, "ClientSendThread");
+		sender.setDaemon(true);
+		sender.start();
 
-			Packet packet = out.poll();
-			if (packet != null) {
+		try {
+			while (true) {
 				try {
-					socket.getOutputStream().reset();
-					socket.getOutputStream().writeObject(packet);
-					socket.getOutputStream().flush();
+					Packet packet = (Packet) socket.getInputStream().readObject();
+					in.put(packet);
 				} catch (IOException e) {
-					System.err.println("Fehler beim Senden:\n" + e);
+					System.err.println("Verbindung zum Server getrennt:\n" + e);
+					in.offer(new ConnectionClosed("Verbindung zum Server getrennt"));
+					break;
+				} catch (ClassNotFoundException e) {
+					System.err.println("Ungültiges Paket empfangen:\n" + e);
+					in.offer(new ConnectionClosed("Ungültiges Paket vom Server empfangen"));
+					break;
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
 					break;
 				}
 			}
+		} finally {
+			sender.interrupt();
 		}
 	}
 }
