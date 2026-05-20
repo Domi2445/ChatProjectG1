@@ -81,7 +81,7 @@ public class Controller {
 	private boolean profilePictureSyncEnabled;
 	private boolean historyLoaded = false;
 	private static final String RELAY_IP = "217.154.156.40";
-	private static final int RELAY_PORT = 443;
+	private static final int RELAY_PORT = 3268;
 	private final AudioCall audioCall = new AudioCall();
 	private boolean inCall = false;
 
