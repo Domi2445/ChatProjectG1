@@ -40,6 +40,7 @@ public class GeminiHandler {
 	}
 
 	public String ask(String prompt) throws IOException, InterruptedException {
+
 		String responseBody = sendPrompt(prompt);
 		return extractText(responseBody);
 	}

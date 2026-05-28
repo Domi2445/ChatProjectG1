@@ -30,7 +30,9 @@ public class ChatMessageRepository {
 	public List<ChatMessage> getHistoryForChat(String sender, String receiver, String chatRoomId) {
 		try (EntityManager entityManager = Connection.createEntityManager()) {
 			String queryStr;
-			if (chatRoomId != null) {
+			if (sender == null && receiver == null && chatRoomId == null) {
+				return getAllMessages();
+			} else if (chatRoomId != null) {
 				// Gruppenchat
 				queryStr = "SELECT m FROM ChatMessage m WHERE m.chatRoomId = :chatRoomId ORDER BY m.timestamp";
 				return entityManager.createQuery(queryStr, ChatMessage.class)
