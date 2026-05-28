@@ -3,7 +3,6 @@ package Client;
 import AudioCall.AudioCall;
 import User.Login.Status;
 import User.Model.User;
-import User.Repository.ChatHistoryService;
 import User.Model.ChatMessage;
 import User.Model.MessageType;
 import Util.Emoji.Emoji;
@@ -15,7 +14,8 @@ import Util.Network.Auth.RegisterRequest;
 import Util.Network.Auth.RegisterResponse;
 import Util.Network.ConnectionClosed;
 import Util.Network.DeleteMessage;
-import Util.Network.EditMessage;
+import Util.Network.HistoryRequest;
+import Util.Network.HistoryResponse;
 import Util.Network.Messages.FileMessage;
 import Util.Network.Messages.Message;
 import Util.Network.Messages.TextMessage;
@@ -56,6 +56,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -83,12 +84,12 @@ public class Controller {
 	private User localUser;
 	private Stage stage;
 	private TextMessage isEditingMessage;
-	private ChatHistoryService chatHistoryService = new ChatHistoryService();
 	private final Map<String, byte[]> profilePicturesByUsername = new HashMap<>();
 	private final Map<String, String> profilePictureContentTypesByUsername = new HashMap<>();
 	private boolean profilePictureSyncEnabled;
+	private boolean historyLoaded = false;
 	private static final String RELAY_IP = "217.154.156.40";
-	private static final int RELAY_PORT = 443;
+	private static final int RELAY_PORT = 3268;
 	private final AudioCall audioCall = new AudioCall();
 	private boolean inCall = false;
 
@@ -111,6 +112,12 @@ public class Controller {
 	private Button videoCallButton;
 
 	@FXML
+	private Button profilePictureButton;
+
+	@FXML
+	private ImageView profilePictureView;
+
+	@FXML
 	private Button videoButton;
 
 	@FXML
@@ -129,7 +136,7 @@ public class Controller {
 		this.outPacketQueue = new ArrayBlockingQueue<>(PACKET_QUEUE_SIZE);
 		this.inPacketQueue = new ArrayBlockingQueue<>(PACKET_QUEUE_SIZE);
 	}
-	
+
 	// UI registriert hier ihren Handler (z.B. Screen-Wechsel bei Success)
 	public void setOnLoginResult(Consumer<LoginResponse> onLoginResult) {
 		this.onLoginResult = onLoginResult;
@@ -194,15 +201,15 @@ public class Controller {
 						Packet packet = inPacketQueue.take();
 						switch (packet) {
 							case Message message -> Platform.runLater(() -> {
-								getMessages().add(message);
+								boolean alreadyShown = getMessages().stream()
+									.anyMatch(p -> p instanceof Message m && m.getMessageId() == message.getMessageId());
+								if (!alreadyShown) {
+									getMessages().add(message);
+								}
 								// Sende ReadReceipt, wenn die Nachricht nicht von uns selbst stammt
 								if (localUser != null && message.getSender() != null && !message.getSender().equals(localUser)) {
-									try {
-										Util.Network.ReadReceipt receipt = new Util.Network.ReadReceipt(message.getMessageId(), localUser.getUsername());
-										outPacketQueue.put(receipt);
-									} catch (InterruptedException e) {
-										throw new RuntimeException(e);
-									}
+									Util.Network.ReadReceipt receipt = new Util.Network.ReadReceipt(message.getMessageId(), localUser.getUsername());
+									outPacketQueue.offer(receipt);
 								}
 								messageListView.scrollTo(getMessages().size() - 1);
 							});
@@ -232,7 +239,7 @@ public class Controller {
 									}
 								}
 							});
-							case Util.Network.DeleteMessage delete -> Platform.runLater(() -> {
+							case DeleteMessage delete -> Platform.runLater(() -> {
 								for (int i = 0; i < getMessages().size(); i++) {
 									Packet p = getMessages().get(i);
 									if (p instanceof TextMessage msg && msg.getMessageId() == delete.getMessageId()) {
@@ -256,7 +263,32 @@ public class Controller {
 							case RegisterResponse registerResp -> Platform.runLater(() -> {
 								handleRegisterResponse(registerResp);
 							});
-							case null, default -> throw new IllegalStateException("Unbekanntes Paket empfangen");
+							case HistoryResponse histResp -> Platform.runLater(() -> {
+								if (historyLoaded) return; // zweite HistoryResponse ignorieren
+								historyLoaded = true;
+								if ("success".equals(histResp.getStatus()) && histResp.getMessages() != null) {
+									// Session-Nachrichten sichern, damit sie nicht durch den Clear verloren gehen
+									List<Packet> sessionMessages = new ArrayList<>(getMessages());
+									getMessages().clear();
+									for (ChatMessage dbMsg : histResp.getMessages()) {
+										long msgId = dbMsg.getId() != null ? dbMsg.getId() : System.nanoTime();
+										java.time.LocalDateTime sentAt = dbMsg.getTimestamp() != null ? dbMsg.getTimestamp() : java.time.LocalDateTime.now();
+										if (dbMsg.getMessageType() == MessageType.TEXT || dbMsg.getMessageType() == MessageType.EMOJI) {
+											getMessages().add(new TextMessage(new User(dbMsg.getSender()), dbMsg.getContent(), msgId, sentAt));
+										} else if (dbMsg.getMessageType() == MessageType.FILE) {
+											getMessages().add(new TextMessage(new User(dbMsg.getSender()), "[Datei: " + dbMsg.getFilePath() + "]", msgId, sentAt));
+										}
+									}
+									// Session-Nachrichten nach der History wieder einfügen
+									getMessages().addAll(sessionMessages);
+									messageListView.refresh();
+									messageListView.scrollTo(getMessages().size() - 1);
+									System.out.println("✓ Chat-History geladen: " + histResp.getMessages().size() + " Messages");
+								} else {
+									System.err.println("❌ Fehler beim Laden der History: " + histResp.getErrorMessage());
+								}
+							});
+							case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (packet == null ? "null" : packet.getClass().getName()));
 						}
 
 					} catch (InterruptedException e) {
@@ -301,7 +333,7 @@ public class Controller {
 		String text = messageTextField.getText().trim();
 		if (!text.isEmpty()) {
 			if (isEditingMessage != null) {
-				if (!sendPacket(new EditMessage(isEditingMessage.getMessageId(), text))) {
+				if (!sendPacket(new Util.Network.EditMessage(isEditingMessage.getMessageId(), text))) {
 					return;
 				}
 				isEditingMessage = null;
@@ -311,13 +343,14 @@ public class Controller {
 				if (!sendPacket(message)) {
 					return;
 				}
+				getMessages().add(message);
 			}
 
 			messageListView.scrollTo(getMessages().size() - 1);
 			messageTextField.clear();
 		}
 	}
-	
+
 	private void resetSendButton() {
 		sendButton.setText("Senden");
 	}
@@ -358,6 +391,7 @@ public class Controller {
 			return;
 		}
 
+		getMessages().add(message);
 		messageListView.scrollTo(getMessages().size() - 1);
 		messageTextField.clear();
 	}
@@ -514,7 +548,15 @@ public class Controller {
 			cacheProfilePicture(localUser);
 			updateWelcomeLabel();
 			addUserToList(localUser);
-			loadChatHistory(); // Verlauf laden nach erfolgreichem Login
+			updateOwnProfilePictureView();
+			// Nach erfolgreichem Login: lade Chat-History vom Server
+			HistoryRequest histReq = new HistoryRequest();
+			histReq.setSender(localUser.getUsername());
+			histReq.setReceiver(null);
+			histReq.setChatRoomId("main");
+			if (!outPacketQueue.offer(histReq)) {
+				System.err.println("Fehler beim Senden von HistoryRequest: Queue voll");
+			}
 		}
 		if (onLoginResult != null) {
 			onLoginResult.accept(response);
@@ -574,91 +616,6 @@ public class Controller {
 		});
 	}
 
-	private void loadChatHistory() {
-		List<ChatMessage> history = chatHistoryService.getHistory(null, null, "broadcast"); // Für Broadcast
-		for (ChatMessage msg : history) {
-			// Erstelle eine entsprechende Message aus ChatMessage
-			Message message;
-			if (msg.getMessageType() == MessageType.TEXT) {
-				message = new TextMessage(new User(msg.getSender()), msg.getContent());
-			} else {
-				// Für Dateien: Hier musst du die Datei laden, aber für Einfachheit zeige nur den Pfad
-				message = new TextMessage(new User(msg.getSender()), "[Datei: " + msg.getFilePath() + "]");
-			}
-			getMessages().add(message);
-		}
-		messageListView.scrollTo(getMessages().size() - 1);
-	}
-
-	private void applyProfilePictureUpdate(ProfilePictureUpdate update) {
-		if (update.getUsername() == null) {
-			return;
-		}
-
-		if (localUser != null && update.getUsername().equals(localUser.getUsername())) {
-			localUser.setProfilePicture(update.getImageBytes());
-			localUser.setProfilePictureContentType(update.getContentType());
-		}
-
-		cacheProfilePicture(update.getUsername(), update.getImageBytes(), update.getContentType());
-
-		for (Packet packet : getMessages()) {
-			if (packet instanceof Message message && message.getSender() != null
-				&& update.getUsername().equals(message.getSender().getUsername())) {
-				message.getSender().setProfilePicture(update.getImageBytes());
-				message.getSender().setProfilePictureContentType(update.getContentType());
-			}
-		}
-
-		messageListView.refresh();
-	}
-
-	private void cacheProfilePicture(User user) {
-		if (user == null || user.getUsername() == null) {
-			return;
-		}
-		cacheProfilePicture(user.getUsername(), user.getProfilePicture(), user.getProfilePictureContentType());
-	}
-
-	private void cacheProfilePicture(String username, byte[] imageBytes, String contentType) {
-		if (username == null || imageBytes == null || imageBytes.length == 0) {
-			return;
-		}
-		profilePicturesByUsername.put(username, imageBytes);
-		profilePictureContentTypesByUsername.put(username, contentType);
-	}
-
-	private User createNetworkUser(User source) {
-		if (source == null) {
-			return null;
-		}
-
-		User user = new User();
-		user.setUsername(source.getUsername());
-		user.setDisplayname(source.getDisplayname());
-		user.setStatusMessage(source.getStatusMessage());
-		user.setProfileDescription(source.getProfileDescription());
-		user.setProfilePictureUUID(source.getProfilePictureUUID());
-		return user;
-	}
-
-	private String getDisplayName(User user) {
-		if (user == null) {
-			return "Unbekannt";
-		}
-		if (user.getDisplayname() != null && !user.getDisplayname().isBlank()) {
-			return user.getDisplayname();
-		}
-		if (user.getUsername() != null && !user.getUsername().isBlank()) {
-			return user.getUsername();
-		}
-		return "Unbekannt";
-	}
-
-	private String getMessageTime(Message message) {
-		return message.getSentAt() == null ? "" : message.getSentAt().format(MESSAGE_TIME_FORMAT);
-	}
-
 	private class MessageCell extends ListCell<Packet> {
 		private TextMessage editingMessage;
 
@@ -716,7 +673,10 @@ public class Controller {
 				case null, default -> throw new IllegalStateException("Unerwarteter Wert: " + message);
 			}
 
-			boolean isOwn = localUser != null && localUser.equals(message.getSender());
+			boolean isOwn = localUser != null
+				&& message.getSender() != null
+				&& localUser.getUsername() != null
+				&& localUser.getUsername().equals(message.getSender().getUsername());
 			node.getStyleClass().add(isOwn ? "bubble-own" : "bubble-other");
 
 			VBox messageBox = new VBox(2);
@@ -875,24 +835,102 @@ public class Controller {
 				return menu;
 			}
 
-			MenuItem editItem = new MenuItem("Bearbeiten");
+			MenuItem editItem = new MenuItem("✏️ Bearbeiten");
+			editItem.setStyle("-fx-font-size: 12;");
 			editItem.setOnAction(event -> Controller.this.startEditMessage(message));
 
 			MenuItem deleteItem = new MenuItem("Löschen");
 			deleteItem.setOnAction(event -> Controller.this.deleteMessage(message));
-			
+
 			menu.getItems().addAll(editItem, deleteItem);
 			return menu;
 		}
 	}
-	//Audio
-	public void stopCall() {
-		if (inCall) {
-			audioCall.stop();
-			inCall = false;
+
+	private void applyProfilePictureUpdate(ProfilePictureUpdate update) {
+		if (update.getUsername() == null) {
+			return;
 		}
+
+		if (localUser != null && update.getUsername().equals(localUser.getUsername())) {
+			localUser.setProfilePicture(update.getImageBytes());
+			localUser.setProfilePictureContentType(update.getContentType());
+			updateOwnProfilePictureView();
+		}
+
+		cacheProfilePicture(update.getUsername(), update.getImageBytes(), update.getContentType());
+
+		for (Packet packet : getMessages()) {
+			if (packet instanceof Message message && message.getSender() != null
+				&& update.getUsername().equals(message.getSender().getUsername())) {
+				message.getSender().setProfilePicture(update.getImageBytes());
+				message.getSender().setProfilePictureContentType(update.getContentType());
+			}
+		}
+
+		messageListView.refresh();
 	}
-	//Audio
+
+	private void updateOwnProfilePictureView() {
+		if (profilePictureView == null || localUser == null) {
+			return;
+		}
+
+		byte[] imageBytes = localUser.getProfilePicture();
+		if (imageBytes == null || imageBytes.length == 0) {
+			profilePictureView.setImage(null);
+			return;
+		}
+
+		profilePictureView.setImage(new Image(new ByteArrayInputStream(imageBytes)));
+	}
+
+	private void cacheProfilePicture(User user) {
+		if (user == null || user.getUsername() == null) {
+			return;
+		}
+		cacheProfilePicture(user.getUsername(), user.getProfilePicture(), user.getProfilePictureContentType());
+	}
+
+	private void cacheProfilePicture(String username, byte[] imageBytes, String contentType) {
+		if (username == null || imageBytes == null || imageBytes.length == 0) {
+			return;
+		}
+		profilePicturesByUsername.put(username, imageBytes);
+		profilePictureContentTypesByUsername.put(username, contentType);
+	}
+
+	private User createNetworkUser(User source) {
+		if (source == null) {
+			return null;
+		}
+
+		User user = new User();
+		user.setUsername(source.getUsername());
+		user.setDisplayname(source.getDisplayname());
+		user.setStatusMessage(source.getStatusMessage());
+		user.setProfileDescription(source.getProfileDescription());
+		user.setProfilePictureUUID(source.getProfilePictureUUID());
+		return user;
+	}
+
+	private String getDisplayName(User user) {
+		if (user == null) {
+			return "Unbekannt";
+		}
+		if (user.getDisplayname() != null && !user.getDisplayname().isBlank()) {
+			return user.getDisplayname();
+		}
+		if (user.getUsername() != null && !user.getUsername().isBlank()) {
+			return user.getUsername();
+		}
+		return "Unbekannt";
+	}
+
+	private String getMessageTime(Message message) {
+		return message.getSentAt() == null ? "" : message.getSentAt().format(MESSAGE_TIME_FORMAT);
+	}
+
 	private void startEditMessage(TextMessage message) {
 		messageTextField.setText(message.getContent());
 		messageTextField.requestFocus();
@@ -912,6 +950,14 @@ public class Controller {
 
 	private void deleteMessage(Message message) {
 		sendPacket(new DeleteMessage(message.getMessageId()));
+	}
+
+	//Audio
+	public void stopCall() {
+		if (inCall) {
+			audioCall.stop();
+			inCall = false;
+		}
 	}
 
 	public void handleCallButton() {

@@ -24,6 +24,13 @@ public abstract class Message extends Packet {
         this.sentAt = LocalDateTime.now();
     }
 
+    public Message(User sender, long messageId, LocalDateTime sentAt) {
+        this.sender = sender;
+        this.readByUsernames = new HashSet<>();
+        this.messageId = messageId;
+        this.sentAt = sentAt;
+    }
+
     public User getSender() { return sender; }
 
     public void markAsReadBy(String username) {
