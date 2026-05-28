@@ -20,6 +20,13 @@ public class TextMessage extends Message {
         this.isDeleted = false;
     }
 
+    public TextMessage(User sender, String content, long messageId, java.time.LocalDateTime sentAt) {
+        super(sender, messageId, sentAt);
+        this.content = content;
+        this.isEdited = false;
+        this.isDeleted = false;
+    }
+
     public String getContent() {
     	return editedContent != null ? editedContent : content;
     }
