@@ -11,4 +11,5 @@
 
 .hyperlink {
     -fx-underline: false !important;
+    -fx-text-fill: #0a84ff;
 }
