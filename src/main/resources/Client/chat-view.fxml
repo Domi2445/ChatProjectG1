@@ -15,6 +15,7 @@
 			</padding>
 			<Label style="-fx-text-fill: #cdd6f4; -fx-font-size: 18;" text="Socket Chat"/>
 			<Region HBox.hgrow="ALWAYS"/>
+			<ImageView fx:id="remoteVideoView" fitHeight="120" fitWidth="160" preserveRatio="true"/>
 			<ImageView fx:id="profilePictureView" fitHeight="34" fitWidth="34" preserveRatio="false"/>
 			<Button fx:id="profilePictureButton" mnemonicParsing="false"
 			        style="-fx-background-color: #45475a; -fx-text-fill: #cdd6f4; -fx-font-size: 14; -fx-background-radius: 20; -fx-min-width: 95; -fx-min-height: 40;"

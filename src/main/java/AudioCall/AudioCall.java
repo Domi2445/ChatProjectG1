@@ -3,7 +3,9 @@ package AudioCall;
 import javax.sound.sampled.*;
 import java.net.*;
 
-public class AudioCall {
+public class
+
+AudioCall {
 	private volatile boolean running = false;
 	private DatagramSocket socket;
 

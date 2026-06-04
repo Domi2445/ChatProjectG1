@@ -18,7 +18,7 @@ public class AudioRelayServer implements Runnable {
 	public void run() {
 		try (DatagramSocket socket = new DatagramSocket(port)) {
 			System.out.println("AudioRelayServer running on port " + port);
-			byte[] buffer = new byte[2048];
+			byte[] buffer = new byte[8192];
 
 			while (true) {
 				DatagramPacket packet = new DatagramPacket(buffer, buffer.length);

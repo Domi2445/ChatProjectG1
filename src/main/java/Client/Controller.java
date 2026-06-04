@@ -1,6 +1,7 @@
 package Client;
 
 import AudioCall.AudioCall;
+import VideoCall.VideoCall;
 import User.Login.Status;
 import User.Model.User;
 import User.Model.ChatMessage;
@@ -82,7 +83,9 @@ public class Controller {
 	private boolean historyLoaded = false;
 	private static final String RELAY_IP = "217.154.156.40";
 	private static final int RELAY_PORT = 3268;
+	private static final int VIDEO_RELAY_PORT = 9001;
 	private final AudioCall audioCall = new AudioCall();
+	private final VideoCall videoCall = new VideoCall();
 	private boolean inCall = false;
 
 	@FXML
@@ -105,6 +108,9 @@ public class Controller {
 
 	@FXML
 	private ImageView profilePictureView;
+
+	@FXML
+	private ImageView remoteVideoView;
 
 	public Controller() {
 		this.outPacketQueue = new ArrayBlockingQueue<>(PACKET_QUEUE_SIZE);
@@ -857,6 +863,7 @@ public class Controller {
 	public void stopCall() {
 		if (inCall) {
 			audioCall.stop();
+			videoCall.stop();
 			inCall = false;
 		}
 	}
@@ -879,6 +886,7 @@ public class Controller {
 			));
 		} else {
 			audioCall.stop();
+			videoCall.stop();
 			inCall = false;
 			videoCallButton.setStyle(
 				"-fx-background-color: #45475a; -fx-text-fill: #cdd6f4; -fx-font-size: 14; " +
@@ -920,6 +928,7 @@ public class Controller {
 			.collect(Collectors.joining("-"));
 		try {
 			audioCall.start(RELAY_IP, RELAY_PORT, roomId);
+			videoCall.start(RELAY_IP, VIDEO_RELAY_PORT, roomId, remoteVideoView);
 			inCall = true;
 			videoCallButton.setStyle(
 				"-fx-background-color: #f38ba8; -fx-text-fill: #1e1e2e; -fx-font-size: 14; " +
