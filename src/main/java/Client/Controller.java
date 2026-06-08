@@ -81,7 +81,8 @@ public class Controller {
 	private final Map<String, String> profilePictureContentTypesByUsername = new HashMap<>();
 	private boolean profilePictureSyncEnabled;
 	private boolean historyLoaded = false;
-	private static final String RELAY_IP = "217.154.156.40";
+	// Relay (Audio/Video) läuft im selben Server-Prozess wie der Chat – Host wird beim Verbinden gesetzt.
+	private String relayHost;
 	private static final int RELAY_PORT = 3268;
 	private static final int VIDEO_RELAY_PORT = 9001;
 	private final AudioCall audioCall = new AudioCall();
@@ -144,6 +145,7 @@ public class Controller {
 
 	public boolean connectAndRun(String ip, int port) {
 		try {
+			this.relayHost = ip;
 			profilePictureSyncEnabled = Boolean.parseBoolean(System.getProperty("profile.sync", "false"));
 			client = new Client(ip, port, outPacketQueue, inPacketQueue);
 			Thread clientThread = new Thread(client, "ClientThread");
@@ -927,8 +929,8 @@ public class Controller {
 			.sorted()
 			.collect(Collectors.joining("-"));
 		try {
-			audioCall.start(RELAY_IP, RELAY_PORT, roomId);
-			videoCall.start(RELAY_IP, VIDEO_RELAY_PORT, roomId, remoteVideoView);
+			audioCall.start(relayHost, RELAY_PORT, roomId);
+			videoCall.start(relayHost, VIDEO_RELAY_PORT, roomId, remoteVideoView);
 			inCall = true;
 			videoCallButton.setStyle(
 				"-fx-background-color: #f38ba8; -fx-text-fill: #1e1e2e; -fx-font-size: 14; " +

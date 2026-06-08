@@ -42,7 +42,6 @@ AudioCall {
 				mic = (TargetDataLine) AudioSystem.getLine(new DataLine.Info(TargetDataLine.class, format));
 				mic.open(format);
 				mic.start();
-				System.out.println("JOIN отправлен: " + relayIp + ":" + relayPort + " room: " + roomId);
 
 				byte[] buffer = new byte[4096];
 				while (running) {
@@ -85,7 +84,6 @@ AudioCall {
 				while (running) {
 					DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
 					socket.receive(packet);
-					System.out.println("Paket empfangen: " + packet.getLength() + " bytes");
 					speakers.write(packet.getData(), 0, packet.getLength());
 				}
 			} catch (Exception e) {
