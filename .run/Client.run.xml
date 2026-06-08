@@ -1,6 +1,5 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="Client" type="Application" factoryName="Application" singleton="false">
-    <option name="ALTERNATIVE_JRE_PATH" value="BUNDLED" />
     <option name="MAIN_CLASS_NAME" value="Client.Main" />
     <module name="SocketChat" />
     <selectedOptions>

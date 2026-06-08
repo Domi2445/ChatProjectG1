@@ -1,17 +1,16 @@
 package Server;
 
+import User.Model.ChatMessage;
+import User.Model.MessageType;
 import User.Model.User;
+import User.Repository.ChatHistoryService;
+import User.Repository.ChatMessageRepository;
 import Util.FileUtil;
 import Util.Network.Auth.LoginRequest;
 import Util.Network.Auth.RegisterRequest;
 import Util.Network.DeleteMessage;
 import Util.Network.EditMessage;
-import Util.Network.Groups.CreateGroupPacket;
-import Util.Network.Groups.GroupListRequestPacket;
-import Util.Network.Groups.GroupListResponsePacket;
-import Util.Network.Groups.JoinGroupPacket;
-import Util.Network.Groups.LeaveGroupPacket;
-import Util.Network.Groups.MyGroupsRequestPacket;
+import Util.Network.HistoryRequest;
 import Util.Network.Messages.FileMessage;
 import Util.Network.Messages.Message;
 import Util.Network.Notifications.JoinNotification;
@@ -28,6 +27,7 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.UUID;
 
 /// Verteilt Pakete an alle angemeldeten Clients.
 public class PacketBroker implements Runnable {
@@ -38,7 +38,8 @@ public class PacketBroker implements Runnable {
 	private final ExecutorService threadExecutor;
 	private final AuthHandler authHandler;
 	private final GeminiHandler geminiHandler;
-	private final GroupManager groupManager;
+	private final ChatHistoryHandler chatHistoryHandler;
+	private final ChatHistoryService chatHistoryService;
 
 	/// Queue für Pakete, die an alle verbundenen Clients gesendet werden sollen.
 	private final BlockingQueue<IncomingPacket> broadcastPacketQueue;
@@ -47,10 +48,15 @@ public class PacketBroker implements Runnable {
 	private final AtomicBoolean stopFlag;
 
 	public PacketBroker(ExecutorService threadExecutor, AuthHandler authHandler, GeminiHandler geminiHandler) {
+		this(threadExecutor, authHandler, geminiHandler, new ChatHistoryHandler(new ChatMessageRepository()));
+	}
+
+	public PacketBroker(ExecutorService threadExecutor, AuthHandler authHandler, GeminiHandler geminiHandler, ChatHistoryHandler chatHistoryHandler) {
 		this.threadExecutor = threadExecutor;
 		this.authHandler = authHandler;
 		this.geminiHandler = geminiHandler;
-		this.groupManager = new GroupManager();
+		this.chatHistoryHandler = chatHistoryHandler;
+		this.chatHistoryService = new ChatHistoryService();
 
 		this.broadcastPacketQueue = new ArrayBlockingQueue<>(MAX_INCOMING_PACKETS);
 		this.clients = new ArrayList<>(MAX_CLIENTS);
@@ -61,6 +67,7 @@ public class PacketBroker implements Runnable {
 	public void run() {
 		while (!stopFlag.get() && !Thread.currentThread().isInterrupted()) {
 			try {
+				cleanupDisconnectedClients();
 				IncomingPacket incoming = broadcastPacketQueue.take();
 				Packet packet = incoming.packet();
 				ClientProxy sender = incoming.sender();
@@ -69,8 +76,10 @@ public class PacketBroker implements Runnable {
 					case LoginRequest req -> {
 						if (authHandler.handleLogin(req, sender)) {
 							User user = sender.getUser();
-							// register with group manager so this client can create/join groups
-							groupManager.registerClient(sender, user);
+
+							// History direkt nach Login senden — zu diesem Zeitpunkt sind
+							// alle vorher verarbeiteten Nachrichten bereits in der DB.
+							chatHistoryHandler.handleHistoryRequest(new HistoryRequest(null, null, "main"), sender);
 
 							try {
 								if (!broadcast(new JoinNotification(user))) {
@@ -83,31 +92,11 @@ public class PacketBroker implements Runnable {
 						}
 					}
 					case RegisterRequest req -> authHandler.handleRegister(req, sender);
-					// group action packets — only logged in clients can use these
-					case CreateGroupPacket cgp -> {
-						if (sender != null && sender.getUser() != null)
-							groupManager.createGroup(cgp.getGroupName(), sender);
-					}
-					case JoinGroupPacket jgp -> {
-						if (sender != null && sender.getUser() != null)
-							groupManager.joinGroup(jgp.getGroupId(), sender);
-					}
-					case LeaveGroupPacket lgp -> {
-						if (sender != null && sender.getUser() != null)
-							groupManager.leaveGroup(lgp.getGroupId(), sender);
-					}
-					case GroupListRequestPacket ignored -> {
-						if (sender != null)
-							sender.tryEnqueuePacket(new GroupListResponsePacket(groupManager.getAllGroups()));
-					}
-					case MyGroupsRequestPacket ignored -> {
-						if (sender != null)
-							sender.tryEnqueuePacket(new GroupListResponsePacket(groupManager.getGroupsForClient(sender)));
-					}
 					case FileMessage file -> {
 						if (sender != null && sender.getUser() != null) {
 							try {
-								FileUtil.saveFile(file.getContent(), file.getFileExtension());
+								UUID fileId = FileUtil.saveFile(file.getContent(), file.getFileExtension());
+								saveHistoryEntry(file, fileId.toString());
 								broadcastToAll(packet);
 							} catch (IOException e) {
 								System.err.println("Fehler beim Speichern einer Datei: " + e);
@@ -117,6 +106,8 @@ public class PacketBroker implements Runnable {
 					case TextMessage textMessage -> {
 						if (sender != null && sender.getUser() != null) {
 							String content = textMessage.getContent();
+							int contentLength = content != null ? content.length() : 0;
+							boolean isAiCommand = content != null && content.startsWith("/ai ");
 
 							if (content != null && content.startsWith("/ai ")) {
 								User botUser = new User();
@@ -145,19 +136,21 @@ public class PacketBroker implements Runnable {
 								});
 
 							} else {
-								routeMessage(textMessage);
+								saveHistoryEntry(textMessage, null);
+								broadcastToAll(textMessage);
 							}
 						}
 					}
 
 					case Message msg -> {
 						if (sender != null && sender.getUser() != null) {
-							routeMessage(msg);
+							broadcastToAll(packet);
 						}
 					}
 					case ReadReceipt receipt -> broadcastToAll(packet);
 					case EditMessage edit -> broadcastToAll(packet);
 					case DeleteMessage delete -> broadcastToAll(packet);
+					case HistoryRequest histReq -> chatHistoryHandler.handleHistoryRequest(histReq, sender);
 					//Audio
 					case Util.Network.Notifications.CallNotification call -> {
 						if (sender != null) {
@@ -178,32 +171,26 @@ public class PacketBroker implements Runnable {
 		closeAllClients();
 	}
 
-	// if the message has a group id, only send to group members. otherwise broadcast to everyone.
-	private void routeMessage(Message msg) {
-		if (msg.getGroupId() != null) {
-			for (var member : groupManager.getGroupMembers(msg.getGroupId())) {
-				member.tryEnqueuePacket(msg);
-			}
-		} else {
-			broadcastToAll(msg);
-		}
-	}
-
 	private void broadcastToAll(Packet packet) {
 		ArrayList<ClientProxy> clientsToUnregister = new ArrayList<>();
+		int broadcastCount = 0;
+		int skippedCount = 0;
 
 		synchronized (clients) {
 			for (var client : clients) {
-				if (client.getUser() == null) {
-					continue;
-				} else if (client.shouldStop()) {
+				if (client.shouldStop()) {
 					clientsToUnregister.add(client);
+				} else if (client.getUser() == null) {
+					skippedCount++;
 				} else if (!client.tryEnqueuePacket(packet)) {
-					System.err.println("Client outPacketQueue ist voll");
+					System.out.println("     └─ Client outPacketQueue ist voll!");
 					clientsToUnregister.add(client);
+				} else {
+					broadcastCount++;
 				}
 			}
 		}
+
 
 		for (var client : clientsToUnregister) {
 			if (!unregister(client)) {
@@ -278,7 +265,6 @@ public class PacketBroker implements Runnable {
 		}
 
 		if (removed) {
-			groupManager.unregisterClient(client);
 			try {
 				client.close();
 			} catch (IOException e) {
@@ -327,6 +313,58 @@ public class PacketBroker implements Runnable {
 			} catch (IOException e) {
 				System.err.println("Fehler beim Schließen eines Clients: " + e);
 			}
+		}
+	}
+
+	private void cleanupDisconnectedClients() {
+		ArrayList<ClientProxy> clientsToUnregister = new ArrayList<>();
+
+		synchronized (clients) {
+			for (var client : clients) {
+				if (client.shouldStop()) {
+					clientsToUnregister.add(client);
+				}
+			}
+		}
+
+		for (var client : clientsToUnregister) {
+			if (!unregister(client)) {
+				System.err.println("Zu entfernenden Client nicht gefunden");
+			}
+		}
+	}
+
+	private void saveHistoryEntry(Message message, String filePath) {
+		User sender = message.getSender();
+		if (sender == null || sender.getUsername() == null || sender.getUsername().isBlank()) {
+			System.err.println("⚠️  Nachricht hat keinen Sender, wird nicht gespeichert");
+			return;
+		}
+
+		String content;
+		MessageType messageType;
+		if (message instanceof TextMessage textMessage) {
+			content = textMessage.getContent();
+			messageType = MessageType.TEXT;
+		} else if (message instanceof FileMessage fileMessage) {
+			content = "[Datei: " + fileMessage.getFileExtension() + "]";
+			messageType = MessageType.FILE;
+		} else {
+			return;
+		}
+
+		ChatMessage dbMessage = new ChatMessage(
+			sender.getUsername(),
+			null,
+			"main",  // Standard-Chatroom für globale Nachrichten
+			content,
+			messageType,
+			filePath
+		);
+		try {
+			chatHistoryService.saveMessage(dbMessage);
+		} catch (RuntimeException e) {
+			System.err.println("❌ Fehler beim Speichern der Chat-History: " + e.getMessage());
 		}
 	}
 }
