@@ -24,8 +24,9 @@ AudioCall {
 			TargetDataLine mic = null;
 			try {
 				// Unterstütztes Mikrofonformat suchen
+				// Für Sprache reichen 16 kHz – weniger Daten = weniger UDP-Paketverluste = weniger Robo-/Lag-Stimme
 				AudioFormat format = null;
-				int[] sampleRates = {44100, 48000, 22050, 16000};
+				int[] sampleRates = {16000, 22050, 44100, 48000};
 				for (int rate : sampleRates) {
 					AudioFormat f = new AudioFormat(rate, 16, 1, true, false);
 					if (AudioSystem.isLineSupported(new DataLine.Info(TargetDataLine.class, f))) {
@@ -61,8 +62,9 @@ AudioCall {
 			SourceDataLine speakers = null;
 			try {
 				// Unterstütztes Lautsprecherformat suchen
+				// Gleiche Reihenfolge wie beim Mikrofon, damit beide Seiten dieselbe Rate wählen
 				AudioFormat format = null;
-				int[] sampleRates = {44100, 48000, 22050, 16000};
+				int[] sampleRates = {16000, 22050, 44100, 48000};
 				for (int rate : sampleRates) {
 					AudioFormat f = new AudioFormat(rate, 16, 1, true, false);
 					if (AudioSystem.isLineSupported(new DataLine.Info(SourceDataLine.class, f))) {
@@ -77,9 +79,7 @@ AudioCall {
 				}
 
 				speakers = (SourceDataLine) AudioSystem.getLine(new DataLine.Info(SourceDataLine.class, format));
-				// Größerer Wiedergabe-Puffer (mehrere Pakete) glättet ungleichmäßig eintreffende UDP-Pakete
-				// und verhindert so Knacken/Aussetzer.
-				speakers.open(format, 16384);
+				speakers.open(format);
 				speakers.start();
 
 				byte[] buffer = new byte[4096];
