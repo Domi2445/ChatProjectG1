@@ -77,7 +77,9 @@ AudioCall {
 				}
 
 				speakers = (SourceDataLine) AudioSystem.getLine(new DataLine.Info(SourceDataLine.class, format));
-				speakers.open(format);
+				// Größerer Wiedergabe-Puffer (mehrere Pakete) glättet ungleichmäßig eintreffende UDP-Pakete
+				// und verhindert so Knacken/Aussetzer.
+				speakers.open(format, 16384);
 				speakers.start();
 
 				byte[] buffer = new byte[4096];
