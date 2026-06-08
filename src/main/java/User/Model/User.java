@@ -95,9 +95,6 @@ public class User implements Serializable {
         return profilePictureUUID;
     }
 
-    public void setProfilePictureUUI(UUID profilePictureUUID) {
-        this.profilePictureUUID = profilePictureUUID;
-    }
 
     public void setProfilePictureUUID(UUID profilePictureUUID) {
         this.profilePictureUUID = profilePictureUUID;

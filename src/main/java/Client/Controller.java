@@ -136,7 +136,7 @@ public class Controller {
 
 	public boolean connectAndRun(String ip, int port) {
 		try {
-			profilePictureSyncEnabled = Boolean.parseBoolean(System.getProperty("profile.sync", "false"));
+			profilePictureSyncEnabled = Boolean.parseBoolean(System.getProperty("profile.sync", "true"));
 			client = new Client(ip, port, outPacketQueue, inPacketQueue);
 			Thread clientThread = new Thread(client, "ClientThread");
 			clientThread.setDaemon(true);
