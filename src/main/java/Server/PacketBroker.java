@@ -10,6 +10,12 @@ import Util.Network.Auth.LoginRequest;
 import Util.Network.Auth.RegisterRequest;
 import Util.Network.DeleteMessage;
 import Util.Network.EditMessage;
+import Util.Network.Groups.CreateGroupPacket;
+import Util.Network.Groups.GroupListRequestPacket;
+import Util.Network.Groups.GroupListResponsePacket;
+import Util.Network.Groups.JoinGroupPacket;
+import Util.Network.Groups.LeaveGroupPacket;
+import Util.Network.Groups.MyGroupsRequestPacket;
 import Util.Network.HistoryRequest;
 import Util.Network.Messages.FileMessage;
 import Util.Network.Messages.Message;
@@ -40,6 +46,7 @@ public class PacketBroker implements Runnable {
 	private final GeminiHandler geminiHandler;
 	private final ChatHistoryHandler chatHistoryHandler;
 	private final ChatHistoryService chatHistoryService;
+	private final GroupManager groupManager;
 
 	/// Queue für Pakete, die an alle verbundenen Clients gesendet werden sollen.
 	private final BlockingQueue<IncomingPacket> broadcastPacketQueue;
@@ -57,6 +64,7 @@ public class PacketBroker implements Runnable {
 		this.geminiHandler = geminiHandler;
 		this.chatHistoryHandler = chatHistoryHandler;
 		this.chatHistoryService = new ChatHistoryService();
+		this.groupManager = new GroupManager();
 
 		this.broadcastPacketQueue = new ArrayBlockingQueue<>(MAX_INCOMING_PACKETS);
 		this.clients = new ArrayList<>(MAX_CLIENTS);
@@ -76,6 +84,8 @@ public class PacketBroker implements Runnable {
 					case LoginRequest req -> {
 						if (authHandler.handleLogin(req, sender)) {
 							User user = sender.getUser();
+							// register with group manager so this client can create/join groups
+							groupManager.registerClient(sender, user);
 
 							// History direkt nach Login senden — zu diesem Zeitpunkt sind
 							// alle vorher verarbeiteten Nachrichten bereits in der DB.
@@ -92,6 +102,27 @@ public class PacketBroker implements Runnable {
 						}
 					}
 					case RegisterRequest req -> authHandler.handleRegister(req, sender);
+					// group action packets — only logged in clients can use these
+					case CreateGroupPacket cgp -> {
+						if (sender != null && sender.getUser() != null)
+							groupManager.createGroup(cgp.getGroupName(), sender);
+					}
+					case JoinGroupPacket jgp -> {
+						if (sender != null && sender.getUser() != null)
+							groupManager.joinGroup(jgp.getGroupId(), sender);
+					}
+					case LeaveGroupPacket lgp -> {
+						if (sender != null && sender.getUser() != null)
+							groupManager.leaveGroup(lgp.getGroupId(), sender);
+					}
+					case GroupListRequestPacket ignored -> {
+						if (sender != null)
+							sender.tryEnqueuePacket(new GroupListResponsePacket(groupManager.getAllGroups()));
+					}
+					case MyGroupsRequestPacket ignored -> {
+						if (sender != null)
+							sender.tryEnqueuePacket(new GroupListResponsePacket(groupManager.getGroupsForClient(sender)));
+					}
 					case FileMessage file -> {
 						if (sender != null && sender.getUser() != null) {
 							try {
@@ -137,14 +168,14 @@ public class PacketBroker implements Runnable {
 
 							} else {
 								saveHistoryEntry(textMessage, null);
-								broadcastToAll(textMessage);
+								routeMessage(textMessage);
 							}
 						}
 					}
 
 					case Message msg -> {
 						if (sender != null && sender.getUser() != null) {
-							broadcastToAll(packet);
+							routeMessage(msg);
 						}
 					}
 					case ReadReceipt receipt -> broadcastToAll(packet);
@@ -169,6 +200,17 @@ public class PacketBroker implements Runnable {
 		}
 
 		closeAllClients();
+	}
+
+	// if the message has a group id, only send to group members. otherwise broadcast to everyone.
+	private void routeMessage(Message msg) {
+		if (msg.getGroupId() != null) {
+			for (var member : groupManager.getGroupMembers(msg.getGroupId())) {
+				member.tryEnqueuePacket(msg);
+			}
+		} else {
+			broadcastToAll(msg);
+		}
 	}
 
 	private void broadcastToAll(Packet packet) {
@@ -265,6 +307,7 @@ public class PacketBroker implements Runnable {
 		}
 
 		if (removed) {
+			groupManager.unregisterClient(client);
 			try {
 				client.close();
 			} catch (IOException e) {
