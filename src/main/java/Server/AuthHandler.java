@@ -18,6 +18,7 @@ import java.util.UUID;
 
 public class AuthHandler {
 	private final UserRepository userRepository;
+	private static final int MAX_PROFILE_PICTURE_SIZE = 500_000; // bytes
 
 	public AuthHandler(UserRepository userRepository) {
 		this.userRepository = userRepository;
@@ -102,11 +103,20 @@ public class AuthHandler {
 		if (imageBytes == null || imageBytes.length == 0) {
 			return null;
 		}
+		if (imageBytes.length > MAX_PROFILE_PICTURE_SIZE) {
+			System.err.println("Profilbild zu groß: " + imageBytes.length + " Bytes");
+			return null;
+		}
+		String contentType = update.getContentType();
+		if (contentType == null || !contentType.toLowerCase().startsWith("image/")) {
+			System.err.println("Ungültiger Content-Type für Profilbild: " + contentType);
+			return null;
+		}
 
 		try {
 			User user = sender.getUser();
 			user.setProfilePicture(imageBytes);
-			user.setProfilePictureContentType(update.getContentType());
+			user.setProfilePictureContentType(contentType);
 			user.setProfilePictureUUID(UUID.randomUUID());
 			userRepository.updateUser(user);
 			sender.setUser(user);

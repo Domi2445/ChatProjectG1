@@ -6,6 +6,7 @@ import User.Model.User;
 import User.Repository.ChatHistoryService;
 import User.Repository.ChatMessageRepository;
 import Util.FileUtil;
+import Util.Network.ProfilePictureUpdate;
 import Util.Network.Auth.LoginRequest;
 import Util.Network.Auth.RegisterRequest;
 import Util.Network.DeleteMessage;
@@ -141,6 +142,17 @@ public class PacketBroker implements Runnable {
 					case Message msg -> {
 						if (sender != null && sender.getUser() != null) {
 							broadcastToAll(packet);
+						}
+					}
+					case ProfilePictureUpdate update -> {
+						// Persist profile picture via AuthHandler and broadcast the persisted update
+						try {
+							ProfilePictureUpdate persisted = authHandler.handleProfilePictureUpdate(update, sender);
+							if (persisted != null) {
+								broadcastToAll(persisted);
+							} // else: invalid update or persistence failed -> drop silently
+						} catch (Exception e) {
+							System.err.println("Fehler beim Verarbeiten des Profilbild-Updates: " + e);
 						}
 					}
 					case ReadReceipt receipt -> broadcastToAll(packet);
