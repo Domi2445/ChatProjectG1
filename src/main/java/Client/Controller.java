@@ -1056,7 +1056,7 @@ public class Controller {
 			Platform.runLater(() -> {
 				root.getChildren().clear();
 				if (emojis.isEmpty()) {
-					Label empty = new Label("Keine Emojis verfuegbar");
+					Label empty = new Label("Keine Emojis verfügbar");
 					empty.getStyleClass().add("meta-label");
 					root.getChildren().add(empty);
 					return;
