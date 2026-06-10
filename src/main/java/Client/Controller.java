@@ -56,7 +56,6 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -87,7 +86,6 @@ public class Controller {
 	private final Map<String, byte[]> profilePicturesByUsername = new HashMap<>();
 	private final Map<String, String> profilePictureContentTypesByUsername = new HashMap<>();
 	private boolean profilePictureSyncEnabled;
-	private boolean historyLoaded = false;
 	private static final String RELAY_IP = "217.154.156.40";
 	private static final int RELAY_PORT = 3268;
 	private final AudioCall audioCall = new AudioCall();
@@ -189,7 +187,7 @@ public class Controller {
 
 	public boolean connectAndRun(String ip, int port) {
 		try {
-			profilePictureSyncEnabled = Boolean.parseBoolean(System.getProperty("profile.sync", "false"));
+			profilePictureSyncEnabled = Boolean.parseBoolean(System.getProperty("profile.sync", "true"));
 			client = new Client(ip, port, outPacketQueue, inPacketQueue);
 			Thread clientThread = new Thread(client, "ClientThread");
 			clientThread.setDaemon(true);
@@ -201,15 +199,10 @@ public class Controller {
 						Packet packet = inPacketQueue.take();
 						switch (packet) {
 							case Message message -> Platform.runLater(() -> {
-								boolean alreadyShown = getMessages().stream()
-									.anyMatch(p -> p instanceof Message m && m.getMessageId() == message.getMessageId());
-								if (!alreadyShown) {
-									getMessages().add(message);
-								}
+								getMessages().add(message);
 								// Sende ReadReceipt, wenn die Nachricht nicht von uns selbst stammt
 								if (localUser != null && message.getSender() != null && !message.getSender().equals(localUser)) {
-									Util.Network.ReadReceipt receipt = new Util.Network.ReadReceipt(message.getMessageId(), localUser.getUsername());
-									outPacketQueue.offer(receipt);
+									outPacketQueue.offer(new Util.Network.ReadReceipt(message.getMessageId(), localUser.getUsername()));
 								}
 								messageListView.scrollTo(getMessages().size() - 1);
 							});
@@ -239,7 +232,7 @@ public class Controller {
 									}
 								}
 							});
-							case DeleteMessage delete -> Platform.runLater(() -> {
+							case Util.Network.DeleteMessage delete -> Platform.runLater(() -> {
 								for (int i = 0; i < getMessages().size(); i++) {
 									Packet p = getMessages().get(i);
 									if (p instanceof TextMessage msg && msg.getMessageId() == delete.getMessageId()) {
@@ -264,31 +257,26 @@ public class Controller {
 								handleRegisterResponse(registerResp);
 							});
 							case HistoryResponse histResp -> Platform.runLater(() -> {
-								if (historyLoaded) return; // zweite HistoryResponse ignorieren
-								historyLoaded = true;
+								// Laden die Chat-History vom Server
 								if ("success".equals(histResp.getStatus()) && histResp.getMessages() != null) {
-									// Session-Nachrichten sichern, damit sie nicht durch den Clear verloren gehen
-									List<Packet> sessionMessages = new ArrayList<>(getMessages());
 									getMessages().clear();
+									// Konvertiere ChatMessage in Message/TextMessage für die UI
 									for (ChatMessage dbMsg : histResp.getMessages()) {
-										long msgId = dbMsg.getId() != null ? dbMsg.getId() : System.nanoTime();
-										java.time.LocalDateTime sentAt = dbMsg.getTimestamp() != null ? dbMsg.getTimestamp() : java.time.LocalDateTime.now();
 										if (dbMsg.getMessageType() == MessageType.TEXT || dbMsg.getMessageType() == MessageType.EMOJI) {
-											getMessages().add(new TextMessage(new User(dbMsg.getSender()), dbMsg.getContent(), msgId, sentAt));
+											Message msg = new TextMessage(new User(dbMsg.getSender()), dbMsg.getContent());
+											getMessages().add(msg);
 										} else if (dbMsg.getMessageType() == MessageType.FILE) {
-											getMessages().add(new TextMessage(new User(dbMsg.getSender()), "[Datei: " + dbMsg.getFilePath() + "]", msgId, sentAt));
+											Message msg = new TextMessage(new User(dbMsg.getSender()), "[Datei: " + dbMsg.getFilePath() + "]");
+											getMessages().add(msg);
 										}
 									}
-									// Session-Nachrichten nach der History wieder einfügen
-									getMessages().addAll(sessionMessages);
 									messageListView.refresh();
-									messageListView.scrollTo(getMessages().size() - 1);
-									System.out.println("✓ Chat-History geladen: " + histResp.getMessages().size() + " Messages");
+									System.out.println("Chat-History geladen: " + histResp.getMessages().size() + " Messages");
 								} else {
-									System.err.println("❌ Fehler beim Laden der History: " + histResp.getErrorMessage());
+									System.err.println("Fehler beim Laden der History: " + histResp.getErrorMessage());
 								}
 							});
-							case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (packet == null ? "null" : packet.getClass().getName()));
+case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (packet == null ? "null" : packet.getClass().getName()));
 						}
 
 					} catch (InterruptedException e) {
@@ -343,7 +331,6 @@ public class Controller {
 				if (!sendPacket(message)) {
 					return;
 				}
-				getMessages().add(message);
 			}
 
 			messageListView.scrollTo(getMessages().size() - 1);
@@ -391,7 +378,6 @@ public class Controller {
 			return;
 		}
 
-		getMessages().add(message);
 		messageListView.scrollTo(getMessages().size() - 1);
 		messageTextField.clear();
 	}
@@ -511,7 +497,10 @@ public class Controller {
 
 	private void handleNotification(Notification notification) {
 		switch (notification) {
-			case JoinNotification join -> addUserToList(join.getUser());
+			case JoinNotification join -> {
+				cacheProfilePicture(join.getUser());
+				addUserToList(join.getUser());
+			}
 			case LeaveNotification leave -> removeUserFromList(leave.getUser());
 			case null, default -> throw new IllegalStateException("Unbekannte Systemnachricht");
 		}
@@ -545,17 +534,20 @@ public class Controller {
 	private void handleLoginResponse(LoginResponse response) {
 		if (response.getStatus() == Status.SUCCESS) {
 			this.localUser = response.getUser();
+
 			cacheProfilePicture(localUser);
 			updateWelcomeLabel();
 			addUserToList(localUser);
 			updateOwnProfilePictureView();
 			// Nach erfolgreichem Login: lade Chat-History vom Server
-			HistoryRequest histReq = new HistoryRequest();
-			histReq.setSender(localUser.getUsername());
-			histReq.setReceiver(null);
-			histReq.setChatRoomId("main");
-			if (!outPacketQueue.offer(histReq)) {
-				System.err.println("Fehler beim Senden von HistoryRequest: Queue voll");
+			try {
+				HistoryRequest histReq = new HistoryRequest();
+				histReq.setSender(localUser.getUsername());  // Sender = aktueller Benutzer
+				histReq.setReceiver(null);                   // Global chat
+				histReq.setChatRoomId("main");               // Standard chat room für globale Nachrichten
+				outPacketQueue.put(histReq);
+			} catch (InterruptedException e) {
+				System.err.println("Fehler beim Senden von HistoryRequest: " + e.getMessage());
 			}
 		}
 		if (onLoginResult != null) {
@@ -849,6 +841,7 @@ public class Controller {
 
 	private void applyProfilePictureUpdate(ProfilePictureUpdate update) {
 		if (update.getUsername() == null) {
+			System.err.println("ProfilePictureUpdate mit null username");
 			return;
 		}
 
