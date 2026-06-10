@@ -81,6 +81,19 @@ public class PacketBroker implements Runnable {
 							// alle vorher verarbeiteten Nachrichten bereits in der DB.
 							chatHistoryHandler.handleHistoryRequest(new HistoryRequest(null, null, "main"), sender);
 
+										// Sende dem neu angemeldeten Client die bereits verbundenen Benutzer,
+										// damit dieser deren Profilbilder direkt laden und cachen kann.
+										synchronized (clients) {
+											for (var existingClient : clients) {
+												if (existingClient == sender) continue;
+												var existingUser = existingClient.getUser();
+												if (existingUser != null) {
+													// versuche, dem neuen Client eine JoinNotification für den existierenden Benutzer zu senden
+													sender.tryEnqueuePacket(new JoinNotification(existingUser));
+												}
+											}
+										}
+
 							try {
 								if (!broadcast(new JoinNotification(user))) {
 									System.err.println("broadcastPacketQueue ist voll, JoinNotification wurde verworfen");
@@ -157,6 +170,12 @@ public class PacketBroker implements Runnable {
 							call.setSenderIp(sender.getIpAddress());
 						}
 						broadcastToAll(call);
+					}
+					case Util.Network.ProfilePictureUpdate update -> {
+						Util.Network.ProfilePictureUpdate saved = authHandler.handleProfilePictureUpdate(update, sender);
+						if (saved != null) {
+							broadcastToAll(saved);
+						}
 					}
 
 					default -> broadcastToAll(packet);
@@ -337,7 +356,7 @@ public class PacketBroker implements Runnable {
 	private void saveHistoryEntry(Message message, String filePath) {
 		User sender = message.getSender();
 		if (sender == null || sender.getUsername() == null || sender.getUsername().isBlank()) {
-			System.err.println("⚠️  Nachricht hat keinen Sender, wird nicht gespeichert");
+			System.err.println("Nachricht hat keinen Sender, wird nicht gespeichert");
 			return;
 		}
 
@@ -364,7 +383,7 @@ public class PacketBroker implements Runnable {
 		try {
 			chatHistoryService.saveMessage(dbMessage);
 		} catch (RuntimeException e) {
-			System.err.println("❌ Fehler beim Speichern der Chat-History: " + e.getMessage());
+			System.err.println("Fehler beim Speichern der Chat-History: " + e.getMessage());
 		}
 	}
 }

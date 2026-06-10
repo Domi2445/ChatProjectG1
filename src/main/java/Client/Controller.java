@@ -83,6 +83,7 @@ public class Controller {
 	private boolean historyLoaded = false;
 	// Relay (Audio/Video) läuft im selben Server-Prozess wie der Chat – Host wird beim Verbinden gesetzt.
 	private String relayHost;
+	private static final String RELAY_IP = "217.154.156.40";
 	private static final int RELAY_PORT = 3268;
 	private static final int VIDEO_RELAY_PORT = 9001;
 	private final AudioCall audioCall = new AudioCall();
@@ -117,7 +118,7 @@ public class Controller {
 		this.outPacketQueue = new ArrayBlockingQueue<>(PACKET_QUEUE_SIZE);
 		this.inPacketQueue = new ArrayBlockingQueue<>(PACKET_QUEUE_SIZE);
 	}
-	
+
 	// UI registriert hier ihren Handler (z.B. Screen-Wechsel bei Success)
 	public void setOnLoginResult(Consumer<LoginResponse> onLoginResult) {
 		this.onLoginResult = onLoginResult;
@@ -130,7 +131,7 @@ public class Controller {
 	@FXML
 	private void initialize() {
 		messageListView.setCellFactory(lv -> new MessageCell());
-		
+
 		sendButton.setOnAction(e -> sendMessage());
 		messageTextField.setOnAction(e -> sendMessage());
 		uploadButton.setOnAction(e -> sendFile());
@@ -145,6 +146,7 @@ public class Controller {
 
 	public boolean connectAndRun(String ip, int port) {
 		try {
+			profilePictureSyncEnabled = Boolean.parseBoolean(System.getProperty("profile.sync", "true"));
 			this.relayHost = ip;
 			profilePictureSyncEnabled = Boolean.parseBoolean(System.getProperty("profile.sync", "false"));
 			client = new Client(ip, port, outPacketQueue, inPacketQueue);
@@ -158,15 +160,10 @@ public class Controller {
 						Packet packet = inPacketQueue.take();
 						switch (packet) {
 							case Message message -> Platform.runLater(() -> {
-								boolean alreadyShown = getMessages().stream()
-									.anyMatch(p -> p instanceof Message m && m.getMessageId() == message.getMessageId());
-								if (!alreadyShown) {
-									getMessages().add(message);
-								}
+								getMessages().add(message);
 								// Sende ReadReceipt, wenn die Nachricht nicht von uns selbst stammt
 								if (localUser != null && message.getSender() != null && !message.getSender().equals(localUser)) {
-									Util.Network.ReadReceipt receipt = new Util.Network.ReadReceipt(message.getMessageId(), localUser.getUsername());
-									outPacketQueue.offer(receipt);
+									outPacketQueue.offer(new Util.Network.ReadReceipt(message.getMessageId(), localUser.getUsername()));
 								}
 								messageListView.scrollTo(getMessages().size() - 1);
 							});
@@ -196,7 +193,7 @@ public class Controller {
 									}
 								}
 							});
-							case DeleteMessage delete -> Platform.runLater(() -> {
+							case Util.Network.DeleteMessage delete -> Platform.runLater(() -> {
 								for (int i = 0; i < getMessages().size(); i++) {
 									Packet p = getMessages().get(i);
 									if (p instanceof TextMessage msg && msg.getMessageId() == delete.getMessageId()) {
@@ -221,31 +218,26 @@ public class Controller {
 								handleRegisterResponse(registerResp);
 							});
 							case HistoryResponse histResp -> Platform.runLater(() -> {
-								if (historyLoaded) return; // zweite HistoryResponse ignorieren
-								historyLoaded = true;
+								// Laden die Chat-History vom Server
 								if ("success".equals(histResp.getStatus()) && histResp.getMessages() != null) {
-									// Session-Nachrichten sichern, damit sie nicht durch den Clear verloren gehen
-									List<Packet> sessionMessages = new ArrayList<>(getMessages());
 									getMessages().clear();
+									// Konvertiere ChatMessage in Message/TextMessage für die UI
 									for (ChatMessage dbMsg : histResp.getMessages()) {
-										long msgId = dbMsg.getId() != null ? dbMsg.getId() : System.nanoTime();
-										java.time.LocalDateTime sentAt = dbMsg.getTimestamp() != null ? dbMsg.getTimestamp() : java.time.LocalDateTime.now();
 										if (dbMsg.getMessageType() == MessageType.TEXT || dbMsg.getMessageType() == MessageType.EMOJI) {
-											getMessages().add(new TextMessage(new User(dbMsg.getSender()), dbMsg.getContent(), msgId, sentAt));
+											Message msg = new TextMessage(new User(dbMsg.getSender()), dbMsg.getContent());
+											getMessages().add(msg);
 										} else if (dbMsg.getMessageType() == MessageType.FILE) {
-											getMessages().add(new TextMessage(new User(dbMsg.getSender()), "[Datei: " + dbMsg.getFilePath() + "]", msgId, sentAt));
+											Message msg = new TextMessage(new User(dbMsg.getSender()), "[Datei: " + dbMsg.getFilePath() + "]");
+											getMessages().add(msg);
 										}
 									}
-									// Session-Nachrichten nach der History wieder einfügen
-									getMessages().addAll(sessionMessages);
 									messageListView.refresh();
-									messageListView.scrollTo(getMessages().size() - 1);
-									System.out.println("✓ Chat-History geladen: " + histResp.getMessages().size() + " Messages");
+									System.out.println("Chat-History geladen: " + histResp.getMessages().size() + " Messages");
 								} else {
-									System.err.println("❌ Fehler beim Laden der History: " + histResp.getErrorMessage());
+									System.err.println("Fehler beim Laden der History: " + histResp.getErrorMessage());
 								}
 							});
-							case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (packet == null ? "null" : packet.getClass().getName()));
+case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (packet == null ? "null" : packet.getClass().getName()));
 						}
 
 					} catch (InterruptedException e) {
@@ -300,14 +292,13 @@ public class Controller {
 				if (!sendPacket(message)) {
 					return;
 				}
-				getMessages().add(message);
 			}
 
 			messageListView.scrollTo(getMessages().size() - 1);
 			messageTextField.clear();
 		}
 	}
-	
+
 	private void resetSendButton() {
 		sendButton.setText("Send");
 		sendButton.setStyle("-fx-background-color: #89b4fa; -fx-text-fill: #1e1e2e; -fx-font-size: 14; -fx-background-radius: 20; -fx-min-width: 70; -fx-min-height: 40;");
@@ -349,7 +340,6 @@ public class Controller {
 			return;
 		}
 
-		getMessages().add(message);
 		messageListView.scrollTo(getMessages().size() - 1);
 		messageTextField.clear();
 	}
@@ -448,6 +438,7 @@ public class Controller {
 		switch (notification) {
 			case JoinNotification join -> {
 				System.out.println(join.getUser().getUsername() + " ist beigetreten");
+				cacheProfilePicture(join.getUser());
 				// todo(team-view): in der View einen neuen Nutzer anzeigen (z. B. In Seitenleiste oder direkt im Chat)
 			}
 			case LeaveNotification leave -> {
@@ -487,15 +478,18 @@ public class Controller {
 	private void handleLoginResponse(LoginResponse response) {
 		if (response.getStatus() == Status.SUCCESS) {
 			this.localUser = response.getUser();
+
 			cacheProfilePicture(localUser);
 			updateOwnProfilePictureView();
 			// Nach erfolgreichem Login: lade Chat-History vom Server
-			HistoryRequest histReq = new HistoryRequest();
-			histReq.setSender(localUser.getUsername());
-			histReq.setReceiver(null);
-			histReq.setChatRoomId("main");
-			if (!outPacketQueue.offer(histReq)) {
-				System.err.println("Fehler beim Senden von HistoryRequest: Queue voll");
+			try {
+				HistoryRequest histReq = new HistoryRequest();
+				histReq.setSender(localUser.getUsername());  // Sender = aktueller Benutzer
+				histReq.setReceiver(null);                   // Global chat
+				histReq.setChatRoomId("main");               // Standard chat room für globale Nachrichten
+				outPacketQueue.put(histReq);
+			} catch (InterruptedException e) {
+				System.err.println("Fehler beim Senden von HistoryRequest: " + e.getMessage());
 			}
 		}
 		if (onLoginResult != null) {
@@ -745,11 +739,11 @@ public class Controller {
 			MenuItem editItem = new MenuItem("✏️ Bearbeiten");
 			editItem.setStyle("-fx-font-size: 12;");
 			editItem.setOnAction(event -> Controller.this.startEditMessage(message));
-			
+
 			MenuItem deleteItem = new MenuItem("🗑️ Löschen");
 			deleteItem.setStyle("-fx-font-size: 12;");
 			deleteItem.setOnAction(event -> Controller.this.deleteMessage(message));
-			
+
 			menu.getItems().addAll(editItem, deleteItem);
 			return menu;
 		}
@@ -757,6 +751,7 @@ public class Controller {
 
 	private void applyProfilePictureUpdate(ProfilePictureUpdate update) {
 		if (update.getUsername() == null) {
+			System.err.println("ProfilePictureUpdate mit null username");
 			return;
 		}
 
