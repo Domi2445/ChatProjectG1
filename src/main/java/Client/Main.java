@@ -22,7 +22,7 @@ public class Main extends Application {
 		Controller chatController = chatLoader.getController();
 		chatController.configure(primaryStage, null);
 		String host = System.getProperty("server.host",
-			System.getenv().getOrDefault("SERVER_HOST", "localhost"));
+			System.getenv().getOrDefault("SERVER_HOST", "217.154.156.40"));
 		int port = Integer.parseInt(System.getProperty("server.port",
 			System.getenv().getOrDefault("SERVER_PORT", "3299")));
 		if (!chatController.connectAndRun(host, port)) {
