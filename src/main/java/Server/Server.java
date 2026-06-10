@@ -52,7 +52,7 @@ public class Server implements Runnable {
 	public void run() {
 
 		// Audio
-		new Thread(new AudioRelayServer(3298), "AudioRelayServer").start();
+		new Thread(new AudioRelayServer(3268), "AudioRelayServer").start();
 		// Video
 		new Thread(new VideoRelayServer(9001), "VideoRelayServer").start();
 
