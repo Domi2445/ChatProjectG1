@@ -5,6 +5,7 @@ import User.Model.MessageType;
 import User.Model.User;
 import User.Repository.ChatHistoryService;
 import User.Repository.ChatMessageRepository;
+import User.Repository.JPAUserRepository;
 import Util.FileUtil;
 import Util.Network.Auth.LoginRequest;
 import Util.Network.Auth.RegisterRequest;
@@ -55,7 +56,7 @@ public class PacketBroker implements Runnable {
 	private final AtomicBoolean stopFlag;
 
 	public PacketBroker(ExecutorService threadExecutor, AuthHandler authHandler, GeminiHandler geminiHandler) {
-		this(threadExecutor, authHandler, geminiHandler, new ChatHistoryHandler(new ChatMessageRepository()));
+		this(threadExecutor, authHandler, geminiHandler, new ChatHistoryHandler(new ChatMessageRepository(), new JPAUserRepository()));
 	}
 
 	public PacketBroker(ExecutorService threadExecutor, AuthHandler authHandler, GeminiHandler geminiHandler, ChatHistoryHandler chatHistoryHandler) {
