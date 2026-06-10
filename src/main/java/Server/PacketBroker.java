@@ -158,6 +158,12 @@ public class PacketBroker implements Runnable {
 						}
 						broadcastToAll(call);
 					}
+					case Util.Network.ProfilePictureUpdate update -> {
+						Util.Network.ProfilePictureUpdate saved = authHandler.handleProfilePictureUpdate(update, sender);
+						if (saved != null) {
+							broadcastToAll(saved);
+						}
+					}
 
 					default -> broadcastToAll(packet);
 				}
@@ -337,7 +343,7 @@ public class PacketBroker implements Runnable {
 	private void saveHistoryEntry(Message message, String filePath) {
 		User sender = message.getSender();
 		if (sender == null || sender.getUsername() == null || sender.getUsername().isBlank()) {
-			System.err.println("⚠️  Nachricht hat keinen Sender, wird nicht gespeichert");
+			System.err.println("Nachricht hat keinen Sender, wird nicht gespeichert");
 			return;
 		}
 
@@ -364,7 +370,7 @@ public class PacketBroker implements Runnable {
 		try {
 			chatHistoryService.saveMessage(dbMessage);
 		} catch (RuntimeException e) {
-			System.err.println("❌ Fehler beim Speichern der Chat-History: " + e.getMessage());
+			System.err.println("Fehler beim Speichern der Chat-History: " + e.getMessage());
 		}
 	}
 }
