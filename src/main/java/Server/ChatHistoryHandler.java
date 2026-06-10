@@ -2,6 +2,8 @@ package Server;
 
 import User.Model.ChatMessage;
 import User.Repository.ChatMessageRepository;
+import User.Repository.UserRepository;
+import Util.Network.ProfilePictureUpdate;
 import Util.Network.HistoryRequest;
 import Util.Network.HistoryResponse;
 
@@ -14,9 +16,11 @@ import java.util.Collections;
  */
 public class ChatHistoryHandler {
 	private final ChatMessageRepository messageRepository;
+	private final UserRepository userRepository;
 
-	public ChatHistoryHandler(ChatMessageRepository messageRepository) {
+	public ChatHistoryHandler(ChatMessageRepository messageRepository, UserRepository userRepository) {
 		this.messageRepository = messageRepository;
+		this.userRepository = userRepository;
 	}
 
 	/**
@@ -33,6 +37,29 @@ public class ChatHistoryHandler {
 
 			HistoryResponse response = new HistoryResponse(dbMessages);
 			clientProxy.tryEnqueuePacket(response);
+
+			try {
+				java.util.Set<String> uniqueSenders = new java.util.HashSet<>();
+				for (ChatMessage m : dbMessages) {
+					if (m.getSender() != null) uniqueSenders.add(m.getSender());
+				}
+				for (String senderUsername : uniqueSenders) {
+					try {
+						var userOpt = userRepository.findByUsername(senderUsername);
+						if (userOpt.isPresent()) {
+							var user = userOpt.get();
+							byte[] img = user.getProfilePicture();
+							String ct = user.getProfilePictureContentType();
+							if (img != null && img.length > 0 && ct != null) {
+								clientProxy.tryEnqueuePacket(new ProfilePictureUpdate(senderUsername, img, ct));
+							}
+						}
+					} catch (Exception ignored) {
+						// Falls einzelne User nicht geladen werden können -> weiter
+					}
+				}
+			} catch (Exception ignored) {
+			}
 		} catch (Exception e) {
 			System.err.println("Fehler beim Verarbeiten von HistoryRequest: " + e.getMessage());
 			e.printStackTrace();
