@@ -81,6 +81,19 @@ public class PacketBroker implements Runnable {
 							// alle vorher verarbeiteten Nachrichten bereits in der DB.
 							chatHistoryHandler.handleHistoryRequest(new HistoryRequest(null, null, "main"), sender);
 
+										// Sende dem neu angemeldeten Client die bereits verbundenen Benutzer,
+										// damit dieser deren Profilbilder direkt laden und cachen kann.
+										synchronized (clients) {
+											for (var existingClient : clients) {
+												if (existingClient == sender) continue;
+												var existingUser = existingClient.getUser();
+												if (existingUser != null) {
+													// versuche, dem neuen Client eine JoinNotification für den existierenden Benutzer zu senden
+													sender.tryEnqueuePacket(new JoinNotification(existingUser));
+												}
+											}
+										}
+
 							try {
 								if (!broadcast(new JoinNotification(user))) {
 									System.err.println("broadcastPacketQueue ist voll, JoinNotification wurde verworfen");
