@@ -5,6 +5,8 @@ import User.Login.Status;
 import User.Model.User;
 import User.Model.ChatMessage;
 import User.Model.MessageType;
+import Util.Emoji.Emoji;
+import Util.Emoji.EmojiService;
 import Util.FileUtil;
 import Util.Network.Auth.LoginRequest;
 import Util.Network.Auth.LoginResponse;
@@ -25,16 +27,22 @@ import Util.Network.Packet;
 import Util.Network.ProfilePictureUpdate;
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
+import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
+import javafx.collections.transformation.FilteredList;
 import javafx.fxml.FXML;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.geometry.Side;
 import javafx.scene.Node;
+import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
+import javafx.scene.shape.Circle;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
@@ -83,6 +91,9 @@ public class Controller {
 	private final AudioCall audioCall = new AudioCall();
 	private boolean inCall = false;
 
+	private final ObservableList<User> userList = FXCollections.observableArrayList();
+	private final FilteredList<User> filteredUserList = new FilteredList<>(userList, p -> true);
+
 	@FXML
 	private ListView<Packet> messageListView;
 
@@ -104,6 +115,21 @@ public class Controller {
 	@FXML
 	private ImageView profilePictureView;
 
+	@FXML
+	private Button videoButton;
+
+	@FXML
+	private Button buttonEmoji;
+
+	@FXML
+	private Label welcomeLabel;
+
+	@FXML
+	private ListView<User> userListView;
+
+	@FXML
+	private TextField textFieldSearch;
+
 	public Controller() {
 		this.outPacketQueue = new ArrayBlockingQueue<>(PACKET_QUEUE_SIZE);
 		this.inPacketQueue = new ArrayBlockingQueue<>(PACKET_QUEUE_SIZE);
@@ -124,9 +150,34 @@ public class Controller {
 
 		sendButton.setOnAction(e -> sendMessage());
 		messageTextField.setOnAction(e -> sendMessage());
-		uploadButton.setOnAction(e -> sendFile());
-		profilePictureButton.setOnAction(e -> uploadProfilePicture());
+		uploadButton.setOnAction(e -> openUploadMenu());
 		videoCallButton.setOnAction(e -> handleCallButton());
+
+		if (buttonEmoji != null) {
+			buttonEmoji.setOnAction(e -> openEmojiPicker());
+		}
+		if (videoButton != null) {
+			videoButton.setOnAction(e -> handleVideoButton());
+		}
+
+		if (userListView != null) {
+			userListView.setItems(filteredUserList);
+			userListView.setCellFactory(lv -> new UserCell());
+		}
+
+		if (textFieldSearch != null) {
+			textFieldSearch.textProperty().addListener((obs, oldVal, newVal) -> applyUserFilter(newVal));
+		}
+	}
+
+	private void openUploadMenu() {
+		ContextMenu menu = new ContextMenu();
+		MenuItem fileItem = new MenuItem("Datei senden");
+		fileItem.setOnAction(e -> sendFile());
+		MenuItem profileItem = new MenuItem("Profilbild aendern");
+		profileItem.setOnAction(e -> uploadProfilePicture());
+		menu.getItems().addAll(fileItem, profileItem);
+		menu.show(uploadButton, Side.TOP, 0, 0);
 	}
 
 	public void configure(Stage stage, User user) {
@@ -242,7 +293,7 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 
 			alert.setHeaderText("Verbindung fehlgeschlagen");
 
-			var response = alert.showAndWait();
+			var response = Main.themed(alert).showAndWait();
 			if (response.isPresent() && response.get() == ButtonType.YES) {
 				return connectAndRun(ip, port);
 			}
@@ -260,7 +311,7 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 			Alert alert = new Alert(Alert.AlertType.ERROR);
 			alert.setHeaderText("Nachricht konnte nicht gesendet werden");
 			alert.setContentText("Die Verbindung ist gerade ausgelastet. Bitte versuche es gleich nochmal.");
-			alert.show();
+			Main.themed(alert).show();
 			return false;
 		}
 		return true;
@@ -288,8 +339,7 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 	}
 
 	private void resetSendButton() {
-		sendButton.setText("Send");
-		sendButton.setStyle("-fx-background-color: #89b4fa; -fx-text-fill: #1e1e2e; -fx-font-size: 14; -fx-background-radius: 20; -fx-min-width: 70; -fx-min-height: 40;");
+		sendButton.setText("Senden");
 	}
 
 	private void sendFile() {
@@ -304,7 +354,7 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 			Alert alert = new Alert(Alert.AlertType.ERROR);
 			alert.setHeaderText("Die Datei ist zu groß!");
 			alert.setContentText(selectedFile.length() + " Bytes / " + MAX_FILE_SIZE + " Bytes");
-			alert.show();
+			Main.themed(alert).show();
 			return;
 		}
 
@@ -316,7 +366,7 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 			Alert alert = new Alert(Alert.AlertType.ERROR);
 			alert.setHeaderText("Datei konnte nicht geöffnet werden");
 			alert.setContentText(e.toString());
-			alert.show();
+			Main.themed(alert).show();
 			return;
 		}
 
@@ -330,6 +380,27 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 
 		messageListView.scrollTo(getMessages().size() - 1);
 		messageTextField.clear();
+	}
+
+	private void saveFileMessage(FileMessage fileMessage) {
+		FileChooser chooser = new FileChooser();
+		String extension = fileMessage.getFileExtension();
+		chooser.setInitialFileName("datei." + extension);
+		if (extension != null && !extension.isBlank()) {
+			chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter(extension + "-Datei", "*." + extension));
+		}
+		File target = chooser.showSaveDialog(stage);
+		if (target == null) {
+			return;
+		}
+		try {
+			Files.write(target.toPath(), fileMessage.getContent());
+		} catch (IOException e) {
+			Alert alert = new Alert(Alert.AlertType.ERROR);
+			alert.setHeaderText("Datei konnte nicht gespeichert werden");
+			alert.setContentText(e.toString());
+			Main.themed(alert).show();
+		}
 	}
 
 	private void uploadProfilePicture() {
@@ -350,7 +421,7 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 			Alert alert = new Alert(Alert.AlertType.ERROR);
 			alert.setHeaderText("Das Profilbild ist zu gross!");
 			alert.setContentText(selectedFile.length() + " Bytes / " + MAX_FILE_SIZE + " Bytes");
-			alert.show();
+			Main.themed(alert).show();
 			return;
 		}
 
@@ -358,7 +429,7 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 		if (!FileUtil.isImageExtension(extension)) {
 			Alert alert = new Alert(Alert.AlertType.ERROR);
 			alert.setHeaderText("Bitte eine Bilddatei auswaehlen");
-			alert.show();
+			Main.themed(alert).show();
 			return;
 		}
 
@@ -368,14 +439,16 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 				Alert alert = new Alert(Alert.AlertType.ERROR);
 				alert.setHeaderText("Profilbild konnte nicht verkleinert werden");
 				alert.setContentText(bytes.length + " Bytes / " + MAX_PROFILE_PICTURE_SIZE + " Bytes");
-				alert.show();
+				Main.themed(alert).show();
 				return;
 			}
 			localUser.setProfilePicture(bytes);
 			localUser.setProfilePictureContentType("image/jpeg");
 			cacheProfilePicture(localUser.getUsername(), bytes, localUser.getProfilePictureContentType());
-			updateOwnProfilePictureView();
 			messageListView.refresh();
+			if (userListView != null) {
+				userListView.refresh();
+			}
 			if (profilePictureSyncEnabled) {
 				sendPacket(new ProfilePictureUpdate(localUser.getUsername(), bytes, "image/jpeg"));
 			}
@@ -383,7 +456,7 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 			Alert alert = new Alert(Alert.AlertType.ERROR);
 			alert.setHeaderText("Profilbild konnte nicht geoeffnet werden");
 			alert.setContentText(e.toString());
-			alert.show();
+			Main.themed(alert).show();
 		}
 	}
 
@@ -425,24 +498,19 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 	private void handleNotification(Notification notification) {
 		switch (notification) {
 			case JoinNotification join -> {
-				System.out.println(join.getUser().getUsername() + " ist beigetreten");
 				cacheProfilePicture(join.getUser());
-				// todo(team-view): in der View einen neuen Nutzer anzeigen (z. B. In Seitenleiste oder direkt im Chat)
+				addUserToList(join.getUser());
 			}
-			case LeaveNotification leave -> {
-				System.out.println(leave.getUser().getUsername() + " hat verlassen");
-				// todo(team-view): in der View den angezeigten Benutzer entfernen
-			}
+			case LeaveNotification leave -> removeUserFromList(leave.getUser());
 			case null, default -> throw new IllegalStateException("Unbekannte Systemnachricht");
 		}
-
 	}
 
 	private void handleConnectionClosed(ConnectionClosed closed) {
 		Alert alert = new Alert(Alert.AlertType.ERROR);
 		alert.setHeaderText("Verbindung zum Server getrennt");
 		alert.setContentText(closed.getReason());
-		alert.show();
+		Main.themed(alert).show();
 	}
 
 	public void sendLoginRequest(String username, String password) {
@@ -468,6 +536,8 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 			this.localUser = response.getUser();
 
 			cacheProfilePicture(localUser);
+			updateWelcomeLabel();
+			addUserToList(localUser);
 			updateOwnProfilePictureView();
 			// Nach erfolgreichem Login: lade Chat-History vom Server
 			try {
@@ -489,7 +559,8 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 		if (response.getStatus() == Status.SUCCESS) {
 			this.localUser = response.getUser();
 			cacheProfilePicture(localUser);
-			updateOwnProfilePictureView();
+			updateWelcomeLabel();
+			addUserToList(localUser);
 		}
 
 		if (onRegisterResult != null) {
@@ -497,6 +568,45 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 		}
 	}
 
+	private void updateWelcomeLabel() {
+		if (welcomeLabel == null || localUser == null) {
+			return;
+		}
+		welcomeLabel.setText("Willkommen, " + getDisplayName(localUser) + "!");
+	}
+
+	private void addUserToList(User user) {
+		if (user == null || user.getUsername() == null) {
+			return;
+		}
+		for (User existing : userList) {
+			if (user.getUsername().equals(existing.getUsername())) {
+				return;
+			}
+		}
+		userList.add(user);
+	}
+
+	private void removeUserFromList(User user) {
+		if (user == null || user.getUsername() == null) {
+			return;
+		}
+		userList.removeIf(existing -> user.getUsername().equals(existing.getUsername()));
+	}
+
+	private void applyUserFilter(String search) {
+		if (search == null || search.isBlank()) {
+			filteredUserList.setPredicate(u -> true);
+			return;
+		}
+		String needle = search.toLowerCase();
+		filteredUserList.setPredicate(u -> {
+			if (u == null) return false;
+			if (u.getUsername() != null && u.getUsername().toLowerCase().contains(needle)) return true;
+			if (u.getDisplayname() != null && u.getDisplayname().toLowerCase().contains(needle)) return true;
+			return false;
+		});
+	}
 
 	private class MessageCell extends ListCell<Packet> {
 		private TextMessage editingMessage;
@@ -507,7 +617,9 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 
 			setText(null);
 			setGraphic(null);
-			setStyle("-fx-background-color: transparent; -fx-padding: 0;");
+			if (!getStyleClass().contains("message-cell")) {
+				getStyleClass().add("message-cell");
+			}
 
 			if (empty || item == null) {
 				return;
@@ -534,7 +646,7 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 					label.setMaxWidth(300);
 
 					if (textMessage.isDeleted()) {
-						label.setStyle("-fx-text-fill: #6c7086; -fx-font-style: italic;");
+						label.getStyleClass().add("deleted-label");
 					}
 
 					node = label;
@@ -544,7 +656,7 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 						Label label = new Label("Diese Datei wurde geloescht");
 						label.setWrapText(true);
 						label.setMaxWidth(300);
-						label.setStyle("-fx-text-fill: #6c7086; -fx-font-style: italic;");
+						label.getStyleClass().add("deleted-label");
 						node = label;
 					} else {
 						node = createFileNode(fileMessage);
@@ -557,24 +669,23 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 				&& message.getSender() != null
 				&& localUser.getUsername() != null
 				&& localUser.getUsername().equals(message.getSender().getUsername());
-			node.setStyle(getBubbleStyle(isOwn));
+			node.getStyleClass().add(isOwn ? "bubble-own" : "bubble-other");
 
 			VBox messageBox = new VBox(2);
 			Label metaLabel = new Label(getDisplayName(message.getSender()) + "  " + getMessageTime(message));
-			metaLabel.setStyle("-fx-font-size: 11; -fx-text-fill: #9399b2;");
+			metaLabel.getStyleClass().add("meta-label");
 			messageBox.getChildren().add(metaLabel);
 			messageBox.getChildren().add(node);
 
 			if (message instanceof TextMessage textMessage && textMessage.isEdited() && !textMessage.isDeleted()) {
 				Label editedLabel = new Label("bearbeitet");
-				editedLabel.setStyle("-fx-font-size: 10; -fx-text-fill: #6c7086; -fx-font-style: italic;");
+				editedLabel.getStyleClass().add("edited-label");
 				messageBox.getChildren().add(editedLabel);
 			}
 
 			if (isOwn) {
 				Label readStatus = new Label(getReadCheckmarks(message));
-				String color = message.getReadByUsernames().isEmpty() ? "#6c7086" : "#89b4fa";
-				readStatus.setStyle("-fx-font-size: 10; -fx-text-fill: " + color + ";");
+				readStatus.getStyleClass().add(message.getReadByUsernames().isEmpty() ? "read-status" : "read-status-read");
 				messageBox.getChildren().add(readStatus);
 			}
 
@@ -608,7 +719,7 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 			fallback.setMinSize(32, 32);
 			fallback.setPrefSize(32, 32);
 			fallback.setMaxSize(32, 32);
-			fallback.setStyle("-fx-background-color: #45475a; -fx-text-fill: #cdd6f4; -fx-font-weight: bold; -fx-background-radius: 16;");
+			fallback.getStyleClass().add("avatar-fallback");
 			return fallback;
 		}
 
@@ -649,23 +760,17 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 				return imageView;
 			} else {
 				Label label = new Label(fileMessage.getFileExtension() + "-Datei");
-				// todo(team-view): Datei herunterladen Button
-				return label;
+				Button saveButton = new Button("Speichern");
+				saveButton.getStyleClass().add("rounded");
+				saveButton.setOnAction(e -> Controller.this.saveFileMessage(fileMessage));
+				HBox box = new HBox(8, label, saveButton);
+				box.setAlignment(Pos.CENTER_LEFT);
+				return box;
 			}
-		}
-
-		private String getBubbleStyle(boolean isOwn) {
-			if (isOwn) {
-				return "-fx-background-color: #89b4fa; -fx-text-fill: #1e1e2e; "
-					+ "-fx-padding: 8 12; -fx-background-radius: 14 14 4 14;";
-			}
-			return "-fx-background-color: #313244; -fx-text-fill: #cdd6f4; "
-				+ "-fx-padding: 8 12; -fx-background-radius: 14 14 14 4;";
 		}
 
 		private void renderNotificationLine(Notification notification) {
 			String text;
-			String color;
 
 			switch (notification) {
 				case JoinNotification join -> {
@@ -680,7 +785,6 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 						}
 					}
 					text = name + " ist beigetreten";
-					color = "#89b4fa";
 				}
 				case LeaveNotification leave -> {
 					var u = leave.getUser();
@@ -693,15 +797,15 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 						}
 					}
 					text = name + " hat verlassen";
-					color = "#f38ba8";
 				}
 				case null, default -> throw new IllegalStateException("Unerwarteter Wert: " + notification);
 			}
 
 			setText(text);
 			setAlignment(Pos.CENTER);
-			setStyle("-fx-background-color: transparent; -fx-padding: 4 0; "
-				+ "-fx-text-fill: " + color + "; -fx-font-style: italic;");
+			if (!getStyleClass().contains("notification-line")) {
+				getStyleClass().add("notification-line");
+			}
 		}
 
 		private boolean canShowContextMenu(Message message) {
@@ -718,7 +822,6 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 			ContextMenu menu = new ContextMenu();
 			if (message instanceof FileMessage) {
 				MenuItem deleteItem = new MenuItem("Loeschen");
-				deleteItem.setStyle("-fx-font-size: 12;");
 				deleteItem.setOnAction(event -> Controller.this.deleteMessage(message));
 				menu.getItems().add(deleteItem);
 				return menu;
@@ -728,8 +831,7 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 			editItem.setStyle("-fx-font-size: 12;");
 			editItem.setOnAction(event -> Controller.this.startEditMessage(message));
 
-			MenuItem deleteItem = new MenuItem("🗑️ Löschen");
-			deleteItem.setStyle("-fx-font-size: 12;");
+			MenuItem deleteItem = new MenuItem("Löschen");
 			deleteItem.setOnAction(event -> Controller.this.deleteMessage(message));
 
 			menu.getItems().addAll(editItem, deleteItem);
@@ -827,7 +929,6 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 		messageTextField.requestFocus();
 		isEditingMessage = message;
 		sendButton.setText("Speichern");
-		sendButton.setStyle("-fx-background-color: #a6e3a1; -fx-text-fill: #1e1e2e; -fx-font-size: 14; -fx-background-radius: 20; -fx-min-width: 70; -fx-min-height: 40;");
 	}
 
 	private void startEditMessage(Message message) {
@@ -857,7 +958,7 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 			TextInputDialog dialog = new TextInputDialog();
 			dialog.setTitle("Anruf starten");
 			dialog.setHeaderText("Benutzername des Empfaengers:");
-			String target = dialog.showAndWait().orElse(null);
+			String target = Main.themed(dialog).showAndWait().orElse(null);
 			if (target == null || target.isBlank()) {
 				return;
 			}
@@ -871,10 +972,7 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 		} else {
 			audioCall.stop();
 			inCall = false;
-			videoCallButton.setStyle(
-				"-fx-background-color: #45475a; -fx-text-fill: #cdd6f4; -fx-font-size: 14; " +
-					"-fx-background-radius: 20; -fx-min-width: 70; -fx-min-height: 40;"
-			);
+			videoCallButton.getStyleClass().remove("call-active");
 		}
 	}
 
@@ -888,7 +986,7 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 				Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
 				alert.setTitle("Eingehender Anruf");
 				alert.setHeaderText("Anruf von: " + call.getSender().getUsername());
-				boolean accepted = alert.showAndWait().orElse(ButtonType.CANCEL) == ButtonType.OK;
+				boolean accepted = Main.themed(alert).showAndWait().orElse(ButtonType.CANCEL) == ButtonType.OK;
 				sendPacket(new CallNotification(
 					accepted ? CallNotification.CallType.ACCEPT : CallNotification.CallType.REJECT,
 					createNetworkUser(localUser),
@@ -912,17 +1010,111 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 		try {
 			audioCall.start(RELAY_IP, RELAY_PORT, roomId);
 			inCall = true;
-			videoCallButton.setStyle(
-				"-fx-background-color: #f38ba8; -fx-text-fill: #1e1e2e; -fx-font-size: 14; " +
-					"-fx-background-radius: 20; -fx-min-width: 70; -fx-min-height: 40;"
-			);
+			if (!videoCallButton.getStyleClass().contains("call-active")) {
+				videoCallButton.getStyleClass().add("call-active");
+			}
 		} catch (Exception e) {
 			Alert alert = new Alert(Alert.AlertType.ERROR);
 			alert.setHeaderText("Anruf konnte nicht gestartet werden");
 			alert.setContentText(e.toString());
-			alert.show();
+			Main.themed(alert).show();
 		}
 	}
 
+	private void handleVideoButton() {
+		Alert alert = new Alert(Alert.AlertType.INFORMATION);
+		alert.setTitle("Videoanruf");
+		alert.setHeaderText("Videoanruf");
+		alert.setContentText("Videoanrufe sind in dieser Version noch nicht angebunden. Audio funktioniert bereits.");
+		Main.themed(alert).show();
+	}
 
+	private void openEmojiPicker() {
+		Stage pickerStage = new Stage();
+		pickerStage.setTitle("Emoji auswaehlen");
+
+		FlowPane root = new FlowPane(8, 8);
+		root.setPadding(new Insets(12));
+		Label loading = new Label("Lade Emojis...");
+		loading.getStyleClass().add("meta-label");
+		root.getChildren().add(loading);
+
+		Scene scene = new Scene(root, 360, 280);
+		scene.getStylesheets().add(Main.CUPERTINO_DARK_CSS);
+		pickerStage.setScene(scene);
+		pickerStage.show();
+
+		Thread loader = new Thread(() -> {
+			java.util.List<Emoji> emojis = new EmojiService().loadEmojis();
+			Platform.runLater(() -> {
+				root.getChildren().clear();
+				if (emojis.isEmpty()) {
+					Label empty = new Label("Keine Emojis verfügbar");
+					empty.getStyleClass().add("meta-label");
+					root.getChildren().add(empty);
+					return;
+				}
+				for (Emoji emoji : emojis) {
+					Button btn = new Button(emoji.getCharacter());
+					btn.getStyleClass().add("rounded");
+					btn.setOnAction(ev -> {
+						messageTextField.appendText(emoji.getCharacter());
+						pickerStage.close();
+					});
+					root.getChildren().add(btn);
+				}
+			});
+		}, "EmojiLoader");
+		loader.setDaemon(true);
+		loader.start();
+	}
+
+	private class UserCell extends ListCell<User> {
+		@Override
+		protected void updateItem(User user, boolean empty) {
+			super.updateItem(user, empty);
+			setText(null);
+			setGraphic(null);
+			if (!getStyleClass().contains("user-cell")) {
+				getStyleClass().add("user-cell");
+			}
+			if (empty || user == null) {
+				return;
+			}
+
+			HBox container = new HBox(8, createUserAvatar(user), buildNameLabel(user));
+			container.setAlignment(Pos.CENTER_LEFT);
+			container.setPadding(new Insets(6, 10, 6, 10));
+			setGraphic(container);
+		}
+
+		private Label buildNameLabel(User user) {
+			Label label = new Label(getDisplayName(user));
+			label.getStyleClass().add("user-cell-name");
+			return label;
+		}
+
+		private Node createUserAvatar(User user) {
+			byte[] imageBytes = user.getProfilePicture();
+			if (imageBytes == null || imageBytes.length == 0) {
+				imageBytes = profilePicturesByUsername.get(user.getUsername());
+			}
+			if (imageBytes != null && imageBytes.length > 0) {
+				ImageView imageView = new ImageView(new Image(new ByteArrayInputStream(imageBytes)));
+				imageView.setFitWidth(28);
+				imageView.setFitHeight(28);
+				imageView.setPreserveRatio(false);
+				imageView.setClip(new Circle(14, 14, 14));
+				return imageView;
+			}
+			String name = getDisplayName(user);
+			Label fallback = new Label(name.isBlank() ? "?" : name.substring(0, 1).toUpperCase());
+			fallback.setAlignment(Pos.CENTER);
+			fallback.setMinSize(28, 28);
+			fallback.setPrefSize(28, 28);
+			fallback.setMaxSize(28, 28);
+			fallback.getStyleClass().add("avatar-fallback");
+			return fallback;
+		}
+	}
 }

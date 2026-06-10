@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ListView?>
+<?import javafx.scene.control.Separator?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.image.Image?>
+<?import javafx.scene.image.ImageView?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.ColumnConstraints?>
+<?import javafx.scene.layout.GridPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.RowConstraints?>
+<?import javafx.scene.layout.VBox?>
+
+<BorderPane maxHeight="-Infinity" maxWidth="-Infinity" minHeight="-Infinity" minWidth="-Infinity" prefHeight="720.0" prefWidth="1280.0" stylesheets="@styleChatScreen.css" xmlns="http://javafx.com/javafx/25" xmlns:fx="http://javafx.com/fxml/1" fx:controller="Client.Controller">
+   <left>
+      <GridPane prefWidth="300.0" styleClass="border-muted" BorderPane.alignment="TOP_LEFT">
+        <columnConstraints>
+          <ColumnConstraints hgrow="SOMETIMES" minWidth="10.0" prefWidth="100.0" />
+        </columnConstraints>
+        <rowConstraints>
+          <RowConstraints vgrow="SOMETIMES" />
+          <RowConstraints minHeight="10.0" vgrow="ALWAYS" />
+        </rowConstraints>
+         <children>
+            <VBox alignment="BOTTOM_CENTER" prefHeight="114.0" prefWidth="308.0">
+               <children>
+                  <ImageView fitHeight="78.0" fitWidth="90.0" pickOnBounds="true" preserveRatio="true">
+                     <image>
+                        <Image url="@assets/logo1.png" />
+                     </image>
+                     <VBox.margin>
+                        <Insets bottom="10.0" left="10.0" right="10.0" top="10.0" />
+                     </VBox.margin>
+                  </ImageView>
+                  <Label fx:id="welcomeLabel" text="Willkommen!">
+                     <padding>
+                        <Insets bottom="10.0" />
+                     </padding></Label>
+                  <TextField fx:id="textFieldSearch" focusTraversable="false" promptText="Suche" styleClass="rounded">
+                     <VBox.margin>
+                        <Insets bottom="10.0" left="10.0" right="10.0" top="10.0" />
+                     </VBox.margin>
+                  </TextField>
+                  <Separator prefWidth="200.0" />
+               </children>
+               <GridPane.margin>
+                  <Insets />
+               </GridPane.margin>
+               <padding>
+                  <Insets bottom="10.0" left="10.0" right="10.0" top="20.0" />
+               </padding>
+            </VBox>
+            <ListView fx:id="userListView" GridPane.rowIndex="1" />
+         </children>
+      </GridPane>
+   </left>
+   <center>
+      <GridPane alignment="BOTTOM_CENTER" BorderPane.alignment="CENTER">
+        <columnConstraints>
+          <ColumnConstraints hgrow="SOMETIMES" minWidth="10.0" prefWidth="100.0" />
+        </columnConstraints>
+        <rowConstraints>
+          <RowConstraints minHeight="0.0" vgrow="SOMETIMES" />
+          <RowConstraints maxHeight="576.7999938011169" minHeight="10.0" prefHeight="559.9999988555908" vgrow="SOMETIMES" />
+          <RowConstraints fillHeight="false" prefHeight="80.0" vgrow="SOMETIMES" />
+        </rowConstraints>
+         <children>
+            <GridPane>
+              <columnConstraints>
+                <ColumnConstraints halignment="CENTER" hgrow="SOMETIMES" maxWidth="723.4000244140625" minWidth="10.0" prefWidth="694.5999755859375" />
+                <ColumnConstraints hgrow="SOMETIMES" maxWidth="316.8000244140625" minWidth="255.99997558593748" prefWidth="284.8000244140625" />
+              </columnConstraints>
+              <rowConstraints>
+                <RowConstraints vgrow="SOMETIMES" />
+              </rowConstraints>
+               <children>
+                  <HBox alignment="CENTER_RIGHT" prefHeight="84.0" prefWidth="337.0" GridPane.columnIndex="1">
+                     <children>
+                        <Button fx:id="videoCallButton" minWidth="100.0" mnemonicParsing="false" styleClass="rounded" text="Anruf">
+                           <HBox.margin>
+                              <Insets bottom="20.0" left="10.0" right="10.0" top="10.0" />
+                           </HBox.margin>
+                        </Button>
+                        <Button fx:id="videoButton" minWidth="120.0" mnemonicParsing="false" styleClass="rounded" text="Videoanruf">
+                           <HBox.margin>
+                              <Insets bottom="20.0" left="10.0" right="10.0" top="10.0" />
+                           </HBox.margin>
+                        </Button>
+                     </children>
+                     <padding>
+                        <Insets bottom="10.0" left="10.0" right="10.0" top="10.0" />
+                     </padding>
+                  </HBox>
+                  <Label styleClass="title-3" text="FIA11 Gruppe 1">
+                     <padding>
+                        <Insets bottom="10.0" />
+                     </padding>
+                  </Label>
+               </children>
+            </GridPane>
+            <Separator prefWidth="200.0" GridPane.valignment="BOTTOM" />
+            <ListView fx:id="messageListView" GridPane.rowIndex="1" />
+            <Separator prefWidth="200.0" valignment="TOP" GridPane.rowIndex="2" GridPane.valignment="TOP" />
+            <HBox alignment="CENTER" GridPane.rowIndex="2">
+               <children>
+                  <TextField fx:id="messageTextField" minWidth="500.0" promptText="Nachricht eingeben ..." styleClass="rounded">
+                     <HBox.margin>
+                        <Insets right="10.0" />
+                     </HBox.margin>
+                  </TextField>
+                  <Button fx:id="uploadButton" mnemonicParsing="false" styleClass="rounded" text="+">
+                     <HBox.margin>
+                        <Insets right="10.0" />
+                     </HBox.margin>
+                  </Button>
+                  <Button fx:id="buttonEmoji" mnemonicParsing="false" styleClass="rounded" text="😊">
+                     <HBox.margin>
+                        <Insets right="10.0" />
+                     </HBox.margin>
+                  </Button>
+                  <Button fx:id="sendButton" mnemonicParsing="false" styleClass="rounded" text="Senden" textAlignment="CENTER" />
+               </children>
+               <GridPane.margin>
+                  <Insets />
+               </GridPane.margin>
+               <padding>
+                  <Insets bottom="10.0" left="10.0" right="10.0" top="20.0" />
+               </padding>
+            </HBox>
+         </children>
+      </GridPane>
+   </center>
+</BorderPane>

@@ -11,6 +11,7 @@ module com.chatproject {
 	uses java.sql.Driver;
 
 
+	requires atlantafx.base;
 	requires jbcrypt;
 
 	requires java.net.http;
