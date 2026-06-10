@@ -230,7 +230,7 @@ public class Controller {
 									System.err.println("Fehler beim Laden der History: " + histResp.getErrorMessage());
 								}
 							});
-							case null, default -> throw new IllegalStateException("Unbekanntes Paket empfangen");
+case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (packet == null ? "null" : packet.getClass().getName()));
 						}
 
 					} catch (InterruptedException e) {
