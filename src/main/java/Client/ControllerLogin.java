@@ -13,16 +13,16 @@ import java.io.IOException;
 public class ControllerLogin {
 
 	@FXML
-	private TextField usernameField;
+	private TextField textFieldUsername;
 
 	@FXML
-	private PasswordField passwordField;
+	private PasswordField textFieldPassword;
 
 	@FXML
-	private Button loginButton;
+	private Button buttonLogin;
 
 	@FXML
-	private Label registerLink;
+	private Label buttonRegister;
 
 	private Stage stage;
 	private Controller controller;
@@ -30,11 +30,11 @@ public class ControllerLogin {
 
 	@FXML
 	private void initialize() {
-		loginButton.setOnAction(e -> {
-			loginButton.setDisable(true);
+		buttonLogin.setOnAction(e -> {
+			buttonLogin.setDisable(true);
 			handleLogin();
 		});
-		registerLink.setOnMouseClicked(e -> handleRegisterClick());
+		buttonRegister.setOnMouseClicked(e -> handleRegisterClick());
 	}
 
 	public void setStage(Stage stage) {
@@ -50,8 +50,8 @@ public class ControllerLogin {
 	}
 
 	private void handleLogin() {
-		String username = usernameField.getText().trim();
-		String password = passwordField.getText();
+		String username = textFieldUsername.getText().trim();
+		String password = textFieldPassword.getText();
 
 		if (!validateInput(username, password)) return;
 
@@ -60,7 +60,7 @@ public class ControllerLogin {
 				stage.setTitle("Socket Chat");
 				stage.setScene(chatScene);
 			} else {
-				loginButton.setDisable(false);
+				buttonLogin.setDisable(false);
 				showError(response.getMessage());
 			}
 		});
@@ -77,9 +77,13 @@ public class ControllerLogin {
 			registerController.setStage(stage);
 			registerController.setController(controller);
 			registerController.setChatScene(chatScene);
+			registerController.setLoginScene(stage.getScene());
+
+			Scene registerScene = new Scene(registerRoot, 1280, 720);
+			registerScene.getStylesheets().add(Main.CUPERTINO_DARK_CSS);
 
 			stage.setTitle("Socket Chat - Registrierung");
-			stage.setScene(new Scene(registerRoot, 1280, 720));
+			stage.setScene(registerScene);
 		} catch (IOException e) {
 			showError("Fehler beim Laden des Registrierungsbildschirms: " + e.getMessage());
 		}
@@ -101,6 +105,6 @@ public class ControllerLogin {
 		Alert alert = new Alert(Alert.AlertType.ERROR);
 		alert.setHeaderText("Fehler");
 		alert.setContentText(message);
-		alert.show();
+		Main.themed(alert).show();
 	}
 }

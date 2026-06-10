@@ -1,0 +1,103 @@
+.list-view {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+    -fx-border-color: transparent;
+}
+
+.list-view .virtual-flow .scroll-bar:horizontal,
+.list-view .virtual-flow .corner {
+    -fx-background-color: transparent;
+}
+
+.list-cell,
+.list-cell:empty,
+.list-cell:filled,
+.list-cell:odd,
+.list-cell:even,
+.list-cell:selected,
+.list-cell:focused,
+.list-cell:hover {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-border-color: transparent;
+    -fx-padding: 0;
+}
+
+.message-cell {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+
+.bubble-own {
+    -fx-background-color: -color-accent-emphasis;
+    -fx-text-fill: -color-fg-emphasis;
+    -fx-padding: 8 12;
+    -fx-background-radius: 14 14 4 14;
+}
+
+.bubble-other {
+    -fx-background-color: -color-bg-subtle;
+    -fx-text-fill: -color-fg-default;
+    -fx-padding: 8 12;
+    -fx-background-radius: 14 14 14 4;
+}
+
+.avatar-fallback {
+    -fx-background-color: -color-bg-subtle;
+    -fx-text-fill: -color-fg-default;
+    -fx-font-weight: bold;
+    -fx-background-radius: 16;
+}
+
+.meta-label {
+    -fx-font-size: 11;
+    -fx-text-fill: -color-fg-muted;
+}
+
+.edited-label {
+    -fx-font-size: 10;
+    -fx-text-fill: -color-fg-subtle;
+    -fx-font-style: italic;
+}
+
+.deleted-label {
+    -fx-text-fill: -color-fg-subtle;
+    -fx-font-style: italic;
+}
+
+.read-status {
+    -fx-font-size: 10;
+    -fx-text-fill: -color-fg-subtle;
+}
+
+.read-status-read {
+    -fx-font-size: 10;
+    -fx-text-fill: -color-accent-fg;
+}
+
+.notification-line {
+    -fx-background-color: transparent;
+    -fx-padding: 4 0;
+    -fx-text-fill: -color-fg-subtle;
+    -fx-font-style: italic;
+}
+
+.call-active {
+    -fx-background-color: -color-danger-emphasis;
+    -fx-text-fill: -color-fg-emphasis;
+}
+
+.user-cell {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+
+.user-cell:hover {
+    -fx-background-color: -color-bg-subtle;
+}
+
+.user-cell-name {
+    -fx-text-fill: -color-fg-default;
+    -fx-font-size: 13;
+}
