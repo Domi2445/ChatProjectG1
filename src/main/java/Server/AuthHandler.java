@@ -18,6 +18,7 @@ import java.util.UUID;
 
 public class AuthHandler {
 	private final UserRepository userRepository;
+	private static final int MAX_PROFILE_PICTURE_SIZE = 500_000; // bytes
 
 	public AuthHandler(UserRepository userRepository) {
 		this.userRepository = userRepository;
@@ -50,6 +51,7 @@ public class AuthHandler {
 			return true;
 		} catch (RepositoryException e) {
 			System.err.println("Login fehlgeschlagen (DB): " + e.getMessage());
+			e.printStackTrace();
 			sender.tryEnqueuePacket(new LoginResponse(Status.DATABASE_ERROR, "Datenbankfehler", null));
 			return false;
 		}
@@ -99,17 +101,23 @@ public class AuthHandler {
 		}
 
 		byte[] imageBytes = update.getImageBytes();
-		if (imageBytes == null || imageBytes.length == 0) {
+		if (imageBytes == null || imageBytes.length == 0 || imageBytes.length > MAX_PROFILE_PICTURE_SIZE) {
+			return null;
+		}
+		String contentType = update.getContentType();
+		if (contentType == null || !contentType.toLowerCase().startsWith("image/")) {
 			return null;
 		}
 
 		try {
 			User user = sender.getUser();
 			user.setProfilePicture(imageBytes);
-			user.setProfilePictureContentType(update.getContentType());
+			user.setProfilePictureContentType(contentType);
 			user.setProfilePictureUUID(UUID.randomUUID());
+
 			userRepository.updateUser(user);
 			sender.setUser(user);
+
 			return new ProfilePictureUpdate(username, imageBytes, update.getContentType());
 		} catch (RepositoryException e) {
 			System.err.println("Profilbild konnte nicht gespeichert werden: " + e.getMessage());

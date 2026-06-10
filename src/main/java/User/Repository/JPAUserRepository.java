@@ -64,7 +64,18 @@ public class JPAUserRepository implements UserRepository {
 			if (existing == null) {
 				throw new UserNotFoundException(user.getUsername());
 			}
-			entityManager.merge(user);
+
+			// Aktualisiere einzelnen Felder statt merge() zu verwenden, um LOB-Probleme zu vermeiden
+			existing.setDisplayname(user.getDisplayname());
+			existing.setPasswordHash(user.getPasswordHash());
+			existing.setStatusMessage(user.getStatusMessage());
+			existing.setProfileDescription(user.getProfileDescription());
+			existing.setProfilePictureUUID(user.getProfilePictureUUID());
+			existing.setProfilePicture(user.getProfilePicture());
+			existing.setProfilePictureContentType(user.getProfilePictureContentType());
+			existing.setContactData(user.getContactData());
+
+			entityManager.flush();
 		}, "User konnte nicht aktualisiert werden: " + user.getUsername());
 	}
 

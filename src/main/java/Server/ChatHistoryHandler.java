@@ -29,23 +29,12 @@ public class ChatHistoryHandler {
 			String receiver = request.getReceiver();
 			String chatRoomId = request.getChatRoomId();
 
-			System.out.println("  📨 HistoryRequest erhalten: sender=" + sender + ", receiver=" + receiver + ", chatRoomId=" + chatRoomId);
-
 			List<ChatMessage> dbMessages = messageRepository.getHistoryForChat(sender, receiver, chatRoomId);
-
-			System.out.println("    🔍 Gefundene Messages in DB: " + (dbMessages != null ? dbMessages.size() : 0));
 
 			HistoryResponse response = new HistoryResponse(dbMessages);
 			clientProxy.tryEnqueuePacket(response);
-
-			String chatIdentifier = chatRoomId != null
-					? "'" + chatRoomId + "'"
-					: (sender != null || receiver != null)
-						? "zwischen '" + sender + "' und '" + receiver + "'"
-						: "alle Nachrichten";
-			System.out.println("✓ History für Chat " + chatIdentifier + " (" + (dbMessages != null ? dbMessages.size() : 0) + " Messages) gesendet");
 		} catch (Exception e) {
-			System.err.println("❌ Fehler beim Verarbeiten von HistoryRequest: " + e.getMessage());
+			System.err.println("Fehler beim Verarbeiten von HistoryRequest: " + e.getMessage());
 			e.printStackTrace();
 			try {
 				HistoryResponse errorResponse = new HistoryResponse(Collections.emptyList(), "error", e.getMessage());
