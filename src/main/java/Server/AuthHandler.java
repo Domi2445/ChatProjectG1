@@ -118,7 +118,7 @@ public class AuthHandler {
 			userRepository.updateUser(user);
 			sender.setUser(user);
 
-			return new ProfilePictureUpdate(username, imageBytes, update.getContentType());
+			return new ProfilePictureUpdate(username, imageBytes, contentType);
 		} catch (RepositoryException e) {
 			System.err.println("Profilbild konnte nicht gespeichert werden: " + e.getMessage());
 			return null;
