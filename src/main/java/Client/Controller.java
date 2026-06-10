@@ -151,10 +151,7 @@ public class Controller {
 								getMessages().add(message);
 								// Sende ReadReceipt, wenn die Nachricht nicht von uns selbst stammt
 								if (localUser != null && message.getSender() != null && !message.getSender().equals(localUser)) {
-Util.Network.ReadReceipt receipt = new Util.Network.ReadReceipt(message.getMessageId(), localUser.getUsername());
-if (!outPacketQueue.offer(receipt)) {
-	System.err.println("ReadReceipt konnte nicht gesendet werden: Queue voll");
-}
+									outPacketQueue.offer(new Util.Network.ReadReceipt(message.getMessageId(), localUser.getUsername()));
 								}
 								messageListView.scrollTo(getMessages().size() - 1);
 							});

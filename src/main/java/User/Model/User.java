@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.util.Arrays;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -101,11 +102,11 @@ public class User implements Serializable {
 	}
 
 	public byte[] getProfilePicture() {
-		return profilePicture;
+		return profilePicture == null ? null : Arrays.copyOf(profilePicture, profilePicture.length);
 	}
 
 	public void setProfilePicture(byte[] profilePicture) {
-		this.profilePicture = profilePicture;
+		this.profilePicture = profilePicture == null ? null : Arrays.copyOf(profilePicture, profilePicture.length);
 	}
 
 	public String getProfilePictureContentType() {
