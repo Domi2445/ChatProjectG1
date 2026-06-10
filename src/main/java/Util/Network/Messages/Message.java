@@ -28,7 +28,7 @@ public abstract class Message extends Packet {
         this.groupId = null;
     }
 
-    protected Message(User sender, long messageId, LocalDateTime sentAt) {
+    public Message(User sender, long messageId, LocalDateTime sentAt) {
         this.sender = sender;
         this.readByUsernames = new HashSet<>();
         this.messageId = messageId;
