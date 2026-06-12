@@ -11,11 +11,20 @@ import java.util.concurrent.ConcurrentHashMap;
 // this class is only used internally by the server — clients interact with groups by sending packets.
 public class GroupManager
 {
+	public static final UUID BROADCAST_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
+	public static final String BROADCAST_NAME = "📢 Ankündigungen";
+
 	private final Map<UUID, Group> groups = new ConcurrentHashMap<>();
 	// maps each group id to the set of clients currently in that group
 	private final Map<UUID, Set<ClientProxy>> groupMembers = new ConcurrentHashMap<>();
 	// maps each connected client to their logged-in user object
 	private final Map<ClientProxy, User> clientUsers = new ConcurrentHashMap<>();
+
+	public GroupManager() {
+		Group broadcast = new Group(BROADCAST_ID, BROADCAST_NAME, "System");
+		groups.put(BROADCAST_ID, broadcast);
+		groupMembers.put(BROADCAST_ID, Collections.synchronizedSet(new HashSet<>()));
+	}
 
 	// ---- client registration ----
 
@@ -23,6 +32,8 @@ public class GroupManager
 	public void registerClient(ClientProxy client, User user)
 	{
 		clientUsers.put(client, user);
+		// auto-join broadcast channel
+		groupMembers.get(BROADCAST_ID).add(client);
 	}
 
 	// call this when a client disconnects — removes them from all groups automatically

@@ -5,13 +5,17 @@ import User.Model.MessageType;
 import User.Model.User;
 import User.Repository.ChatHistoryService;
 import User.Repository.ChatMessageRepository;
+import User.Repository.DeletedForUserRepository;
 import User.Repository.JPAUserRepository;
 import Util.FileUtil;
 import Util.Network.Auth.LoginRequest;
 import Util.Network.Auth.RegisterRequest;
+import Util.Network.DeleteForMeMessage;
 import Util.Network.DeleteMessage;
 import Util.Network.EditMessage;
 import Util.Network.Groups.CreateGroupPacket;
+import Util.Network.Groups.Group;
+import Util.Network.Groups.GroupCreatedPacket;
 import Util.Network.Groups.GroupListRequestPacket;
 import Util.Network.Groups.GroupListResponsePacket;
 import Util.Network.Groups.JoinGroupPacket;
@@ -47,6 +51,7 @@ public class PacketBroker implements Runnable {
 	private final GeminiHandler geminiHandler;
 	private final ChatHistoryHandler chatHistoryHandler;
 	private final ChatHistoryService chatHistoryService;
+	private final DeletedForUserRepository deletedForUserRepository;
 	private final GroupManager groupManager;
 
 	/// Queue für Pakete, die an alle verbundenen Clients gesendet werden sollen.
@@ -65,6 +70,7 @@ public class PacketBroker implements Runnable {
 		this.geminiHandler = geminiHandler;
 		this.chatHistoryHandler = chatHistoryHandler;
 		this.chatHistoryService = new ChatHistoryService();
+		this.deletedForUserRepository = new DeletedForUserRepository();
 		this.groupManager = new GroupManager();
 
 		this.broadcastPacketQueue = new ArrayBlockingQueue<>(MAX_INCOMING_PACKETS);
@@ -88,9 +94,11 @@ public class PacketBroker implements Runnable {
 							// register with group manager so this client can create/join groups
 							groupManager.registerClient(sender, user);
 
-							// History direkt nach Login senden — zu diesem Zeitpunkt sind
-							// alle vorher verarbeiteten Nachrichten bereits in der DB.
-							chatHistoryHandler.handleHistoryRequest(new HistoryRequest(null, null, "main"), sender);
+							// History direkt nach Login senden
+							chatHistoryHandler.handleHistoryRequest(new HistoryRequest(user.getUsername(), null, "main"), sender);
+
+							// Dem Client die Gruppen schicken, in denen er Mitglied ist (inkl. Broadcast)
+							sender.tryEnqueuePacket(new GroupListResponsePacket(groupManager.getGroupsForClient(sender)));
 
 										// Sende dem neu angemeldeten Client die bereits verbundenen Benutzer,
 										// damit dieser deren Profilbilder direkt laden und cachen kann.
@@ -118,12 +126,17 @@ public class PacketBroker implements Runnable {
 					case RegisterRequest req -> authHandler.handleRegister(req, sender);
 					// group action packets — only logged in clients can use these
 					case CreateGroupPacket cgp -> {
-						if (sender != null && sender.getUser() != null)
-							groupManager.createGroup(cgp.getGroupName(), sender);
+						if (sender != null && sender.getUser() != null) {
+							Group created = groupManager.createGroup(cgp.getGroupName(), sender);
+							sender.tryEnqueuePacket(new GroupCreatedPacket(created));
+						}
 					}
 					case JoinGroupPacket jgp -> {
-						if (sender != null && sender.getUser() != null)
+						if (sender != null && sender.getUser() != null) {
 							groupManager.joinGroup(jgp.getGroupId(), sender);
+							Group joined = groupManager.getGroup(jgp.getGroupId());
+							if (joined != null) sender.tryEnqueuePacket(new GroupCreatedPacket(joined));
+						}
 					}
 					case LeaveGroupPacket lgp -> {
 						if (sender != null && sender.getUser() != null)
@@ -141,8 +154,13 @@ public class PacketBroker implements Runnable {
 						if (sender != null && sender.getUser() != null) {
 							try {
 								UUID fileId = FileUtil.saveFile(file.getContent(), file.getFileExtension());
-								saveHistoryEntry(file, fileId.toString());
-								broadcastToAll(packet);
+								Long dbId = saveHistoryEntry(file, fileId.toString());
+								FileMessage withDbId = dbId != null
+									? new FileMessage(file.getSender(), file.getContent(), file.getFileExtension(), dbId, file.getSentAt())
+									: new FileMessage(file.getSender(), file.getContent(), file.getFileExtension());
+								withDbId.setGroupId(file.getGroupId());
+								withDbId.setReceiverUsername(file.getReceiverUsername());
+								routeMessage(withDbId);
 							} catch (IOException e) {
 								System.err.println("Fehler beim Speichern einer Datei: " + e);
 							}
@@ -151,8 +169,6 @@ public class PacketBroker implements Runnable {
 					case TextMessage textMessage -> {
 						if (sender != null && sender.getUser() != null) {
 							String content = textMessage.getContent();
-							int contentLength = content != null ? content.length() : 0;
-							boolean isAiCommand = content != null && content.startsWith("/ai ");
 
 							if (content != null && content.startsWith("/ai ")) {
 								User botUser = new User();
@@ -181,8 +197,13 @@ public class PacketBroker implements Runnable {
 								});
 
 							} else {
-								saveHistoryEntry(textMessage, null);
-								routeMessage(textMessage);
+								Long dbId = saveHistoryEntry(textMessage, null);
+								TextMessage withDbId = dbId != null
+									? new TextMessage(textMessage.getSender(), textMessage.getContent(), dbId, textMessage.getSentAt())
+									: new TextMessage(textMessage.getSender(), textMessage.getContent());
+								withDbId.setGroupId(textMessage.getGroupId());
+								withDbId.setReceiverUsername(textMessage.getReceiverUsername());
+								routeMessage(withDbId);
 							}
 						}
 					}
@@ -194,8 +215,25 @@ public class PacketBroker implements Runnable {
 					}
 					case ReadReceipt receipt -> broadcastToAll(packet);
 					case EditMessage edit -> broadcastToAll(packet);
-					case DeleteMessage delete -> broadcastToAll(packet);
-					case HistoryRequest histReq -> chatHistoryHandler.handleHistoryRequest(histReq, sender);
+					case DeleteForMeMessage deleteForMe -> {
+						if (sender != null && sender.getUser() != null) {
+							try {
+								deletedForUserRepository.save(deleteForMe.getMessageId(), sender.getUser().getUsername());
+							} catch (Exception e) {
+								System.err.println("Fehler beim Speichern von 'nur für mich löschen': " + e.getMessage());
+							}
+						}
+					}
+					case DeleteMessage delete -> {
+						chatHistoryService.markAsDeleted(delete.getMessageId());
+						broadcastToAll(packet);
+					}
+					case HistoryRequest histReq -> {
+						if (sender != null && sender.getUser() != null) {
+							histReq.setSender(sender.getUser().getUsername());
+						}
+						chatHistoryHandler.handleHistoryRequest(histReq, sender);
+					}
 					//Audio
 					case Util.Network.Notifications.CallNotification call -> {
 						if (sender != null) {
@@ -222,11 +260,22 @@ public class PacketBroker implements Runnable {
 		closeAllClients();
 	}
 
-	// if the message has a group id, only send to group members. otherwise broadcast to everyone.
+	// Routes a message to group, private, or global chat based on message fields.
 	private void routeMessage(Message msg) {
 		if (msg.getGroupId() != null) {
 			for (var member : groupManager.getGroupMembers(msg.getGroupId())) {
 				member.tryEnqueuePacket(msg);
+			}
+		} else if (msg.getReceiverUsername() != null) {
+			// Private message: deliver to sender and receiver only
+			synchronized (clients) {
+				for (var client : clients) {
+					User u = client.getUser();
+					if (u != null && (u.getUsername().equals(msg.getReceiverUsername())
+							|| (msg.getSender() != null && u.getUsername().equals(msg.getSender().getUsername())))) {
+						client.tryEnqueuePacket(msg);
+					}
+				}
 			}
 		} else {
 			broadcastToAll(msg);
@@ -397,11 +446,11 @@ public class PacketBroker implements Runnable {
 		}
 	}
 
-	private void saveHistoryEntry(Message message, String filePath) {
+	private Long saveHistoryEntry(Message message, String filePath) {
 		User sender = message.getSender();
 		if (sender == null || sender.getUsername() == null || sender.getUsername().isBlank()) {
 			System.err.println("Nachricht hat keinen Sender, wird nicht gespeichert");
-			return;
+			return null;
 		}
 
 		String content;
@@ -413,21 +462,34 @@ public class PacketBroker implements Runnable {
 			content = "[Datei: " + fileMessage.getFileExtension() + "]";
 			messageType = MessageType.FILE;
 		} else {
-			return;
+			return null;
+		}
+
+		String receiver = message.getReceiverUsername();
+		String chatRoomId;
+		if (message.getGroupId() != null) {
+			chatRoomId = message.getGroupId().toString();
+			receiver = null;
+		} else if (receiver != null) {
+			chatRoomId = null;
+		} else {
+			chatRoomId = "main";
 		}
 
 		ChatMessage dbMessage = new ChatMessage(
 			sender.getUsername(),
-			null,
-			"main",  // Standard-Chatroom für globale Nachrichten
+			receiver,
+			chatRoomId,
 			content,
 			messageType,
 			filePath
 		);
 		try {
 			chatHistoryService.saveMessage(dbMessage);
+			return dbMessage.getId();
 		} catch (RuntimeException e) {
 			System.err.println("Fehler beim Speichern der Chat-History: " + e.getMessage());
+			return null;
 		}
 	}
 }

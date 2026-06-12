@@ -19,6 +19,8 @@ public abstract class Message extends Packet {
     private final LocalDateTime sentAt;
     // null = global chat, set this to route the message to a specific group only
     private UUID groupId;
+    // null = global/group chat, set this for private user-to-user messages
+    private String receiverUsername;
 
     public Message(User sender) {
         this.sender = sender;
@@ -38,6 +40,9 @@ public abstract class Message extends Packet {
 
     public UUID getGroupId() { return groupId; }
     public void setGroupId(UUID groupId) { this.groupId = groupId; }
+
+    public String getReceiverUsername() { return receiverUsername; }
+    public void setReceiverUsername(String receiverUsername) { this.receiverUsername = receiverUsername; }
 
     public User getSender() { return sender; }
 

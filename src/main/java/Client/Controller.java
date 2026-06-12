@@ -13,7 +13,13 @@ import Util.Network.Auth.LoginResponse;
 import Util.Network.Auth.RegisterRequest;
 import Util.Network.Auth.RegisterResponse;
 import Util.Network.ConnectionClosed;
+import Util.Network.DeleteForMeMessage;
 import Util.Network.DeleteMessage;
+import Util.Network.Groups.CreateGroupPacket;
+import Util.Network.Groups.Group;
+import Util.Network.Groups.GroupCreatedPacket;
+import Util.Network.Groups.GroupListResponsePacket;
+import Util.Network.Groups.JoinGroupPacket;
 import Util.Network.HistoryRequest;
 import Util.Network.HistoryResponse;
 import Util.Network.Messages.FileMessage;
@@ -60,6 +66,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.function.Consumer;
@@ -83,6 +90,12 @@ public class Controller {
 	private User localUser;
 	private Stage stage;
 	private TextMessage isEditingMessage;
+	// null = globaler Chat, sonst Username des privaten Gesprächspartners
+	private String activePrivateChat = null;
+	// null = kein Gruppen-Chat aktiv
+	private Group activeGroup = null;
+
+	private final ObservableList<ChatEntry> chatList = FXCollections.observableArrayList();
 	private final Map<String, byte[]> profilePicturesByUsername = new HashMap<>();
 	private final Map<String, String> profilePictureContentTypesByUsername = new HashMap<>();
 	private boolean profilePictureSyncEnabled;
@@ -125,6 +138,15 @@ public class Controller {
 	private Label welcomeLabel;
 
 	@FXML
+	private Label chatHeaderLabel;
+
+	@FXML
+	private ListView<ChatEntry> chatListView;
+
+	@FXML
+	private Button createGroupButton;
+
+	@FXML
 	private ListView<User> userListView;
 
 	@FXML
@@ -163,6 +185,25 @@ public class Controller {
 		if (userListView != null) {
 			userListView.setItems(filteredUserList);
 			userListView.setCellFactory(lv -> new UserCell());
+			userListView.setOnMouseClicked(e -> {
+				User selected = userListView.getSelectionModel().getSelectedItem();
+				if (selected != null) openChat(selected);
+			});
+		}
+
+		if (chatListView != null) {
+			chatListView.setItems(chatList);
+			chatListView.setCellFactory(lv -> new ChatEntryCell());
+			chatListView.setOnMouseClicked(e -> {
+				ChatEntry selected = chatListView.getSelectionModel().getSelectedItem();
+				if (selected != null) openChatEntry(selected);
+			});
+			// Globaler Chat ist immer vorhanden
+			chatList.add(ChatEntry.global());
+		}
+
+		if (createGroupButton != null) {
+			createGroupButton.setOnAction(e -> showCreateGroupDialog());
 		}
 
 		if (textFieldSearch != null) {
@@ -199,12 +240,13 @@ public class Controller {
 						Packet packet = inPacketQueue.take();
 						switch (packet) {
 							case Message message -> Platform.runLater(() -> {
-								getMessages().add(message);
-								// Sende ReadReceipt, wenn die Nachricht nicht von uns selbst stammt
-								if (localUser != null && message.getSender() != null && !message.getSender().equals(localUser)) {
-									outPacketQueue.offer(new Util.Network.ReadReceipt(message.getMessageId(), localUser.getUsername()));
+								if (isMessageForActiveChat(message)) {
+									getMessages().add(message);
+									if (localUser != null && message.getSender() != null && !message.getSender().equals(localUser)) {
+										outPacketQueue.offer(new Util.Network.ReadReceipt(message.getMessageId(), localUser.getUsername()));
+									}
+									messageListView.scrollTo(getMessages().size() - 1);
 								}
-								messageListView.scrollTo(getMessages().size() - 1);
 							});
 							case CallNotification call -> Platform.runLater(() -> handleCallNotification(call));
 							case Notification notification -> Platform.runLater(() -> {
@@ -248,6 +290,15 @@ public class Controller {
 									}
 								}
 							});
+							case GroupListResponsePacket groupList -> Platform.runLater(() -> {
+								for (Group g : groupList.getGroups()) {
+									addGroupToChatList(g);
+								}
+							});
+							case GroupCreatedPacket created -> Platform.runLater(() -> {
+								addGroupToChatList(created.getGroup());
+								openGroupChat(created.getGroup());
+							});
 							case ProfilePictureUpdate update -> Platform.runLater(() -> applyProfilePictureUpdate(update));
 							case ConnectionClosed closed -> Platform.runLater(() -> handleConnectionClosed(closed));
 							case LoginResponse loginResp -> Platform.runLater(() -> { //FÜR UI CALLBACK
@@ -265,14 +316,16 @@ public class Controller {
 									var fileExtensions = histResp.getFileExtensions();
 									for (ChatMessage dbMsg : histResp.getMessages()) {
 										if (dbMsg.getMessageType() == MessageType.TEXT || dbMsg.getMessageType() == MessageType.EMOJI) {
-											Message msg = new TextMessage(new User(dbMsg.getSender()), dbMsg.getContent());
+											TextMessage msg = new TextMessage(new User(dbMsg.getSender()), dbMsg.getContent(), dbMsg.getId(), dbMsg.getTimestamp());
+											if (dbMsg.isDeleted()) msg.setDeleted();
 											getMessages().add(msg);
 										} else if (dbMsg.getMessageType() == MessageType.FILE) {
 											String fileId = dbMsg.getFilePath();
 											if (fileId != null && fileContents != null && fileContents.containsKey(fileId)) {
 												byte[] bytes = fileContents.get(fileId);
 												String ext = fileExtensions != null ? fileExtensions.getOrDefault(fileId, "bin") : "bin";
-												Message msg = new FileMessage(new User(dbMsg.getSender()), bytes, ext);
+												FileMessage msg = new FileMessage(new User(dbMsg.getSender()), bytes, ext, dbMsg.getId(), dbMsg.getTimestamp());
+												if (dbMsg.isDeleted()) msg.setDeleted();
 												getMessages().add(msg);
 											} else {
 												// Fallback: keine Dateibytes verfügbar -> Platzhaltertext
@@ -338,7 +391,12 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 				isEditingMessage = null;
 				resetSendButton();
 			} else {
-				Message message = new TextMessage(createNetworkUser(localUser), text);
+				TextMessage message = new TextMessage(createNetworkUser(localUser), text);
+				if (activePrivateChat != null) {
+					message.setReceiverUsername(activePrivateChat);
+				} else if (activeGroup != null) {
+					message.setGroupId(activeGroup.getId());
+				}
 				if (!sendPacket(message)) {
 					return;
 				}
@@ -383,7 +441,12 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 
 		String fileName = selectedFile.getName();
 		String fileExt = FileUtil.getFileExtension(fileName).toLowerCase();
-		Message message = new FileMessage(createNetworkUser(localUser), bytes, fileExt);
+		FileMessage message = new FileMessage(createNetworkUser(localUser), bytes, fileExt);
+		if (activePrivateChat != null) {
+			message.setReceiverUsername(activePrivateChat);
+		} else if (activeGroup != null) {
+			message.setGroupId(activeGroup.getId());
+		}
 
 		if (!sendPacket(message)) {
 			return;
@@ -605,6 +668,115 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 		userList.removeIf(existing -> user.getUsername().equals(existing.getUsername()));
 	}
 
+	private void openChat(User user) {
+		if (localUser == null) return;
+
+		if (user.getUsername().equals(localUser.getUsername())) {
+			// Klick auf sich selbst → globaler Chat
+			openGlobalChat();
+			return;
+		}
+
+		activePrivateChat = user.getUsername();
+		activeGroup = null;
+		addPrivateChatToChatList(user.getUsername(), getDisplayName(user));
+		if (chatHeaderLabel != null) chatHeaderLabel.setText(getDisplayName(user));
+		getMessages().clear();
+		outPacketQueue.offer(new HistoryRequest(localUser.getUsername(), user.getUsername(), null));
+	}
+
+	private boolean isMessageForActiveChat(Message message) {
+		String receiver = message.getReceiverUsername();
+		UUID msgGroupId = message.getGroupId();
+		String senderName = message.getSender() != null ? message.getSender().getUsername() : null;
+		String myName = localUser != null ? localUser.getUsername() : null;
+
+		if (activeGroup != null) {
+			return activeGroup.getId().equals(msgGroupId);
+		} else if (activePrivateChat != null) {
+			return (activePrivateChat.equals(receiver) && myName != null && myName.equals(senderName))
+				|| (myName != null && myName.equals(receiver) && activePrivateChat.equals(senderName));
+		} else {
+			// Globaler Chat: keine groupId, kein receiver
+			return msgGroupId == null && receiver == null;
+		}
+	}
+
+	private void openGlobalChat() {
+		activePrivateChat = null;
+		activeGroup = null;
+		if (chatHeaderLabel != null) chatHeaderLabel.setText("Globaler Chat");
+		getMessages().clear();
+		outPacketQueue.offer(new HistoryRequest(localUser.getUsername(), null, "main"));
+	}
+
+	private void openGroupChat(Group group) {
+		activePrivateChat = null;
+		activeGroup = group;
+		if (chatHeaderLabel != null) chatHeaderLabel.setText(group.getName());
+		getMessages().clear();
+		outPacketQueue.offer(new HistoryRequest(localUser.getUsername(), null, group.getId().toString()));
+	}
+
+	private void openChatEntry(ChatEntry entry) {
+		if (localUser == null) return;
+		switch (entry.type()) {
+			case GLOBAL -> openGlobalChat();
+			case GROUP -> {
+				// Gruppe beitreten falls noch nicht Mitglied, dann öffnen
+				outPacketQueue.offer(new JoinGroupPacket(entry.groupId()));
+				openGroupChat(new Group(entry.groupId(), entry.displayName(), ""));
+			}
+			case PRIVATE -> {
+				activePrivateChat = entry.username();
+				activeGroup = null;
+				if (chatHeaderLabel != null) chatHeaderLabel.setText(entry.displayName());
+				getMessages().clear();
+				outPacketQueue.offer(new HistoryRequest(localUser.getUsername(), entry.username(), null));
+			}
+		}
+	}
+
+	private void addGroupToChatList(Group group) {
+		for (ChatEntry e : chatList) {
+			if (e.type() == ChatEntry.Type.GROUP && group.getId().equals(e.groupId())) return;
+		}
+		chatList.add(ChatEntry.group(group));
+	}
+
+	private void addPrivateChatToChatList(String username, String displayName) {
+		for (ChatEntry e : chatList) {
+			if (e.type() == ChatEntry.Type.PRIVATE && username.equals(e.username())) return;
+		}
+		chatList.add(ChatEntry.privateDm(username, displayName));
+	}
+
+	private void showCreateGroupDialog() {
+		TextInputDialog dialog = new TextInputDialog();
+		dialog.setTitle("Gruppe erstellen");
+		dialog.setHeaderText("Name der neuen Gruppe:");
+		Main.themed(dialog).showAndWait().ifPresent(name -> {
+			if (!name.isBlank()) {
+				outPacketQueue.offer(new CreateGroupPacket(name.trim()));
+			}
+		});
+	}
+
+	private void showJoinGroupDialog() {
+		TextInputDialog dialog = new TextInputDialog();
+		dialog.setTitle("Gruppe beitreten");
+		dialog.setHeaderText("Gruppen-ID eingeben:");
+		Main.themed(dialog).showAndWait().ifPresent(idStr -> {
+			try {
+				UUID groupId = UUID.fromString(idStr.trim());
+				outPacketQueue.offer(new JoinGroupPacket(groupId));
+			} catch (IllegalArgumentException ex) {
+				Alert alert = new Alert(Alert.AlertType.ERROR, "Ungültige Gruppen-ID");
+				Main.themed(alert).show();
+			}
+		});
+	}
+
 	private void applyUserFilter(String search) {
 		if (search == null || search.isBlank()) {
 			filteredUserList.setPredicate(u -> true);
@@ -705,9 +877,9 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 			container.setAlignment(isOwn ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT);
 			container.setPadding(new Insets(2, 10, 2, 10));
 
-			if (isOwn && canShowContextMenu(message)) {
+			if (canShowContextMenu(message)) {
 				container.setOnContextMenuRequested(event -> {
-					ContextMenu contextMenu = createMessageContextMenu(message);
+					ContextMenu contextMenu = createMessageContextMenu(message, isOwn);
 					contextMenu.show(container, event.getScreenX(), event.getScreenY());
 				});
 			}
@@ -765,7 +937,7 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 				ImageView imageView = new ImageView(image);
 				imageView.setPreserveRatio(true);
 				imageView.fitWidthProperty().bind(Bindings.createDoubleBinding(
-					() -> Math.clamp(getScene().getWidth() - 32, 100.0, image.getWidth()),
+					() -> Math.clamp(getScene().getWidth() - 32, 100.0, Math.max(100.0, image.getWidth())),
 					getScene().widthProperty()
 				));
 				return imageView;
@@ -820,32 +992,37 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 		}
 
 		private boolean canShowContextMenu(Message message) {
-			if (message instanceof TextMessage textMessage) {
-				return !textMessage.isDeleted();
-			}
-			if (message instanceof FileMessage fileMessage) {
-				return !fileMessage.isDeleted();
-			}
+			// Für alle gelöschte Nachrichten: kein Menü mehr nötig
+			if (message instanceof TextMessage tm) return !tm.isDeleted();
+			if (message instanceof FileMessage fm) return !fm.isDeleted();
 			return false;
 		}
 
-		private ContextMenu createMessageContextMenu(Message message) {
+		private ContextMenu createMessageContextMenu(Message message, boolean isOwn) {
 			ContextMenu menu = new ContextMenu();
-			if (message instanceof FileMessage) {
-				MenuItem deleteItem = new MenuItem("Loeschen");
-				deleteItem.setOnAction(event -> Controller.this.deleteMessage(message));
-				menu.getItems().add(deleteItem);
-				return menu;
+
+			MenuItem deleteForMeItem = new MenuItem("Nur für mich löschen");
+			deleteForMeItem.setOnAction(event -> {
+				sendPacket(new DeleteForMeMessage(message.getMessageId()));
+				getMessages().remove(message);
+				messageListView.refresh();
+			});
+
+			menu.getItems().add(deleteForMeItem);
+
+			if (isOwn) {
+				MenuItem deleteForAllItem = new MenuItem("Für alle löschen");
+				deleteForAllItem.setOnAction(event -> Controller.this.deleteMessage(message));
+				menu.getItems().add(deleteForAllItem);
+
+				if (message instanceof TextMessage) {
+					MenuItem editItem = new MenuItem("✏️ Bearbeiten");
+					editItem.setStyle("-fx-font-size: 12;");
+					editItem.setOnAction(event -> Controller.this.startEditMessage(message));
+					menu.getItems().add(0, editItem);
+				}
 			}
 
-			MenuItem editItem = new MenuItem("✏️ Bearbeiten");
-			editItem.setStyle("-fx-font-size: 12;");
-			editItem.setOnAction(event -> Controller.this.startEditMessage(message));
-
-			MenuItem deleteItem = new MenuItem("Löschen");
-			deleteItem.setOnAction(event -> Controller.this.deleteMessage(message));
-
-			menu.getItems().addAll(editItem, deleteItem);
 			return menu;
 		}
 	}
@@ -1078,6 +1255,55 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 		}, "EmojiLoader");
 		loader.setDaemon(true);
 		loader.start();
+	}
+
+	public record ChatEntry(Type type, String displayName, UUID groupId, String username) {
+		public enum Type { GLOBAL, GROUP, PRIVATE }
+
+		public static ChatEntry global() {
+			return new ChatEntry(Type.GLOBAL, "💬 Globaler Chat", null, null);
+		}
+
+		public static ChatEntry group(Group g) {
+			return new ChatEntry(Type.GROUP, g.getName(), g.getId(), null);
+		}
+
+		public static ChatEntry privateDm(String username, String displayName) {
+			return new ChatEntry(Type.PRIVATE, "👤 " + displayName, null, username);
+		}
+
+		@Override public String toString() { return displayName; }
+	}
+
+	private class ChatEntryCell extends ListCell<ChatEntry> {
+		@Override
+		protected void updateItem(ChatEntry item, boolean empty) {
+			super.updateItem(item, empty);
+			setText(null);
+			setGraphic(null);
+			if (empty || item == null) return;
+
+			Label label = new Label(item.displayName());
+			label.getStyleClass().add("user-cell-name");
+
+			HBox box = new HBox(8, label);
+			box.setAlignment(Pos.CENTER_LEFT);
+			box.setPadding(new Insets(6, 10, 6, 10));
+
+			if (item.type() == ChatEntry.Type.GROUP) {
+				Button joinBtn = new Button("ID");
+				joinBtn.setStyle("-fx-font-size: 9;");
+				joinBtn.setOnAction(e -> {
+					Alert alert = new Alert(Alert.AlertType.INFORMATION);
+					alert.setHeaderText("Gruppen-ID");
+					alert.setContentText(item.groupId().toString());
+					Main.themed(alert).show();
+				});
+				box.getChildren().add(joinBtn);
+			}
+
+			setGraphic(box);
+		}
 	}
 
 	private class UserCell extends ListCell<User> {
