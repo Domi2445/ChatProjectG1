@@ -110,6 +110,10 @@ public class Controller {
 	private final AudioCall audioCall = new AudioCall();
 	private final VideoCall videoCall = new VideoCall();
 	private boolean inCall = false;
+	// Anruf wurde initiiert, aber noch nicht von der Gegenseite angenommen (für rotes Button-Feedback)
+	private boolean pendingCall = false;
+	// Art des aktiven/ausstehenden Anrufs: true = Video, false = nur Audio
+	private boolean callIsVideo = false;
 
 	private final ObservableList<User> userList = FXCollections.observableArrayList();
 	private final FilteredList<User> filteredUserList = new FilteredList<>(userList, p -> true);
@@ -1147,39 +1151,51 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 
 	//Audio
 	public void stopCall() {
-		if (inCall) {
+		if (inCall || pendingCall) {
 			audioCall.stop();
 			videoCall.stop();
-			inCall = false;
+			resetCallState();
 		}
 	}
 
 	// "Anruf"-Button → reiner Audioanruf
 	public void handleCallButton() {
-		if (!inCall) {
-			startOutgoingCall(false);
-		} else {
+		if (inCall || pendingCall) {
 			endCall();
+		} else {
+			startOutgoingCall(false);
 		}
 	}
 
 	// "Videoanruf"-Button → Audio + Video
 	private void handleVideoButton() {
-		if (!inCall) {
-			startOutgoingCall(true);
-		} else {
+		if (inCall || pendingCall) {
 			endCall();
+		} else {
+			startOutgoingCall(true);
 		}
 	}
 
+	// Anruf an einen Benutzernamen starten (target == null fragt per Dialog nach)
 	private void startOutgoingCall(boolean video) {
-		TextInputDialog dialog = new TextInputDialog();
-		dialog.setTitle(video ? "Videoanruf starten" : "Anruf starten");
-		dialog.setHeaderText("Benutzername des Empfaengers:");
-		String target = Main.themed(dialog).showAndWait().orElse(null);
+		startOutgoingCall(video, null);
+	}
+
+	private void startOutgoingCall(boolean video, String target) {
 		if (target == null || target.isBlank()) {
-			return;
+			TextInputDialog dialog = new TextInputDialog();
+			dialog.setTitle(video ? "Videoanruf starten" : "Anruf starten");
+			dialog.setHeaderText("Benutzername des Empfaengers:");
+			target = Main.themed(dialog).showAndWait().orElse(null);
+			if (target == null || target.isBlank()) {
+				return;
+			}
 		}
+
+		callIsVideo = video;
+		pendingCall = true;
+		setCallButtonActive(video, true);
+		System.out.println("[Call] REQUEST gesendet an " + target + " (video=" + video + ")");
 
 		sendPacket(new CallNotification(
 			CallNotification.CallType.REQUEST,
@@ -1193,9 +1209,27 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 	private void endCall() {
 		audioCall.stop();
 		videoCall.stop();
+		resetCallState();
+	}
+
+	// Setzt alle Anruf-Zustände zurück und entfernt die rote Markierung von beiden Buttons.
+	private void resetCallState() {
 		inCall = false;
+		pendingCall = false;
 		videoCallButton.getStyleClass().remove("call-active");
 		videoButton.getStyleClass().remove("call-active");
+	}
+
+	// Markiert den zur Anrufart passenden Button rot (call-active) bzw. entfernt die Markierung.
+	private void setCallButtonActive(boolean video, boolean active) {
+		Button button = video ? videoButton : videoCallButton;
+		if (active) {
+			if (!button.getStyleClass().contains("call-active")) {
+				button.getStyleClass().add("call-active");
+			}
+		} else {
+			button.getStyleClass().remove("call-active");
+		}
 	}
 
 	private void handleCallNotification(CallNotification call) {
@@ -1205,6 +1239,7 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 
 		switch (call.getType()) {
 			case REQUEST -> {
+				System.out.println("[Call] REQUEST empfangen von " + call.getSender().getUsername() + " (video=" + call.isVideo() + ")");
 				Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
 				alert.setTitle("Eingehender Anruf");
 				alert.setHeaderText((call.isVideo() ? "Videoanruf" : "Anruf") + " von: " + call.getSender().getUsername());
@@ -1220,9 +1255,16 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 					startCall(call, call.isVideo());
 				}
 			}
-			case ACCEPT -> startCall(call, call.isVideo());
-			case REJECT -> getMessages().add(
-				new TextMessage(createNetworkUser(localUser), call.getSender().getUsername() + " hat abgelehnt."));
+			case ACCEPT -> {
+				System.out.println("[Call] ACCEPT empfangen von " + call.getSender().getUsername() + " (video=" + call.isVideo() + ")");
+				startCall(call, call.isVideo());
+			}
+			case REJECT -> {
+				System.out.println("[Call] REJECT empfangen von " + call.getSender().getUsername());
+				resetCallState();
+				getMessages().add(
+					new TextMessage(createNetworkUser(localUser), call.getSender().getUsername() + " hat abgelehnt."));
+			}
 		}
 	}
 
@@ -1230,17 +1272,19 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 		String roomId = Stream.of(localUser.getUsername(), call.getSender().getUsername())
 			.sorted()
 			.collect(Collectors.joining("-"));
+		System.out.println("[Call] Starte " + (video ? "Video+Audio" : "Audio") + " | relay=" + relayHost + " | room=" + roomId);
 		try {
 			audioCall.start(relayHost, RELAY_PORT, roomId);
 			if (video) {
 				videoCall.start(relayHost, VIDEO_RELAY_PORT, roomId, remoteVideoView);
 			}
+			callIsVideo = video;
 			inCall = true;
-			Button activeButton = video ? videoButton : videoCallButton;
-			if (!activeButton.getStyleClass().contains("call-active")) {
-				activeButton.getStyleClass().add("call-active");
-			}
+			pendingCall = false;
+			setCallButtonActive(video, true);
 		} catch (Exception e) {
+			System.err.println("[Call] Fehler beim Start: " + e);
+			resetCallState();
 			Alert alert = new Alert(Alert.AlertType.ERROR);
 			alert.setHeaderText("Anruf konnte nicht gestartet werden");
 			alert.setContentText(e.toString());
