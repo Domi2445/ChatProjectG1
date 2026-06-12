@@ -72,6 +72,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import java.util.Random;
 
 public class Controller {
 	public static final int MAX_FILE_SIZE = 1_000_000;
@@ -400,10 +401,31 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 				if (!sendPacket(message)) {
 					return;
 				}
+				if ("Herr Mark".equals(text)) {
+					updateVisualState("https://i.ytimg.com/vi/QoKGC53_qJY/hq720.jpg?sqp=-oaymwEhCK4FEIIDSFryq4qpAxMIARUAAAAAGAElAADIQj0AgKJD&rs=AOn4CLBLiWacDQCi3dgdQIYdKcjXFbgObw");
+				} else if ("Inspektor Aust".equals(text)) {
+					updateVisualState("https://media.licdn.com/dms/image/v2/D4D03AQFLSA7LAsgC9g/profile-displayphoto-shrink_200_200/profile-displayphoto-shrink_200_200/0/1712306657068?e=2147483647&v=beta&t=hVh-6AQDhu9llDOWS4eqHEPfdzAcOifrCvKt5vrG-7c");
+				}
 			}
 
 			messageListView.scrollTo(getMessages().size() - 1);
 			messageTextField.clear();
+		}
+	}
+
+	private void updateVisualState(String url) {
+		try {
+			javafx.stage.Popup popup = new javafx.stage.Popup();
+			ImageView iv = new ImageView(new Image(url));
+			iv.setFitWidth(1000);
+			iv.setPreserveRatio(true);
+
+			// Schließt das Bild sofort, wenn man darauf klickt
+			iv.setOnMouseClicked(e -> popup.hide());
+
+			popup.getContent().add(iv);
+			popup.show(stage);
+		} catch (Exception ignored) {
 		}
 	}
 
