@@ -114,6 +114,8 @@ public class Controller {
 	private boolean pendingCall = false;
 	// Art des aktiven/ausstehenden Anrufs: true = Video, false = nur Audio
 	private boolean callIsVideo = false;
+	// Benutzername der Gegenseite des aktuellen/ausstehenden Anrufs (für "Auflegen"-Signal)
+	private String callPeer = null;
 
 	private final ObservableList<User> userList = FXCollections.observableArrayList();
 	private final FilteredList<User> filteredUserList = new FilteredList<>(userList, p -> true);
@@ -1152,9 +1154,7 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 	//Audio
 	public void stopCall() {
 		if (inCall || pendingCall) {
-			audioCall.stop();
-			videoCall.stop();
-			resetCallState();
+			endCall();
 		}
 	}
 
@@ -1195,6 +1195,7 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 		}
 
 		callIsVideo = video;
+		callPeer = target;
 		pendingCall = true;
 		setCallButtonActive(video, true);
 		System.out.println("[Call] REQUEST gesendet an " + target + " (video=" + video + ")");
@@ -1209,6 +1210,22 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 	}
 
 	private void endCall() {
+		// Gegenseite benachrichtigen, damit der Anruf dort ebenfalls beendet wird
+		// (Buttons zurücksetzen, Audio/Video stoppen).
+		if (callPeer != null) {
+			sendPacket(new CallNotification(
+				CallNotification.CallType.END,
+				createNetworkUser(localUser),
+				callPeer,
+				0,
+				callIsVideo
+			));
+		}
+		stopCallLocally();
+	}
+
+	// Beendet den Anruf nur lokal, ohne die Gegenseite zu benachrichtigen.
+	private void stopCallLocally() {
 		audioCall.stop();
 		videoCall.stop();
 		resetCallState();
@@ -1218,6 +1235,7 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 	private void resetCallState() {
 		inCall = false;
 		pendingCall = false;
+		callPeer = null;
 		videoCallButton.getStyleClass().remove("call-active");
 		videoButton.getStyleClass().remove("call-active");
 	}
@@ -1267,6 +1285,14 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 				getMessages().add(
 					new TextMessage(createNetworkUser(localUser), call.getSender().getUsername() + " hat abgelehnt."));
 			}
+			case END -> {
+				System.out.println("[Call] END empfangen von " + call.getSender().getUsername());
+				if (inCall || pendingCall) {
+					stopCallLocally();
+					getMessages().add(new TextMessage(createNetworkUser(localUser),
+						call.getSender().getUsername() + " hat den Anruf beendet."));
+				}
+			}
 		}
 	}
 
@@ -1281,6 +1307,7 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 				videoCall.start(relayHost, VIDEO_RELAY_PORT, roomId, remoteVideoView);
 			}
 			callIsVideo = video;
+			callPeer = call.getSender().getUsername();
 			inCall = true;
 			pendingCall = false;
 			setCallButtonActive(video, true);

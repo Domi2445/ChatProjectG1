@@ -60,6 +60,7 @@ public class VideoCall {
 			} catch (Exception ex) { if (running) ex.printStackTrace(); }
 		}, "VideoSender").start();
 
+		final ImageView view = display;
 		new Thread(() -> {
 			byte[] buffer = new byte[65507];
 			Map<Integer, byte[][]> frames = new HashMap<>();
@@ -85,7 +86,9 @@ public class VideoCall {
 							ByteArrayOutputStream out = new ByteArrayOutputStream();
 							for (byte[] c : chunks) out.write(c);
 							Image image = new Image(new ByteArrayInputStream(out.toByteArray()));
-							Platform.runLater(() -> display.setImage(image));
+							// Nur anzeigen, solange der Anruf läuft – verhindert, dass ein spät
+							// eintreffendes Frame das Leeren in stop() wieder überschreibt.
+							Platform.runLater(() -> { if (running) view.setImage(image); });
 							frames.remove(id);
 							received.remove(id);
 						}
@@ -98,10 +101,12 @@ public class VideoCall {
 	public void stop() {
 		running = false;
 		if (socket != null && !socket.isClosed()) socket.close();
-		// Letztes Frame löschen, damit kein eingefriertes Bild bleibt
-		if (display != null) {
-			Platform.runLater(() -> display.setImage(null));
-			display = null;
+		// Letztes Frame löschen, damit kein eingefriertes Bild bleibt.
+		// Referenz lokal sichern, bevor das Feld genullt wird (sonst NPE im runLater).
+		ImageView toClear = display;
+		display = null;
+		if (toClear != null) {
+			Platform.runLater(() -> toClear.setImage(null));
 		}
 	}
 }

@@ -8,7 +8,7 @@ public class CallNotification extends Notification
 	@Serial
 	private static final long serialVersionUID = 1L;
 
-	public enum  CallType{ REQUEST,ACCEPT,REJECT}
+	public enum  CallType{ REQUEST,ACCEPT,REJECT,END}
 
 	private final CallType type;
 	private final User sender ;
