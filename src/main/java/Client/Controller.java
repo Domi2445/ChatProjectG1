@@ -272,14 +272,25 @@ public class Controller {
 								// Laden die Chat-History vom Server
 								if ("success".equals(histResp.getStatus()) && histResp.getMessages() != null) {
 									getMessages().clear();
-									// Konvertiere ChatMessage in Message/TextMessage für die UI
+									// Konvertiere ChatMessage in Message/TextMessage bzw. FileMessage für die UI
+									var fileContents = histResp.getFileContents();
+									var fileExtensions = histResp.getFileExtensions();
 									for (ChatMessage dbMsg : histResp.getMessages()) {
 										if (dbMsg.getMessageType() == MessageType.TEXT || dbMsg.getMessageType() == MessageType.EMOJI) {
 											Message msg = new TextMessage(new User(dbMsg.getSender()), dbMsg.getContent());
 											getMessages().add(msg);
 										} else if (dbMsg.getMessageType() == MessageType.FILE) {
-											Message msg = new TextMessage(new User(dbMsg.getSender()), "[Datei: " + dbMsg.getFilePath() + "]");
-											getMessages().add(msg);
+											String fileId = dbMsg.getFilePath();
+											if (fileId != null && fileContents != null && fileContents.containsKey(fileId)) {
+												byte[] bytes = fileContents.get(fileId);
+												String ext = fileExtensions != null ? fileExtensions.getOrDefault(fileId, "bin") : "bin";
+												Message msg = new FileMessage(new User(dbMsg.getSender()), bytes, ext);
+												getMessages().add(msg);
+											} else {
+												// Fallback: keine Dateibytes verfügbar -> Platzhaltertext
+												Message msg = new TextMessage(new User(dbMsg.getSender()), "[Datei: " + dbMsg.getFilePath() + "]");
+												getMessages().add(msg);
+											}
 										}
 									}
 									messageListView.refresh();
