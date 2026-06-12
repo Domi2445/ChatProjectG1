@@ -35,6 +35,9 @@ public class ChatMessage implements Serializable {
 	@Column
 	private String filePath; // Optional: Pfad zur Datei im Dateisystem (für FILE)
 
+	@Column(nullable = false, columnDefinition = "boolean default false")
+	private boolean deleted = false;
+
 	@Column(nullable = false)
 	private LocalDateTime timestamp;
 
@@ -71,6 +74,9 @@ public class ChatMessage implements Serializable {
 
 	public String getFilePath() { return filePath; }
 	public void setFilePath(String filePath) { this.filePath = filePath; }
+
+	public boolean isDeleted() { return deleted; }
+	public void setDeleted(boolean deleted) { this.deleted = deleted; }
 
 	public LocalDateTime getTimestamp() { return timestamp; }
 	public void setTimestamp(LocalDateTime timestamp) { this.timestamp = timestamp; }

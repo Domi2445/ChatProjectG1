@@ -2,6 +2,7 @@ package Server;
 
 import User.Model.ChatMessage;
 import User.Repository.ChatMessageRepository;
+import User.Repository.DeletedForUserRepository;
 import User.Repository.UserRepository;
 import Util.Network.ProfilePictureUpdate;
 import Util.Network.HistoryRequest;
@@ -17,10 +18,12 @@ import java.util.Collections;
 public class ChatHistoryHandler {
 	private final ChatMessageRepository messageRepository;
 	private final UserRepository userRepository;
+	private final DeletedForUserRepository deletedForUserRepository;
 
 	public ChatHistoryHandler(ChatMessageRepository messageRepository, UserRepository userRepository) {
 		this.messageRepository = messageRepository;
 		this.userRepository = userRepository;
+		this.deletedForUserRepository = new DeletedForUserRepository();
 	}
 
 	/**
@@ -33,7 +36,18 @@ public class ChatHistoryHandler {
 			String receiver = request.getReceiver();
 			String chatRoomId = request.getChatRoomId();
 
-			List<ChatMessage> dbMessages = messageRepository.getHistoryForChat(sender, receiver, chatRoomId);
+			List<ChatMessage> allMessages = messageRepository.getHistoryForChat(sender, receiver, chatRoomId);
+
+			// Nachrichten herausfiltern, die der anfragende Benutzer nur für sich gelöscht hat
+			java.util.Set<Long> deletedForMe = new java.util.HashSet<>();
+			if (sender != null) {
+				try {
+					deletedForMe.addAll(deletedForUserRepository.getDeletedMessageIdsForUser(sender));
+				} catch (Exception ignored) {}
+			}
+			List<ChatMessage> dbMessages = deletedForMe.isEmpty()
+				? allMessages
+				: allMessages.stream().filter(m -> !deletedForMe.contains(m.getId())).toList();
 
 			// Sammle alle Dateiinhalte, die in der History referenziert werden
 			java.util.Map<String, byte[]> fileContents = new java.util.HashMap<>();

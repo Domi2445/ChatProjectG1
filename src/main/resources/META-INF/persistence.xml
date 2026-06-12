@@ -10,6 +10,7 @@
         <class>User.Model.User</class>
         <class>User.Model.ContactData</class>
 		<class>User.Model.ChatMessage</class>
+		<class>User.Model.DeletedForUser</class>
 
 
         <properties>
