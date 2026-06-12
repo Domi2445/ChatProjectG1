@@ -22,28 +22,21 @@ public class AudioCall {
 		new Thread(() -> {
 			TargetDataLine mic = null;
 			try {
-				// Unterstütztes Mikrofonformat suchen
-				// Für Sprache reichen 16 kHz – weniger Daten = weniger UDP-Paketverluste = weniger Robo-/Lag-Stimme
-				AudioFormat format = null;
-				int[] sampleRates = {16000, 22050, 44100, 48000};
-				for (int rate : sampleRates) {
-					AudioFormat f = new AudioFormat(rate, 16, 1, true, false);
-					if (AudioSystem.isLineSupported(new DataLine.Info(TargetDataLine.class, f))) {
-						format = f;
-						System.out.println("Mikrofonformat gefunden: " + rate + " Hz");
-						break;
-					}
-				}
+				AudioFormat format = findSupportedFormat(TargetDataLine.class);
 				if (format == null) {
 					System.out.println("Kein unterstütztes Mikrofonformat gefunden!");
 					return;
 				}
+				System.out.println("Mikrofonformat: " + format.getSampleRate() + " Hz");
+
+				// 20 ms pro Chunk – kleine Puffer = weniger Latenz = weniger Echo
+				int chunkBytes = chunkBytes(format);
 
 				mic = (TargetDataLine) AudioSystem.getLine(new DataLine.Info(TargetDataLine.class, format));
-				mic.open(format);
+				mic.open(format, chunkBytes * 2); // 40 ms interner Puffer
 				mic.start();
 
-				byte[] buffer = new byte[4096];
+				byte[] buffer = new byte[chunkBytes];
 				while (running) {
 					int bytesRead = mic.read(buffer, 0, buffer.length);
 					if (bytesRead > 0)
@@ -60,28 +53,21 @@ public class AudioCall {
 		new Thread(() -> {
 			SourceDataLine speakers = null;
 			try {
-				// Unterstütztes Lautsprecherformat suchen
-				// Gleiche Reihenfolge wie beim Mikrofon, damit beide Seiten dieselbe Rate wählen
-				AudioFormat format = null;
-				int[] sampleRates = {16000, 22050, 44100, 48000};
-				for (int rate : sampleRates) {
-					AudioFormat f = new AudioFormat(rate, 16, 1, true, false);
-					if (AudioSystem.isLineSupported(new DataLine.Info(SourceDataLine.class, f))) {
-						format = f;
-						System.out.println("Lautsprecherformat gefunden: " + rate + " Hz");
-						break;
-					}
-				}
+				AudioFormat format = findSupportedFormat(SourceDataLine.class);
 				if (format == null) {
 					System.out.println("Kein unterstütztes Lautsprecherformat gefunden!");
 					return;
 				}
+				System.out.println("Lautsprecherformat: " + format.getSampleRate() + " Hz");
+
+				int chunkBytes = chunkBytes(format);
 
 				speakers = (SourceDataLine) AudioSystem.getLine(new DataLine.Info(SourceDataLine.class, format));
-				speakers.open(format);
+				// 60 ms Jitter-Puffer – guter Kompromiss zwischen Latenz und Stabilität
+				speakers.open(format, chunkBytes * 3);
 				speakers.start();
 
-				byte[] buffer = new byte[4096];
+				byte[] buffer = new byte[chunkBytes];
 				while (running) {
 					DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
 					socket.receive(packet);
@@ -90,7 +76,7 @@ public class AudioCall {
 			} catch (Exception e) {
 				if (running) e.printStackTrace();
 			} finally {
-				if (speakers != null) { speakers.stop(); speakers.close(); }
+				if (speakers != null) { speakers.flush(); speakers.stop(); speakers.close(); }
 				if (socket != null && !socket.isClosed()) socket.close();
 			}
 		}).start();
@@ -101,5 +87,21 @@ public class AudioCall {
 		if (socket != null && !socket.isClosed()) {
 			socket.close();
 		}
+	}
+
+	/** Gibt das erste unterstützte Audioformat zurück (16 kHz bevorzugt). */
+	private static <T extends DataLine> AudioFormat findSupportedFormat(Class<T> lineClass) {
+		int[] sampleRates = {16000, 22050, 44100, 48000};
+		for (int rate : sampleRates) {
+			AudioFormat f = new AudioFormat(rate, 16, 1, true, false);
+			if (AudioSystem.isLineSupported(new DataLine.Info(lineClass, f))) return f;
+		}
+		return null;
+	}
+
+	/** Berechnet einen 20-ms-Chunk in Bytes für das gegebene Format. */
+	private static int chunkBytes(AudioFormat format) {
+		// sampleRate * frameSize * 20ms / 1000ms
+		return Math.max(64, (int)(format.getSampleRate() * format.getFrameSize() * 0.02f));
 	}
 }

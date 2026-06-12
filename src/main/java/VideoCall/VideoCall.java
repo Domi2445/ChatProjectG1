@@ -18,11 +18,13 @@ import java.util.Map;
 public class VideoCall {
 	private volatile boolean running = false;
 	private DatagramSocket socket;
+	private ImageView display;
 
 	private static final int HEADER = 8;
 	private static final int CHUNK = 60000;
 
 	public void start(String relayIp, int relayPort, String roomId, ImageView display) throws Exception {
+		this.display = display;
 		running = true;
 		socket = new DatagramSocket();
 		InetAddress relay = InetAddress.getByName(relayIp);
@@ -96,5 +98,10 @@ public class VideoCall {
 	public void stop() {
 		running = false;
 		if (socket != null && !socket.isClosed()) socket.close();
+		// Letztes Frame löschen, damit kein eingefriertes Bild bleibt
+		if (display != null) {
+			Platform.runLater(() -> display.setImage(null));
+			display = null;
+		}
 	}
 }
