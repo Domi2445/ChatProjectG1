@@ -2,10 +2,9 @@ package AudioCall;
 
 import javax.sound.sampled.*;
 import java.net.*;
+import java.nio.charset.StandardCharsets;
 
-public class
-
-AudioCall {
+public class AudioCall {
 	private volatile boolean running = false;
 	private DatagramSocket socket;
 
@@ -16,7 +15,7 @@ AudioCall {
 		InetAddress relayAddress = InetAddress.getByName(relayIp);
 
 		// Raum beim Relay registrieren
-		byte[] joinMsg = ("JOIN:" + roomId).getBytes();
+		byte[] joinMsg = ("JOIN:" + roomId).getBytes(StandardCharsets.UTF_8);
 		socket.send(new DatagramPacket(joinMsg, joinMsg.length, relayAddress, relayPort));
 
 		// Thread 1: Mikrofon → Relay

@@ -1163,7 +1163,8 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 		if (inCall || pendingCall) {
 			endCall();
 		} else {
-			startOutgoingCall(false);
+			// Wenn ein privater Chat offen ist, direkt diesen Kontakt anrufen (kein Dialog nötig)
+			startOutgoingCall(false, activePrivateChat);
 		}
 	}
 
@@ -1172,7 +1173,8 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 		if (inCall || pendingCall) {
 			endCall();
 		} else {
-			startOutgoingCall(true);
+			// Wenn ein privater Chat offen ist, direkt diesen Kontakt anrufen (kein Dialog nötig)
+			startOutgoingCall(true, activePrivateChat);
 		}
 	}
 

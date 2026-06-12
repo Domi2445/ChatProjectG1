@@ -11,6 +11,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.net.*;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -26,7 +27,7 @@ public class VideoCall {
 		socket = new DatagramSocket();
 		InetAddress relay = InetAddress.getByName(relayIp);
 
-		byte[] join = ("VJOIN:" + roomId).getBytes();
+		byte[] join = ("VJOIN:" + roomId).getBytes(StandardCharsets.UTF_8);
 		socket.send(new DatagramPacket(join, join.length, relay, relayPort));
 
 		new Thread(() -> {
