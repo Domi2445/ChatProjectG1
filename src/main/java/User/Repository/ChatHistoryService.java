@@ -91,6 +91,15 @@ public class ChatHistoryService {
 	}
 
 
+	public void markAsDeleted(long messageId) {
+		try {
+			repository.markAsDeleted(messageId);
+			cache.clear();
+		} catch (RepositoryException e) {
+			System.err.println("Fehler beim Markieren der Nachricht als gelöscht: " + e.getMessage());
+		}
+	}
+
 	public int deleteOldMessages(int daysOld) {
 		try {
 			int deleted = repository.deleteOldMessages(daysOld);

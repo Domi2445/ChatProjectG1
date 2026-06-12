@@ -53,6 +53,22 @@ public class ChatMessageRepository {
 		}
 	}
 
+	public void markAsDeleted(long messageId) {
+		try (EntityManager entityManager = Connection.createEntityManager()) {
+			EntityTransaction transaction = entityManager.getTransaction();
+			try {
+				transaction.begin();
+				entityManager.createQuery("UPDATE ChatMessage m SET m.deleted = true WHERE m.id = :id")
+					.setParameter("id", messageId)
+					.executeUpdate();
+				transaction.commit();
+			} catch (RuntimeException e) {
+				if (transaction.isActive()) transaction.rollback();
+				throw new RepositoryException("Nachricht konnte nicht als gelöscht markiert werden", e);
+			}
+		}
+	}
+
 	// Neue Methode: Löscht Nachrichten, die älter als die angegebene Anzahl von Tagen sind
 	public int deleteOldMessages(int daysOld) {
 		try (EntityManager entityManager = Connection.createEntityManager()) {

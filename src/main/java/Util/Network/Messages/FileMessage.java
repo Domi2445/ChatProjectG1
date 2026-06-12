@@ -19,6 +19,13 @@ public class FileMessage extends Message {
 		this.isDeleted = false;
 	}
 
+	public FileMessage(User sender, byte[] content, String fileExtension, long messageId, java.time.LocalDateTime sentAt) {
+		super(sender, messageId, sentAt);
+		this.content = content;
+		this.fileExtension = fileExtension;
+		this.isDeleted = false;
+	}
+
 	public byte[] getContent() {
 		return content;
 	}

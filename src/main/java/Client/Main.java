@@ -38,7 +38,7 @@ public class Main extends Application {
 		Controller chatController = chatLoader.getController();
 		chatController.configure(primaryStage, null);
 		// Server IP: 217.154.156.40 und lokal einfach localhost verwenden bzw. ip vom rechner im Labor Netzwerk
-		if (!chatController.connectAndRun("217.154.156.40", 3299)) {
+		if (!chatController.connectAndRun("localhost", 3299)) {
 			return;
 		}
 		// Audio - Beim Schließen des Fensters den Anruf beenden
