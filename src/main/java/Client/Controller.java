@@ -1154,28 +1154,48 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 		}
 	}
 
+	// "Anruf"-Button → reiner Audioanruf
 	public void handleCallButton() {
 		if (!inCall) {
-			TextInputDialog dialog = new TextInputDialog();
-			dialog.setTitle("Anruf starten");
-			dialog.setHeaderText("Benutzername des Empfaengers:");
-			String target = Main.themed(dialog).showAndWait().orElse(null);
-			if (target == null || target.isBlank()) {
-				return;
-			}
-
-			sendPacket(new CallNotification(
-				CallNotification.CallType.REQUEST,
-				createNetworkUser(localUser),
-				target,
-				0
-			));
+			startOutgoingCall(false);
 		} else {
-			audioCall.stop();
-			videoCall.stop();
-			inCall = false;
-			videoCallButton.getStyleClass().remove("call-active");
+			endCall();
 		}
+	}
+
+	// "Videoanruf"-Button → Audio + Video
+	private void handleVideoButton() {
+		if (!inCall) {
+			startOutgoingCall(true);
+		} else {
+			endCall();
+		}
+	}
+
+	private void startOutgoingCall(boolean video) {
+		TextInputDialog dialog = new TextInputDialog();
+		dialog.setTitle(video ? "Videoanruf starten" : "Anruf starten");
+		dialog.setHeaderText("Benutzername des Empfaengers:");
+		String target = Main.themed(dialog).showAndWait().orElse(null);
+		if (target == null || target.isBlank()) {
+			return;
+		}
+
+		sendPacket(new CallNotification(
+			CallNotification.CallType.REQUEST,
+			createNetworkUser(localUser),
+			target,
+			0,
+			video
+		));
+	}
+
+	private void endCall() {
+		audioCall.stop();
+		videoCall.stop();
+		inCall = false;
+		videoCallButton.getStyleClass().remove("call-active");
+		videoButton.getStyleClass().remove("call-active");
 	}
 
 	private void handleCallNotification(CallNotification call) {
@@ -1187,34 +1207,38 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 			case REQUEST -> {
 				Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
 				alert.setTitle("Eingehender Anruf");
-				alert.setHeaderText("Anruf von: " + call.getSender().getUsername());
+				alert.setHeaderText((call.isVideo() ? "Videoanruf" : "Anruf") + " von: " + call.getSender().getUsername());
 				boolean accepted = Main.themed(alert).showAndWait().orElse(ButtonType.CANCEL) == ButtonType.OK;
 				sendPacket(new CallNotification(
 					accepted ? CallNotification.CallType.ACCEPT : CallNotification.CallType.REJECT,
 					createNetworkUser(localUser),
 					call.getSender().getUsername(),
-					0
+					0,
+					call.isVideo()
 				));
 				if (accepted) {
-					startAudioCall(call);
+					startCall(call, call.isVideo());
 				}
 			}
-			case ACCEPT -> startAudioCall(call);
+			case ACCEPT -> startCall(call, call.isVideo());
 			case REJECT -> getMessages().add(
 				new TextMessage(createNetworkUser(localUser), call.getSender().getUsername() + " hat abgelehnt."));
 		}
 	}
 
-	private void startAudioCall(CallNotification call) {
+	private void startCall(CallNotification call, boolean video) {
 		String roomId = Stream.of(localUser.getUsername(), call.getSender().getUsername())
 			.sorted()
 			.collect(Collectors.joining("-"));
 		try {
 			audioCall.start(relayHost, RELAY_PORT, roomId);
-			videoCall.start(relayHost, VIDEO_RELAY_PORT, roomId, remoteVideoView);
+			if (video) {
+				videoCall.start(relayHost, VIDEO_RELAY_PORT, roomId, remoteVideoView);
+			}
 			inCall = true;
-			if (!videoCallButton.getStyleClass().contains("call-active")) {
-				videoCallButton.getStyleClass().add("call-active");
+			Button activeButton = video ? videoButton : videoCallButton;
+			if (!activeButton.getStyleClass().contains("call-active")) {
+				activeButton.getStyleClass().add("call-active");
 			}
 		} catch (Exception e) {
 			Alert alert = new Alert(Alert.AlertType.ERROR);
@@ -1222,14 +1246,6 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 			alert.setContentText(e.toString());
 			Main.themed(alert).show();
 		}
-	}
-
-	private void handleVideoButton() {
-		Alert alert = new Alert(Alert.AlertType.INFORMATION);
-		alert.setTitle("Videoanruf");
-		alert.setHeaderText("Videoanruf");
-		alert.setContentText("Videoanrufe sind in dieser Version noch nicht angebunden. Audio funktioniert bereits.");
-		Main.themed(alert).show();
 	}
 
 	private void openEmojiPicker() {
