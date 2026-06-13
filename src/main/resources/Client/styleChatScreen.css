@@ -83,7 +83,15 @@
     -fx-font-style: italic;
 }
 
-.call-active {
+/* Höhere Spezifität als .button:focused/:hover/:armed im Theme, damit der
+   aktive Anruf-Button auch beim Anrufer (dessen Button nach dem Klick den
+   Fokus hat) rot bleibt und nicht von den Fokus-/Hover-Farben überdeckt wird. */
+.button.call-active,
+.button.call-active:hover,
+.button.call-active:focused,
+.button.call-active:armed,
+.button.call-active:hover:focused,
+.button.call-active:focused:armed {
     -fx-background-color: -color-danger-emphasis;
     -fx-text-fill: -color-fg-emphasis;
 }

@@ -33,8 +33,9 @@ public class VideoCall {
 		socket.send(new DatagramPacket(join, join.length, relay, relayPort));
 
 		new Thread(() -> {
+			Webcam webcam = null;
 			try {
-				Webcam webcam = Webcam.getDefault();
+				webcam = Webcam.getDefault();
 				if (webcam == null) { System.out.println("Keine Webcam"); return; }
 				webcam.open();
 				int frameId = 0;
@@ -56,8 +57,13 @@ public class VideoCall {
 					frameId++;
 					Thread.sleep(33);
 				}
-				webcam.close();
 			} catch (Exception ex) { if (running) ex.printStackTrace(); }
+			finally {
+				// Kamera in jedem Fall freigeben – auch wenn socket.send() beim Auflegen
+				// eine Exception wirft. Sonst bleibt die Kamera-LED an, weil close()
+				// im alten Code nach dem catch übersprungen wurde.
+				if (webcam != null && webcam.isOpen()) webcam.close();
+			}
 		}, "VideoSender").start();
 
 		final ImageView view = display;

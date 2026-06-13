@@ -64,13 +64,20 @@ public class AudioCall {
 
 				speakers = (SourceDataLine) AudioSystem.getLine(new DataLine.Info(SourceDataLine.class, format));
 				// 60 ms Jitter-Puffer – guter Kompromiss zwischen Latenz und Stabilität
-				speakers.open(format, chunkBytes * 3);
+				int bufferSize = chunkBytes * 3;
+				speakers.open(format, bufferSize);
 				speakers.start();
 
 				byte[] buffer = new byte[chunkBytes];
 				while (running) {
 					DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
 					socket.receive(packet);
+					// Latenz begrenzen: Kommen Pakete schneller an, als sie abgespielt werden,
+					// staut sich der Puffer auf und die Verzögerung wächst über den Anruf hinweg.
+					// Übersteigt der Rückstand ~40 ms, verwerfen wir ihn, damit die Latenz konstant bleibt.
+					if (bufferSize - speakers.available() > chunkBytes * 2) {
+						speakers.flush();
+					}
 					speakers.write(packet.getData(), 0, packet.getLength());
 				}
 			} catch (Exception e) {
