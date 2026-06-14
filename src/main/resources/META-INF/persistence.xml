@@ -11,7 +11,9 @@
         <class>User.Model.ContactData</class>
 		<class>User.Model.ChatMessage</class>
 		<class>User.Model.DeletedForUser</class>
-
+		<class>User.Model.ChatGroup</class>
+		<class>User.Model.GroupMember</class>
+		<class>User.Model.RemovedGroupMember</class>
 
         <properties>
             <property name="hibernate.hbm2ddl.auto" value="update"/>

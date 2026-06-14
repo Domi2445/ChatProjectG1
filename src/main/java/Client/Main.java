@@ -6,6 +6,7 @@ import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Dialog;
+import javafx.scene.image.Image;
 import javafx.stage.Stage;
 
 import java.io.IOException;
@@ -38,12 +39,13 @@ public class Main extends Application {
 		Controller chatController = chatLoader.getController();
 		chatController.configure(primaryStage, null);
 		// Server IP: 217.154.156.40 und lokal einfach localhost verwenden bzw. ip vom rechner im Labor Netzwerk
-		if (!chatController.connectAndRun("192.168.0.6", 3299)) {
+		if (!chatController.connectAndRun("localhost", 3299)) {
 			return;
 		}
 		// Audio - Beim Schließen des Fensters den Anruf beenden
 		primaryStage.setOnCloseRequest(e -> {
 			chatController.stopCall();
+			chatController.disconnect();
 			Platform.exit();
 			System.exit(0);
 		});
@@ -61,6 +63,9 @@ public class Main extends Application {
 
 		Scene loginScene = new Scene(loginRoot, 1280, 720);
 		loginScene.getStylesheets().add(CUPERTINO_DARK_CSS);
+
+		var logo = Main.class.getResourceAsStream("/Client/assets/logo2.png");
+		if (logo != null) primaryStage.getIcons().add(new Image(logo));
 
 		primaryStage.setTitle("Socket Chat - Login");
 		primaryStage.setScene(loginScene);

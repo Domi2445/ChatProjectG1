@@ -1,42 +1,59 @@
 package Server;
 
-import Util.Network.Groups.Group;
+import User.Model.ChatGroup;
 import User.Model.User;
+import User.Repository.GroupRepository;
+import Util.Network.Groups.Group;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
-// manages all groups on the server side.
-// keeps track of which groups exist, which clients are in each group, and which user belongs to each client.
-// this class is only used internally by the server — clients interact with groups by sending packets.
 public class GroupManager
 {
 	public static final UUID BROADCAST_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
 	public static final String BROADCAST_NAME = "📢 Ankündigungen";
 
 	private final Map<UUID, Group> groups = new ConcurrentHashMap<>();
-	// maps each group id to the set of clients currently in that group
 	private final Map<UUID, Set<ClientProxy>> groupMembers = new ConcurrentHashMap<>();
-	// maps each connected client to their logged-in user object
 	private final Map<ClientProxy, User> clientUsers = new ConcurrentHashMap<>();
+	private final GroupRepository groupRepository;
 
-	public GroupManager() {
+	public GroupManager(GroupRepository groupRepository) {
+		this.groupRepository = groupRepository;
+
+		groupRepository.saveGroup(BROADCAST_ID, BROADCAST_NAME, "System");
 		Group broadcast = new Group(BROADCAST_ID, BROADCAST_NAME, "System");
 		groups.put(BROADCAST_ID, broadcast);
 		groupMembers.put(BROADCAST_ID, Collections.synchronizedSet(new HashSet<>()));
+
+		for (ChatGroup cg : groupRepository.getAllGroups()) {
+			UUID id = cg.getId();
+			if (groups.containsKey(id)) continue;
+			Group g = new Group(id, cg.getName(), cg.getCreatorUsername());
+			groups.put(id, g);
+			groupMembers.put(id, Collections.synchronizedSet(new HashSet<>()));
+		}
 	}
 
-	// ---- client registration ----
-
-	// call this after a client successfully logs in so the group manager knows who they are
 	public void registerClient(ClientProxy client, User user)
 	{
 		clientUsers.put(client, user);
-		// auto-join broadcast channel
-		groupMembers.get(BROADCAST_ID).add(client);
+
+		// Broadcast nur beitreten wenn der User nicht explizit entfernt wurde
+		List<String> removedIds = groupRepository.getRemovedGroupIdsForUser(user.getUsername());
+		if (!removedIds.contains(BROADCAST_ID.toString())) {
+			groupMembers.get(BROADCAST_ID).add(client);
+		}
+
+		for (String groupIdStr : groupRepository.getGroupIdsForUser(user.getUsername())) {
+			try {
+				UUID groupId = UUID.fromString(groupIdStr);
+				Set<ClientProxy> members = groupMembers.get(groupId);
+				if (members != null) members.add(client);
+			} catch (IllegalArgumentException ignored) {}
+		}
 	}
 
-	// call this when a client disconnects — removes them from all groups automatically
 	public void unregisterClient(ClientProxy client)
 	{
 		clientUsers.remove(client);
@@ -49,10 +66,6 @@ public class GroupManager
 		return clientUsers.get(client);
 	}
 
-	// ---- group management ----
-
-	// creates a new group with a random uuid and adds the creator as the first member.
-	// returns the created Group object which contains the id needed to join or send messages to the group.
 	public Group createGroup(String name, ClientProxy creator)
 	{
 		User user = clientUsers.get(creator);
@@ -60,6 +73,9 @@ public class GroupManager
 
 		UUID id = UUID.randomUUID();
 		Group group = new Group(id, name, creatorName);
+
+		groupRepository.saveGroup(id, name, creatorName);
+		if (user != null) groupRepository.addMember(id, creatorName);
 
 		groups.put(id, group);
 		Set<ClientProxy> members = Collections.synchronizedSet(new HashSet<>());
@@ -69,16 +85,18 @@ public class GroupManager
 		return group;
 	}
 
-	// adds a client to an existing group. returns false if the group doesn't exist.
 	public boolean joinGroup(UUID groupId, ClientProxy client)
 	{
 		Set<ClientProxy> members = groupMembers.get(groupId);
 		if (members == null) return false;
+
+		User user = clientUsers.get(client);
+		if (user != null) groupRepository.addMember(groupId, user.getUsername());
+
 		members.add(client);
 		return true;
 	}
 
-	// removes a client from a group. returns false if the group doesn't exist.
 	public boolean leaveGroup(UUID groupId, ClientProxy client)
 	{
 		Set<ClientProxy> members = groupMembers.get(groupId);
@@ -86,14 +104,12 @@ public class GroupManager
 		return members.remove(client);
 	}
 
-	// checks if a client is currently in a group
 	public boolean isMember(UUID groupId, ClientProxy client)
 	{
 		Set<ClientProxy> members = groupMembers.get(groupId);
 		return members != null && members.contains(client);
 	}
 
-	// returns all clients currently in a group — used by packetbroker to route group messages
 	public Set<ClientProxy> getGroupMembers(UUID groupId)
 	{
 		return groupMembers.getOrDefault(groupId, Collections.emptySet());
@@ -104,13 +120,11 @@ public class GroupManager
 		return groups.get(groupId);
 	}
 
-	// returns all groups that currently exist on the server
 	public Collection<Group> getAllGroups()
 	{
 		return groups.values();
 	}
 
-	// returns all groups that the given client is currently a member of
 	public Collection<Group> getGroupsForClient(ClientProxy client)
 	{
 		List<Group> result = new ArrayList<>();
@@ -120,5 +134,44 @@ public class GroupManager
 				result.add(groups.get(entry.getKey()));
 		}
 		return result;
+	}
+
+	public List<String> getRemovedGroupIdsForUser(String username)
+	{
+		return groupRepository.getRemovedGroupIdsForUser(username);
+	}
+
+	public Set<String> getMemberUsernames(UUID groupId)
+	{
+		List<String> fromDb = groupRepository.getMembersForGroup(groupId.toString());
+		return new java.util.HashSet<>(fromDb);
+	}
+
+	public boolean addMemberByUsername(UUID groupId, String username, Map<String, ClientProxy> onlineClients)
+	{
+		Set<ClientProxy> members = groupMembers.get(groupId);
+		if (members == null) return false;
+
+		groupRepository.addMember(groupId, username);
+
+		ClientProxy client = onlineClients.get(username);
+		if (client != null) members.add(client);
+
+		return true;
+	}
+
+	// Gibt den ClientProxy des entfernten Users zurück (null wenn offline), damit der Server ihm eine Benachrichtigung schicken kann.
+	public ClientProxy removeMemberByUsername(UUID groupId, String username, Map<String, ClientProxy> onlineClients)
+	{
+		Set<ClientProxy> members = groupMembers.get(groupId);
+		if (members == null) return null;
+
+		groupRepository.removeMember(groupId, username);
+		groupRepository.markAsRemoved(groupId, username);
+
+		ClientProxy client = onlineClients.get(username);
+		if (client != null) members.remove(client);
+
+		return client;
 	}
 }
