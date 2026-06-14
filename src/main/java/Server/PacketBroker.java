@@ -15,6 +15,11 @@ import Util.Network.DeleteMessage;
 import Util.Network.EditMessage;
 import User.Repository.GroupRepository;
 import Util.Network.Groups.AddMemberPacket;
+import Util.Network.Groups.GetGroupMembersRequest;
+import Util.Network.Groups.GetGroupMembersResponse;
+import Util.Network.Groups.GroupRemovedNotification;
+import Util.Network.Groups.RemoveMemberPacket;
+import Util.Network.Groups.RemovedGroupsResponse;
 import Util.Network.Groups.CreateGroupPacket;
 import Util.Network.Groups.Group;
 import Util.Network.Groups.GroupCreatedPacket;
@@ -40,6 +45,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -110,6 +116,18 @@ public class PacketBroker implements Runnable {
 
 							// Dem Client die Gruppen schicken, in denen er Mitglied ist (inkl. Broadcast)
 							sender.tryEnqueuePacket(new GroupListResponsePacket(groupManager.getGroupsForClient(sender)));
+							// Dem Client mitteilen aus welchen Gruppen er entfernt wurde (für Lesezugriff)
+							List<String> removedIds = groupManager.getRemovedGroupIdsForUser(user.getUsername());
+							if (!removedIds.isEmpty()) {
+								Map<String, String> removedMap = new java.util.HashMap<>();
+								for (String gid : removedIds) {
+									try {
+										Group g = groupManager.getGroup(UUID.fromString(gid));
+										removedMap.put(gid, g != null ? g.getName() : gid);
+									} catch (IllegalArgumentException ignored) {}
+								}
+								sender.tryEnqueuePacket(new RemovedGroupsResponse(removedMap));
+							}
 
 										// Sende dem neu angemeldeten Client die bereits verbundenen Benutzer,
 										// damit dieser deren Profilbilder direkt laden und cachen kann.
@@ -176,6 +194,34 @@ public class PacketBroker implements Runnable {
 					case MyGroupsRequestPacket ignored -> {
 						if (sender != null)
 							sender.tryEnqueuePacket(new GroupListResponsePacket(groupManager.getGroupsForClient(sender)));
+					}
+					case GetGroupMembersRequest req -> {
+						if (sender != null) {
+							Set<String> members = groupManager.getMemberUsernames(req.getGroupId());
+							Group g = groupManager.getGroup(req.getGroupId());
+							String creator = g != null ? g.getCreatorUsername() : null;
+							sender.tryEnqueuePacket(new GetGroupMembersResponse(req.getGroupId(), members, creator));
+						}
+					}
+					case RemoveMemberPacket rmp -> {
+						if (sender != null && sender.getUser() != null) {
+							Group group = groupManager.getGroup(rmp.getGroupId());
+							// Creator kann nicht entfernt werden
+							if (group != null && rmp.getUsername().equals(group.getCreatorUsername())) break;
+							Map<String, ClientProxy> online = new HashMap<>();
+							synchronized (clients) {
+								for (var c : clients) {
+									if (c.getUser() != null) online.put(c.getUser().getUsername(), c);
+								}
+							}
+							String groupName = group != null ? group.getName() : "Unbekannte Gruppe";
+							ClientProxy removed = groupManager.removeMemberByUsername(rmp.getGroupId(), rmp.getUsername(), online);
+							if (removed != null) {
+								String removedBy = sender.getUser().getDisplayname() != null && !sender.getUser().getDisplayname().isBlank()
+									? sender.getUser().getDisplayname() : sender.getUser().getUsername();
+								removed.tryEnqueuePacket(new GroupRemovedNotification(rmp.getGroupId(), groupName, removedBy));
+							}
+						}
 					}
 					case GetUsersRequest ignored -> {
 						if (sender != null) {

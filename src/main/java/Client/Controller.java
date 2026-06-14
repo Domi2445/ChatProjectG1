@@ -19,6 +19,11 @@ import Util.Network.DeleteMessage;
 import Util.Network.GetUsersRequest;
 import Util.Network.GetUsersResponse;
 import Util.Network.Groups.AddMemberPacket;
+import Util.Network.Groups.GetGroupMembersRequest;
+import Util.Network.Groups.GetGroupMembersResponse;
+import Util.Network.Groups.GroupRemovedNotification;
+import Util.Network.Groups.RemoveMemberPacket;
+import Util.Network.Groups.RemovedGroupsResponse;
 import Util.Network.Groups.CreateGroupPacket;
 import Util.Network.Groups.Group;
 import Util.Network.Groups.GroupCreatedPacket;
@@ -103,6 +108,12 @@ public class Controller {
 
 	private final ObservableList<ChatEntry> chatList = FXCollections.observableArrayList();
 	private final ObservableList<User> allKnownUsers = FXCollections.observableArrayList();
+	// Bekannte Gruppenmitglieder je Gruppe (wird vom Server geladen)
+	private final Map<UUID, Set<String>> groupMemberCache = new HashMap<>();
+	// Ersteller je Gruppe (wird mit GetGroupMembersResponse gesetzt)
+	private final Map<UUID, String> groupCreatorCache = new HashMap<>();
+	// Gruppen aus denen der User entfernt wurde – nur lesen, nicht schreiben
+	private final Set<UUID> removedGroups = new java.util.HashSet<>();
 	private final Map<String, byte[]> profilePicturesByUsername = new HashMap<>();
 	private final Map<String, String> profilePictureContentTypesByUsername = new HashMap<>();
 	private boolean profilePictureSyncEnabled;
@@ -324,10 +335,42 @@ public class Controller {
 								addGroupToChatList(created.getGroup());
 								openGroupChat(created.getGroup());
 							});
-							case GetUsersResponse resp -> Platform.runLater(() -> {
-							allKnownUsers.setAll(resp.getUsers());
-						});
-						case ProfilePictureUpdate update -> Platform.runLater(() -> applyProfilePictureUpdate(update));
+							case GetUsersResponse resp -> Platform.runLater(() ->
+								allKnownUsers.setAll(resp.getUsers()));
+							case GetGroupMembersResponse resp -> Platform.runLater(() -> {
+								groupMemberCache.put(resp.getGroupId(), resp.getUsernames());
+								if (resp.getCreatorUsername() != null)
+									groupCreatorCache.put(resp.getGroupId(), resp.getCreatorUsername());
+							});
+							case RemovedGroupsResponse resp -> Platform.runLater(() -> {
+								for (Map.Entry<String, String> entry : resp.getRemovedGroups().entrySet()) {
+									try {
+										UUID gid = UUID.fromString(entry.getKey());
+										removedGroups.add(gid);
+										boolean alreadyInList = chatList.stream()
+											.anyMatch(e -> e.type() == ChatEntry.Type.GROUP && gid.equals(e.groupId()));
+										if (!alreadyInList) {
+											chatList.add(new ChatEntry(ChatEntry.Type.GROUP, entry.getValue(), gid, null));
+										}
+									} catch (IllegalArgumentException ignored) {}
+								}
+							});
+							case GroupRemovedNotification notif -> Platform.runLater(() -> {
+								removedGroups.add(notif.getGroupId());
+								groupMemberCache.remove(notif.getGroupId());
+								// Gruppe bleibt in der Liste – nur Input sperren wenn gerade offen
+								if (activeGroup != null && activeGroup.getId().equals(notif.getGroupId())) {
+									getMessages().add(new TextMessage(null,
+										"Du wurdest von " + notif.getRemovedBy() + " aus dieser Gruppe entfernt."));
+									setInputEnabled(false);
+								}
+								Alert alert = new Alert(Alert.AlertType.INFORMATION);
+								alert.setTitle("Aus Gruppe entfernt");
+								alert.setHeaderText("Du wurdest aus \"" + notif.getGroupName() + "\" entfernt.");
+								alert.setContentText("Entfernt von: " + notif.getRemovedBy());
+								Main.themed(alert).show();
+							});
+							case ProfilePictureUpdate update -> Platform.runLater(() -> applyProfilePictureUpdate(update));
 							case ConnectionClosed closed -> Platform.runLater(() -> handleConnectionClosed(closed));
 							case LoginResponse loginResp -> Platform.runLater(() -> { //FÜR UI CALLBACK
 								handleLoginResponse(loginResp);
@@ -734,6 +777,7 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 		addPrivateChatToChatList(user.getUsername(), getDisplayName(user));
 		if (chatHeaderLabel != null) chatHeaderLabel.setText(getDisplayName(user));
 		getMessages().clear();
+		setInputEnabled(true);
 		outPacketQueue.offer(new HistoryRequest(localUser.getUsername(), user.getUsername(), null));
 	}
 
@@ -759,6 +803,7 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 		activeGroup = null;
 		if (chatHeaderLabel != null) chatHeaderLabel.setText("Globaler Chat");
 		getMessages().clear();
+		setInputEnabled(true);
 		outPacketQueue.offer(new HistoryRequest(localUser.getUsername(), null, "main"));
 	}
 
@@ -767,6 +812,7 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 		activeGroup = group;
 		if (chatHeaderLabel != null) chatHeaderLabel.setText(group.getName());
 		getMessages().clear();
+		setInputEnabled(!removedGroups.contains(group.getId()));
 		outPacketQueue.offer(new HistoryRequest(localUser.getUsername(), null, group.getId().toString()));
 	}
 
@@ -775,8 +821,9 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 		switch (entry.type()) {
 			case GLOBAL -> openGlobalChat();
 			case GROUP -> {
-				// Gruppe beitreten falls noch nicht Mitglied, dann öffnen
-				outPacketQueue.offer(new JoinGroupPacket(entry.groupId()));
+				// Nur beitreten wenn noch nicht entfernt
+				if (!removedGroups.contains(entry.groupId()))
+					outPacketQueue.offer(new JoinGroupPacket(entry.groupId()));
 				openGroupChat(new Group(entry.groupId(), entry.displayName(), ""));
 			}
 			case PRIVATE -> {
@@ -784,6 +831,7 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 				activeGroup = null;
 				if (chatHeaderLabel != null) chatHeaderLabel.setText(entry.displayName());
 				getMessages().clear();
+				setInputEnabled(true);
 				outPacketQueue.offer(new HistoryRequest(localUser.getUsername(), entry.username(), null));
 			}
 		}
@@ -1185,15 +1233,42 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 		sendPacket(new DeleteMessage(message.getMessageId()));
 	}
 
+	private void setInputEnabled(boolean enabled) {
+		if (messageTextField != null) messageTextField.setDisable(!enabled);
+		if (sendButton != null) sendButton.setDisable(!enabled);
+		if (uploadButton != null) uploadButton.setDisable(!enabled);
+		if (messageTextField != null) messageTextField.setPromptText(enabled
+			? "Nachricht eingeben ..."
+			: "Du wurdest aus dieser Gruppe entfernt.");
+	}
+
 	public void disconnect() {
 		if (client != null) client.disconnect();
 	}
 
 	private void showAddMemberDialog(UUID groupId) {
-		// Aktuelle Liste vom Server anfordern, dann Dialog öffnen
+		// Mitgliederliste und Userliste vom Server frisch laden
 		outPacketQueue.offer(new GetUsersRequest());
+		outPacketQueue.offer(new GetGroupMembersRequest(groupId));
 
-		// Kandidaten: alle bekannten User außer dem eigenen Account
+		// Warten im Hintergrund-Thread, danach Dialog auf JavaFX-Thread öffnen
+		Thread loader = new Thread(() -> {
+			long deadline = System.currentTimeMillis() + 2000;
+			while (System.currentTimeMillis() < deadline) {
+				if (!allKnownUsers.isEmpty() && groupMemberCache.containsKey(groupId)) break;
+				try { Thread.sleep(50); } catch (InterruptedException e) { Thread.currentThread().interrupt(); return; }
+			}
+			Platform.runLater(() -> openAddMemberDialogUI(groupId));
+		}, "AddMemberLoader");
+		loader.setDaemon(true);
+		loader.start();
+	}
+
+	private void openAddMemberDialogUI(UUID groupId) {
+		Set<String> existingMembers = groupMemberCache.getOrDefault(groupId, Set.of());
+		String creatorUsername = groupCreatorCache.get(groupId);
+
+		// Kandidaten: alle bekannten User außer eigenem Account, sortiert
 		List<User> candidates = allKnownUsers.stream()
 			.filter(u -> localUser == null || !u.getUsername().equals(localUser.getUsername()))
 			.sorted((a, b) -> {
@@ -1209,16 +1284,21 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 			return;
 		}
 
-		// Checkboxen für jeden User
+		// Checkboxen: bereits Mitglieder vorausgewählt (abwählbar zum Entfernen)
 		VBox content = new VBox(6);
 		content.setPadding(new Insets(10));
 		List<CheckBox> checkBoxes = new ArrayList<>();
 		for (User u : candidates) {
-			String label = u.getDisplayname() != null && !u.getDisplayname().isBlank()
+			String displayName = u.getDisplayname() != null && !u.getDisplayname().isBlank()
 				? u.getDisplayname() + " (" + u.getUsername() + ")"
 				: u.getUsername();
+			boolean isMember = existingMembers.contains(u.getUsername());
+			boolean isCreator = u.getUsername().equals(creatorUsername);
+			String label = isCreator ? displayName + " (Ersteller)" : (isMember ? displayName + " – bereits Mitglied" : displayName);
 			CheckBox cb = new CheckBox(label);
 			cb.setUserData(u.getUsername());
+			cb.setSelected(isMember || isCreator);
+			if (isCreator) cb.setDisable(true);
 			checkBoxes.add(cb);
 			content.getChildren().add(cb);
 		}
@@ -1228,17 +1308,28 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 		scroll.setPrefHeight(Math.min(candidates.size() * 36.0 + 20, 300));
 
 		Dialog<ButtonType> dialog = new Dialog<>();
-		dialog.setTitle("Mitglied hinzufügen");
-		dialog.setHeaderText("Benutzer auswählen:");
+		dialog.setTitle("Gruppenmitglieder verwalten");
+		dialog.setHeaderText("Mitglieder auswählen – Häkchen entfernen zum Ausschließen:");
 		dialog.getDialogPane().setContent(scroll);
 		dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
 		Main.themed(dialog);
 
 		dialog.showAndWait().ifPresent(btn -> {
 			if (btn == ButtonType.OK) {
+				Set<String> cache = groupMemberCache.computeIfAbsent(groupId, k -> new java.util.HashSet<>());
 				for (CheckBox cb : checkBoxes) {
-					if (cb.isSelected()) {
-						sendPacket(new AddMemberPacket(groupId, (String) cb.getUserData()));
+					String username = (String) cb.getUserData();
+					boolean wasMember = existingMembers.contains(username);
+					boolean isChecked = cb.isSelected();
+
+					if (!wasMember && isChecked) {
+						// Neu hinzufügen
+						sendPacket(new AddMemberPacket(groupId, username));
+						cache.add(username);
+					} else if (wasMember && !isChecked) {
+						// Entfernen
+						sendPacket(new RemoveMemberPacket(groupId, username));
+						cache.remove(username);
 					}
 				}
 			}
@@ -1499,11 +1590,20 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 			box.setAlignment(Pos.CENTER_LEFT);
 			box.setPadding(new Insets(6, 10, 6, 10));
 
-			if (item.type() == ChatEntry.Type.GROUP) {
+			// Globaler Chat (Type.GLOBAL) kriegt kein Menü – alle anderen schon
+			if (item.type() != ChatEntry.Type.GLOBAL) {
 				ContextMenu ctx = new ContextMenu();
-				MenuItem addMember = new MenuItem("Mitglied hinzufügen");
-				addMember.setOnAction(e -> showAddMemberDialog(item.groupId()));
-				ctx.getItems().add(addMember);
+
+				if (item.type() == ChatEntry.Type.GROUP && !removedGroups.contains(item.groupId())) {
+					MenuItem manageMember = new MenuItem("Mitglieder verwalten");
+					manageMember.setOnAction(e -> showAddMemberDialog(item.groupId()));
+					ctx.getItems().add(manageMember);
+				}
+
+				MenuItem removeChat = new MenuItem("Chat entfernen");
+				removeChat.setOnAction(e -> chatList.remove(item));
+				ctx.getItems().add(removeChat);
+
 				setContextMenu(ctx);
 			}
 

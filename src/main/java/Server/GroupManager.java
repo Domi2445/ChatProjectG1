@@ -38,7 +38,12 @@ public class GroupManager
 	public void registerClient(ClientProxy client, User user)
 	{
 		clientUsers.put(client, user);
-		groupMembers.get(BROADCAST_ID).add(client);
+
+		// Broadcast nur beitreten wenn der User nicht explizit entfernt wurde
+		List<String> removedIds = groupRepository.getRemovedGroupIdsForUser(user.getUsername());
+		if (!removedIds.contains(BROADCAST_ID.toString())) {
+			groupMembers.get(BROADCAST_ID).add(client);
+		}
 
 		for (String groupIdStr : groupRepository.getGroupIdsForUser(user.getUsername())) {
 			try {
@@ -131,6 +136,17 @@ public class GroupManager
 		return result;
 	}
 
+	public List<String> getRemovedGroupIdsForUser(String username)
+	{
+		return groupRepository.getRemovedGroupIdsForUser(username);
+	}
+
+	public Set<String> getMemberUsernames(UUID groupId)
+	{
+		List<String> fromDb = groupRepository.getMembersForGroup(groupId.toString());
+		return new java.util.HashSet<>(fromDb);
+	}
+
 	public boolean addMemberByUsername(UUID groupId, String username, Map<String, ClientProxy> onlineClients)
 	{
 		Set<ClientProxy> members = groupMembers.get(groupId);
@@ -142,5 +158,20 @@ public class GroupManager
 		if (client != null) members.add(client);
 
 		return true;
+	}
+
+	// Gibt den ClientProxy des entfernten Users zurück (null wenn offline), damit der Server ihm eine Benachrichtigung schicken kann.
+	public ClientProxy removeMemberByUsername(UUID groupId, String username, Map<String, ClientProxy> onlineClients)
+	{
+		Set<ClientProxy> members = groupMembers.get(groupId);
+		if (members == null) return null;
+
+		groupRepository.removeMember(groupId, username);
+		groupRepository.markAsRemoved(groupId, username);
+
+		ClientProxy client = onlineClients.get(username);
+		if (client != null) members.remove(client);
+
+		return client;
 	}
 }

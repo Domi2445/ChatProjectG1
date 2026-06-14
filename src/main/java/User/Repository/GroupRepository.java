@@ -3,6 +3,7 @@ package User.Repository;
 import DBUtil.Connection;
 import User.Model.ChatGroup;
 import User.Model.GroupMember;
+import User.Model.RemovedGroupMember;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityTransaction;
 
@@ -52,6 +53,54 @@ public class GroupRepository {
                 "SELECT m.groupId FROM GroupMember m WHERE m.username = :u", String.class)
                 .setParameter("u", username)
                 .getResultList();
+        }
+    }
+
+    public List<String> getMembersForGroup(String groupId) {
+        try (EntityManager em = Connection.createEntityManager()) {
+            return em.createQuery(
+                "SELECT m.username FROM GroupMember m WHERE m.groupId = :g", String.class)
+                .setParameter("g", groupId)
+                .getResultList();
+        }
+    }
+
+    public void markAsRemoved(UUID groupId, String username) {
+        try (EntityManager em = Connection.createEntityManager()) {
+            EntityTransaction tx = em.getTransaction();
+            try {
+                tx.begin();
+                em.persist(new RemovedGroupMember(groupId.toString(), username));
+                tx.commit();
+            } catch (Exception e) {
+                if (tx.isActive()) tx.rollback();
+                // unique constraint = already marked, ignore
+            }
+        }
+    }
+
+    public List<String> getRemovedGroupIdsForUser(String username) {
+        try (EntityManager em = Connection.createEntityManager()) {
+            return em.createQuery(
+                "SELECT r.groupId FROM RemovedGroupMember r WHERE r.username = :u", String.class)
+                .setParameter("u", username)
+                .getResultList();
+        }
+    }
+
+    public void removeMember(UUID groupId, String username) {
+        try (EntityManager em = Connection.createEntityManager()) {
+            EntityTransaction tx = em.getTransaction();
+            try {
+                tx.begin();
+                em.createQuery("DELETE FROM GroupMember m WHERE m.groupId = :g AND m.username = :u")
+                    .setParameter("g", groupId.toString())
+                    .setParameter("u", username)
+                    .executeUpdate();
+                tx.commit();
+            } catch (Exception e) {
+                if (tx.isActive()) tx.rollback();
+            }
         }
     }
 }
