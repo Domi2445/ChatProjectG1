@@ -23,20 +23,27 @@ public class GroupRepository {
                 tx.commit();
             } catch (Exception e) {
                 if (tx.isActive()) tx.rollback();
+                System.err.println("saveGroup fehlgeschlagen (" + id + "): " + e.getMessage());
             }
         }
     }
 
     public void addMember(UUID groupId, String username) {
         try (EntityManager em = Connection.createEntityManager()) {
+            String gid = groupId.toString();
+            long count = em.createQuery(
+                    "SELECT COUNT(m) FROM GroupMember m WHERE m.groupId = :g AND m.username = :u", Long.class)
+                .setParameter("g", gid).setParameter("u", username)
+                .getSingleResult();
+            if (count > 0) return;
             EntityTransaction tx = em.getTransaction();
             try {
                 tx.begin();
-                em.persist(new GroupMember(groupId.toString(), username));
+                em.persist(new GroupMember(gid, username));
                 tx.commit();
             } catch (Exception e) {
                 if (tx.isActive()) tx.rollback();
-                // unique constraint = already member, ignore
+                System.err.println("addMember fehlgeschlagen (" + groupId + ", " + username + "): " + e.getMessage());
             }
         }
     }
