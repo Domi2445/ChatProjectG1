@@ -30,6 +30,8 @@ import Util.Network.Notifications.JoinNotification;
 import Util.Network.Messages.TextMessage;
 import Util.Network.Notifications.LeaveNotification;
 import Util.Network.Packet;
+import Util.Network.GetUsersRequest;
+import Util.Network.GetUsersResponse;
 import Util.Network.ReadReceipt;
 import Util.Network.SocketProxy;
 
@@ -58,6 +60,7 @@ public class PacketBroker implements Runnable {
 	private final ChatHistoryService chatHistoryService;
 	private final DeletedForUserRepository deletedForUserRepository;
 	private final GroupManager groupManager;
+	private final JPAUserRepository userRepository;
 
 	/// Queue für Pakete, die an alle verbundenen Clients gesendet werden sollen.
 	private final BlockingQueue<IncomingPacket> broadcastPacketQueue;
@@ -77,6 +80,7 @@ public class PacketBroker implements Runnable {
 		this.chatHistoryService = new ChatHistoryService();
 		this.deletedForUserRepository = new DeletedForUserRepository();
 		this.groupManager = new GroupManager(new GroupRepository());
+		this.userRepository = new JPAUserRepository();
 
 		this.broadcastPacketQueue = new ArrayBlockingQueue<>(MAX_INCOMING_PACKETS);
 		this.clients = new ArrayList<>(MAX_CLIENTS);
@@ -171,6 +175,15 @@ public class PacketBroker implements Runnable {
 					case MyGroupsRequestPacket ignored -> {
 						if (sender != null)
 							sender.tryEnqueuePacket(new GroupListResponsePacket(groupManager.getGroupsForClient(sender)));
+					}
+					case GetUsersRequest ignored -> {
+						if (sender != null) {
+							try {
+								sender.tryEnqueuePacket(new GetUsersResponse(userRepository.getAllUsers()));
+							} catch (Exception e) {
+								System.err.println("Fehler beim Laden aller Benutzer: " + e);
+							}
+						}
 					}
 					case FileMessage file -> {
 						if (sender != null && sender.getUser() != null) {

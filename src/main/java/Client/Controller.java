@@ -16,6 +16,8 @@ import Util.Network.Auth.RegisterResponse;
 import Util.Network.ConnectionClosed;
 import Util.Network.DeleteForMeMessage;
 import Util.Network.DeleteMessage;
+import Util.Network.GetUsersRequest;
+import Util.Network.GetUsersResponse;
 import Util.Network.Groups.AddMemberPacket;
 import Util.Network.Groups.CreateGroupPacket;
 import Util.Network.Groups.Group;
@@ -100,6 +102,7 @@ public class Controller {
 	private Group activeGroup = null;
 
 	private final ObservableList<ChatEntry> chatList = FXCollections.observableArrayList();
+	private final ObservableList<User> allKnownUsers = FXCollections.observableArrayList();
 	private final Map<String, byte[]> profilePicturesByUsername = new HashMap<>();
 	private final Map<String, String> profilePictureContentTypesByUsername = new HashMap<>();
 	private boolean profilePictureSyncEnabled;
@@ -321,7 +324,10 @@ public class Controller {
 								addGroupToChatList(created.getGroup());
 								openGroupChat(created.getGroup());
 							});
-							case ProfilePictureUpdate update -> Platform.runLater(() -> applyProfilePictureUpdate(update));
+							case GetUsersResponse resp -> Platform.runLater(() -> {
+							allKnownUsers.setAll(resp.getUsers());
+						});
+						case ProfilePictureUpdate update -> Platform.runLater(() -> applyProfilePictureUpdate(update));
 							case ConnectionClosed closed -> Platform.runLater(() -> handleConnectionClosed(closed));
 							case LoginResponse loginResp -> Platform.runLater(() -> { //FÜR UI CALLBACK
 								handleLoginResponse(loginResp);
@@ -661,6 +667,7 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 	private void handleLoginResponse(LoginResponse response) {
 		if (response.getStatus() == Status.SUCCESS) {
 			this.localUser = response.getUser();
+			outPacketQueue.offer(new GetUsersRequest());
 
 			cacheProfilePicture(localUser);
 			updateWelcomeLabel();
@@ -1182,12 +1189,54 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 	}
 
 	private void showAddMemberDialog(UUID groupId) {
-		TextInputDialog dialog = new TextInputDialog();
+		// Kandidaten: alle bekannten User außer dem eigenen Account
+		List<User> candidates = allKnownUsers.stream()
+			.filter(u -> localUser == null || !u.getUsername().equals(localUser.getUsername()))
+			.sorted((a, b) -> {
+				String na = a.getDisplayname() != null && !a.getDisplayname().isBlank() ? a.getDisplayname() : a.getUsername();
+				String nb = b.getDisplayname() != null && !b.getDisplayname().isBlank() ? b.getDisplayname() : b.getUsername();
+				return na.compareToIgnoreCase(nb);
+			})
+			.collect(Collectors.toList());
+
+		if (candidates.isEmpty()) {
+			Alert alert = new Alert(Alert.AlertType.INFORMATION, "Keine Benutzer gefunden.");
+			Main.themed(alert).show();
+			return;
+		}
+
+		// Checkboxen für jeden User
+		VBox content = new VBox(6);
+		content.setPadding(new Insets(10));
+		List<CheckBox> checkBoxes = new ArrayList<>();
+		for (User u : candidates) {
+			String label = u.getDisplayname() != null && !u.getDisplayname().isBlank()
+				? u.getDisplayname() + " (" + u.getUsername() + ")"
+				: u.getUsername();
+			CheckBox cb = new CheckBox(label);
+			cb.setUserData(u.getUsername());
+			checkBoxes.add(cb);
+			content.getChildren().add(cb);
+		}
+
+		ScrollPane scroll = new ScrollPane(content);
+		scroll.setFitToWidth(true);
+		scroll.setPrefHeight(Math.min(candidates.size() * 36.0 + 20, 300));
+
+		Dialog<ButtonType> dialog = new Dialog<>();
 		dialog.setTitle("Mitglied hinzufügen");
-		dialog.setHeaderText("Benutzername eingeben:");
-		Main.themed(dialog).showAndWait().ifPresent(username -> {
-			if (!username.isBlank()) {
-				sendPacket(new AddMemberPacket(groupId, username.trim()));
+		dialog.setHeaderText("Benutzer auswählen:");
+		dialog.getDialogPane().setContent(scroll);
+		dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+		Main.themed(dialog);
+
+		dialog.showAndWait().ifPresent(btn -> {
+			if (btn == ButtonType.OK) {
+				for (CheckBox cb : checkBoxes) {
+					if (cb.isSelected()) {
+						sendPacket(new AddMemberPacket(groupId, (String) cb.getUserData()));
+					}
+				}
 			}
 		});
 	}
