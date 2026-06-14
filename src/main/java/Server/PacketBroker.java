@@ -173,6 +173,8 @@ public class PacketBroker implements Runnable {
 					}
 					case AddMemberPacket amp -> {
 						if (sender != null && sender.getUser() != null) {
+							if (!groupManager.isMember(amp.getGroupId(), sender)) break;
+							if (!userRepository.usernameExists(amp.getUsername())) break;
 							Map<String, ClientProxy> online = new HashMap<>();
 							synchronized (clients) {
 								for (var c : clients) {
