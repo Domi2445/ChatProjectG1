@@ -1,6 +1,7 @@
 package Client;
 
 import AudioCall.AudioCall;
+import VideoCall.VideoCall;
 import User.Login.Status;
 import User.Model.User;
 import User.Model.ChatMessage;
@@ -62,6 +63,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -100,10 +102,21 @@ public class Controller {
 	private final Map<String, byte[]> profilePicturesByUsername = new HashMap<>();
 	private final Map<String, String> profilePictureContentTypesByUsername = new HashMap<>();
 	private boolean profilePictureSyncEnabled;
+	private boolean historyLoaded = false;
+	// Relay (Audio/Video) läuft im selben Server-Prozess wie der Chat – Host wird beim Verbinden gesetzt.
+	private String relayHost;
 	private static final String RELAY_IP = "217.154.156.40";
 	private static final int RELAY_PORT = 3268;
+	private static final int VIDEO_RELAY_PORT = 9001;
 	private final AudioCall audioCall = new AudioCall();
+	private final VideoCall videoCall = new VideoCall();
 	private boolean inCall = false;
+	// Anruf wurde initiiert, aber noch nicht von der Gegenseite angenommen (für rotes Button-Feedback)
+	private boolean pendingCall = false;
+	// Art des aktiven/ausstehenden Anrufs: true = Video, false = nur Audio
+	private boolean callIsVideo = false;
+	// Benutzername der Gegenseite des aktuellen/ausstehenden Anrufs (für "Auflegen"-Signal)
+	private String callPeer = null;
 
 	private final ObservableList<User> userList = FXCollections.observableArrayList();
 	private final FilteredList<User> filteredUserList = new FilteredList<>(userList, p -> true);
@@ -128,6 +141,9 @@ public class Controller {
 
 	@FXML
 	private ImageView profilePictureView;
+
+	@FXML
+	private ImageView remoteVideoView;
 
 	@FXML
 	private Button videoButton;
@@ -230,6 +246,8 @@ public class Controller {
 	public boolean connectAndRun(String ip, int port) {
 		try {
 			profilePictureSyncEnabled = Boolean.parseBoolean(System.getProperty("profile.sync", "true"));
+			this.relayHost = ip;
+			profilePictureSyncEnabled = Boolean.parseBoolean(System.getProperty("profile.sync", "false"));
 			client = new Client(ip, port, outPacketQueue, inPacketQueue);
 			Thread clientThread = new Thread(client, "ClientThread");
 			clientThread.setDaemon(true);
@@ -1157,32 +1175,111 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 
 	//Audio
 	public void stopCall() {
-		if (inCall) {
-			audioCall.stop();
-			inCall = false;
+		if (inCall || pendingCall) {
+			endCall();
 		}
 	}
 
+	// "Anruf"-Button → reiner Audioanruf
 	public void handleCallButton() {
-		if (!inCall) {
+		if (inCall || pendingCall) {
+			endCall();
+		} else {
+			// Wenn ein privater Chat offen ist, direkt diesen Kontakt anrufen (kein Dialog nötig)
+			startOutgoingCall(false, activePrivateChat);
+		}
+	}
+
+	// "Videoanruf"-Button → Audio + Video
+	private void handleVideoButton() {
+		if (inCall || pendingCall) {
+			endCall();
+		} else {
+			// Wenn ein privater Chat offen ist, direkt diesen Kontakt anrufen (kein Dialog nötig)
+			startOutgoingCall(true, activePrivateChat);
+		}
+	}
+
+	// Anruf an einen Benutzernamen starten (target == null fragt per Dialog nach)
+	private void startOutgoingCall(boolean video) {
+		startOutgoingCall(video, null);
+	}
+
+	private void startOutgoingCall(boolean video, String target) {
+		if (target == null || target.isBlank()) {
 			TextInputDialog dialog = new TextInputDialog();
-			dialog.setTitle("Anruf starten");
+			dialog.setTitle(video ? "Videoanruf starten" : "Anruf starten");
 			dialog.setHeaderText("Benutzername des Empfaengers:");
-			String target = Main.themed(dialog).showAndWait().orElse(null);
+			target = Main.themed(dialog).showAndWait().orElse(null);
 			if (target == null || target.isBlank()) {
 				return;
 			}
+		}
 
+		// Selbstanruf verhindern – fuehrt sonst zum Einfrieren des Calls.
+		if (localUser != null && target.equals(localUser.getUsername())) {
+			Alert alert = new Alert(Alert.AlertType.WARNING);
+			alert.setTitle("Anruf nicht moeglich");
+			alert.setHeaderText("Du kannst dich nicht selbst anrufen.");
+			Main.themed(alert).showAndWait();
+			return;
+		}
+
+		callIsVideo = video;
+		callPeer = target;
+		pendingCall = true;
+		setCallButtonActive(video, true);
+		System.out.println("[Call] REQUEST gesendet an " + target + " (video=" + video + ")");
+
+		sendPacket(new CallNotification(
+			CallNotification.CallType.REQUEST,
+			createNetworkUser(localUser),
+			target,
+			0,
+			video
+		));
+	}
+
+	private void endCall() {
+		// Gegenseite benachrichtigen, damit der Anruf dort ebenfalls beendet wird
+		// (Buttons zurücksetzen, Audio/Video stoppen).
+		if (callPeer != null) {
 			sendPacket(new CallNotification(
-				CallNotification.CallType.REQUEST,
+				CallNotification.CallType.END,
 				createNetworkUser(localUser),
-				target,
-				0
+				callPeer,
+				0,
+				callIsVideo
 			));
+		}
+		stopCallLocally();
+	}
+
+	// Beendet den Anruf nur lokal, ohne die Gegenseite zu benachrichtigen.
+	private void stopCallLocally() {
+		audioCall.stop();
+		videoCall.stop();
+		resetCallState();
+	}
+
+	// Setzt alle Anruf-Zustände zurück und entfernt die rote Markierung von beiden Buttons.
+	private void resetCallState() {
+		inCall = false;
+		pendingCall = false;
+		callPeer = null;
+		videoCallButton.getStyleClass().remove("call-active");
+		videoButton.getStyleClass().remove("call-active");
+	}
+
+	// Markiert den zur Anrufart passenden Button rot (call-active) bzw. entfernt die Markierung.
+	private void setCallButtonActive(boolean video, boolean active) {
+		Button button = video ? videoButton : videoCallButton;
+		if (active) {
+			if (!button.getStyleClass().contains("call-active")) {
+				button.getStyleClass().add("call-active");
+			}
 		} else {
-			audioCall.stop();
-			inCall = false;
-			videoCallButton.getStyleClass().remove("call-active");
+			button.getStyleClass().remove("call-active");
 		}
 	}
 
@@ -1193,50 +1290,66 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 
 		switch (call.getType()) {
 			case REQUEST -> {
+				System.out.println("[Call] REQUEST empfangen von " + call.getSender().getUsername() + " (video=" + call.isVideo() + ")");
 				Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
 				alert.setTitle("Eingehender Anruf");
-				alert.setHeaderText("Anruf von: " + call.getSender().getUsername());
+				alert.setHeaderText((call.isVideo() ? "Videoanruf" : "Anruf") + " von: " + call.getSender().getUsername());
 				boolean accepted = Main.themed(alert).showAndWait().orElse(ButtonType.CANCEL) == ButtonType.OK;
 				sendPacket(new CallNotification(
 					accepted ? CallNotification.CallType.ACCEPT : CallNotification.CallType.REJECT,
 					createNetworkUser(localUser),
 					call.getSender().getUsername(),
-					0
+					0,
+					call.isVideo()
 				));
 				if (accepted) {
-					startAudioCall(call);
+					startCall(call, call.isVideo());
 				}
 			}
-			case ACCEPT -> startAudioCall(call);
-			case REJECT -> getMessages().add(
-				new TextMessage(createNetworkUser(localUser), call.getSender().getUsername() + " hat abgelehnt."));
+			case ACCEPT -> {
+				System.out.println("[Call] ACCEPT empfangen von " + call.getSender().getUsername() + " (video=" + call.isVideo() + ")");
+				startCall(call, call.isVideo());
+			}
+			case REJECT -> {
+				System.out.println("[Call] REJECT empfangen von " + call.getSender().getUsername());
+				resetCallState();
+				getMessages().add(
+					new TextMessage(createNetworkUser(localUser), call.getSender().getUsername() + " hat abgelehnt."));
+			}
+			case END -> {
+				System.out.println("[Call] END empfangen von " + call.getSender().getUsername());
+				if (inCall || pendingCall) {
+					stopCallLocally();
+					getMessages().add(new TextMessage(createNetworkUser(localUser),
+						call.getSender().getUsername() + " hat den Anruf beendet."));
+				}
+			}
 		}
 	}
 
-	private void startAudioCall(CallNotification call) {
+	private void startCall(CallNotification call, boolean video) {
 		String roomId = Stream.of(localUser.getUsername(), call.getSender().getUsername())
 			.sorted()
 			.collect(Collectors.joining("-"));
+		System.out.println("[Call] Starte " + (video ? "Video+Audio" : "Audio") + " | relay=" + relayHost + " | room=" + roomId);
 		try {
-			audioCall.start(RELAY_IP, RELAY_PORT, roomId);
-			inCall = true;
-			if (!videoCallButton.getStyleClass().contains("call-active")) {
-				videoCallButton.getStyleClass().add("call-active");
+			audioCall.start(relayHost, RELAY_PORT, roomId);
+			if (video) {
+				videoCall.start(relayHost, VIDEO_RELAY_PORT, roomId, remoteVideoView);
 			}
+			callIsVideo = video;
+			callPeer = call.getSender().getUsername();
+			inCall = true;
+			pendingCall = false;
+			setCallButtonActive(video, true);
 		} catch (Exception e) {
+			System.err.println("[Call] Fehler beim Start: " + e);
+			resetCallState();
 			Alert alert = new Alert(Alert.AlertType.ERROR);
 			alert.setHeaderText("Anruf konnte nicht gestartet werden");
 			alert.setContentText(e.toString());
 			Main.themed(alert).show();
 		}
-	}
-
-	private void handleVideoButton() {
-		Alert alert = new Alert(Alert.AlertType.INFORMATION);
-		alert.setTitle("Videoanruf");
-		alert.setHeaderText("Videoanruf");
-		alert.setContentText("Videoanrufe sind in dieser Version noch nicht angebunden. Audio funktioniert bereits.");
-		Main.themed(alert).show();
 	}
 
 	private void openEmojiPicker() {

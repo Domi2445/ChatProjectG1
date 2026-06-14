@@ -130,6 +130,16 @@
                         <Insets bottom="10.0" />
                      </padding>
                   </Label>
+                  <VBox alignment="CENTER">
+                     <children>
+                        <Label styleClass="title-3" text="FIA11 Gruppe 1">
+                           <padding>
+                              <Insets bottom="10.0" />
+                           </padding>
+                        </Label>
+                        <ImageView fx:id="remoteVideoView" fitHeight="180.0" fitWidth="240.0" pickOnBounds="true" preserveRatio="true" />
+                     </children>
+                  </VBox>
                </children>
             </GridPane>
             <Separator prefWidth="200.0" GridPane.valignment="BOTTOM" />

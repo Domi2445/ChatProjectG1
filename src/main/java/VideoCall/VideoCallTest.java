@@ -25,16 +25,13 @@ public class VideoCallTest extends Application {
 		stage.setScene(scene);
 		stage.show();
 
-		// Start sender and receiver on same PC for testing
-		VideoSender sender = new VideoSender("127.0.0.1", 9001, "test-room");
-		VideoReceiver receiver = new VideoReceiver(9001, display);
+		VideoCall videoCall = new VideoCall();
+		try {
+			videoCall.start("127.0.0.1", 9001, "test-room", display);
+		} catch (Exception ex) {
+			ex.printStackTrace();
+		}
 
-		sender.start();
-		receiver.start();
-
-		stage.setOnCloseRequest(e -> {
-			sender.stop();
-			receiver.stop();
-		});
+		stage.setOnCloseRequest(e -> videoCall.stop());
 	}
 }
