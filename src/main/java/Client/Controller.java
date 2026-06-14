@@ -686,6 +686,7 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 			cacheProfilePicture(localUser);
 			updateWelcomeLabel();
 			addUserToList(localUser);
+			outPacketQueue.offer(new GetUsersRequest());
 		}
 
 		if (onRegisterResult != null) {
@@ -1189,6 +1190,9 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 	}
 
 	private void showAddMemberDialog(UUID groupId) {
+		// Aktuelle Liste vom Server anfordern, dann Dialog öffnen
+		outPacketQueue.offer(new GetUsersRequest());
+
 		// Kandidaten: alle bekannten User außer dem eigenen Account
 		List<User> candidates = allKnownUsers.stream()
 			.filter(u -> localUser == null || !u.getUsername().equals(localUser.getUsername()))

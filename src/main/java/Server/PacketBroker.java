@@ -40,6 +40,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
@@ -179,9 +180,16 @@ public class PacketBroker implements Runnable {
 					case GetUsersRequest ignored -> {
 						if (sender != null) {
 							try {
-								sender.tryEnqueuePacket(new GetUsersResponse(userRepository.getAllUsers()));
+								// Einfache Kopien ohne Hibernate-Proxies erstellen
+								List<User> simple = userRepository.getAllUsers().stream().map(u -> {
+									User copy = new User(u.getUsername());
+									copy.setDisplayname(u.getDisplayname());
+									return copy;
+								}).collect(Collectors.toList());
+								sender.tryEnqueuePacket(new GetUsersResponse(simple));
 							} catch (Exception e) {
 								System.err.println("Fehler beim Laden aller Benutzer: " + e);
+								e.printStackTrace();
 							}
 						}
 					}
