@@ -224,7 +224,7 @@ public class PacketBroker implements Runnable {
 						}
 					}
 					case GetUsersRequest ignored -> {
-						if (sender != null) {
+						if (sender != null && sender.getUser() != null) {
 							try {
 								// Einfache Kopien ohne Hibernate-Proxies erstellen
 								List<User> simple = userRepository.getAllUsers().stream().map(u -> {
