@@ -1194,6 +1194,15 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 			}
 		}
 
+		// Selbstanruf verhindern – fuehrt sonst zum Einfrieren des Calls.
+		if (localUser != null && target.equals(localUser.getUsername())) {
+			Alert alert = new Alert(Alert.AlertType.WARNING);
+			alert.setTitle("Anruf nicht moeglich");
+			alert.setHeaderText("Du kannst dich nicht selbst anrufen.");
+			Main.themed(alert).showAndWait();
+			return;
+		}
+
 		callIsVideo = video;
 		callPeer = target;
 		pendingCall = true;
