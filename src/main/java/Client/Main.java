@@ -43,7 +43,7 @@ public class Main extends Application {
 		}
 		// Audio - Beim Schließen des Fensters den Anruf beenden
 		primaryStage.setOnCloseRequest(e -> {
-			chatController.stopCall();
+			chatController.disconnect();
 			Platform.exit();
 			System.exit(0);
 		});

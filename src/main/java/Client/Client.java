@@ -39,6 +39,10 @@ public class Client implements Runnable {
 		this.in = in;
 	}
 
+	public void disconnect() {
+		try { socket.getSocket().close(); } catch (IOException ignored) {}
+	}
+
 	@Override
 	public void run() {
 		Thread sender = new Thread(() -> {

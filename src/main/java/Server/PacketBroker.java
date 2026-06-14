@@ -13,6 +13,8 @@ import Util.Network.Auth.RegisterRequest;
 import Util.Network.DeleteForMeMessage;
 import Util.Network.DeleteMessage;
 import Util.Network.EditMessage;
+import User.Repository.GroupRepository;
+import Util.Network.Groups.AddMemberPacket;
 import Util.Network.Groups.CreateGroupPacket;
 import Util.Network.Groups.Group;
 import Util.Network.Groups.GroupCreatedPacket;
@@ -33,10 +35,13 @@ import Util.Network.SocketProxy;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.UUID;
 
@@ -71,7 +76,7 @@ public class PacketBroker implements Runnable {
 		this.chatHistoryHandler = chatHistoryHandler;
 		this.chatHistoryService = new ChatHistoryService();
 		this.deletedForUserRepository = new DeletedForUserRepository();
-		this.groupManager = new GroupManager();
+		this.groupManager = new GroupManager(new GroupRepository());
 
 		this.broadcastPacketQueue = new ArrayBlockingQueue<>(MAX_INCOMING_PACKETS);
 		this.clients = new ArrayList<>(MAX_CLIENTS);
@@ -83,7 +88,8 @@ public class PacketBroker implements Runnable {
 		while (!stopFlag.get() && !Thread.currentThread().isInterrupted()) {
 			try {
 				cleanupDisconnectedClients();
-				IncomingPacket incoming = broadcastPacketQueue.take();
+				IncomingPacket incoming = broadcastPacketQueue.poll(3, TimeUnit.SECONDS);
+				if (incoming == null) continue;
 				Packet packet = incoming.packet();
 				ClientProxy sender = incoming.sender();
 
@@ -141,6 +147,22 @@ public class PacketBroker implements Runnable {
 					case LeaveGroupPacket lgp -> {
 						if (sender != null && sender.getUser() != null)
 							groupManager.leaveGroup(lgp.getGroupId(), sender);
+					}
+					case AddMemberPacket amp -> {
+						if (sender != null && sender.getUser() != null) {
+							Map<String, ClientProxy> online = new HashMap<>();
+							synchronized (clients) {
+								for (var c : clients) {
+									if (c.getUser() != null) online.put(c.getUser().getUsername(), c);
+								}
+							}
+							if (groupManager.addMemberByUsername(amp.getGroupId(), amp.getUsername(), online)) {
+								ClientProxy added = online.get(amp.getUsername());
+								if (added != null) {
+									added.tryEnqueuePacket(new GroupListResponsePacket(groupManager.getGroupsForClient(added)));
+								}
+							}
+						}
 					}
 					case GroupListRequestPacket ignored -> {
 						if (sender != null)

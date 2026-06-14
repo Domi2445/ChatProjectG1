@@ -16,6 +16,7 @@ import Util.Network.Auth.RegisterResponse;
 import Util.Network.ConnectionClosed;
 import Util.Network.DeleteForMeMessage;
 import Util.Network.DeleteMessage;
+import Util.Network.Groups.AddMemberPacket;
 import Util.Network.Groups.CreateGroupPacket;
 import Util.Network.Groups.Group;
 import Util.Network.Groups.GroupCreatedPacket;
@@ -190,13 +191,15 @@ public class Controller {
 		sendButton.setOnAction(e -> sendMessage());
 		messageTextField.setOnAction(e -> sendMessage());
 		uploadButton.setOnAction(e -> openUploadMenu());
-		videoCallButton.setOnAction(e -> handleCallButton());
-
-		if (buttonEmoji != null) {
-			buttonEmoji.setOnAction(e -> openEmojiPicker());
+		if (videoCallButton != null) {
+			videoCallButton.setOnAction(e -> handleCallButton());
 		}
 		if (videoButton != null) {
 			videoButton.setOnAction(e -> handleVideoButton());
+		}
+
+		if (buttonEmoji != null) {
+			buttonEmoji.setOnAction(e -> openEmojiPicker());
 		}
 
 		if (userListView != null) {
@@ -614,8 +617,18 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 			case JoinNotification join -> {
 				cacheProfilePicture(join.getUser());
 				addUserToList(join.getUser());
+				// Join-Nachricht im globalen Chat anzeigen
+				if (activeGroup == null && activePrivateChat == null) {
+					getMessages().add(join);
+				}
 			}
-			case LeaveNotification leave -> removeUserFromList(leave.getUser());
+			case LeaveNotification leave -> {
+				removeUserFromList(leave.getUser());
+				// Leave-Nachricht im globalen Chat anzeigen
+				if (activeGroup == null && activePrivateChat == null) {
+					getMessages().add(leave);
+				}
+			}
 			case null, default -> throw new IllegalStateException("Unbekannte Systemnachricht");
 		}
 	}
@@ -653,16 +666,7 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 			updateWelcomeLabel();
 			addUserToList(localUser);
 			updateOwnProfilePictureView();
-			// Nach erfolgreichem Login: lade Chat-History vom Server
-			try {
-				HistoryRequest histReq = new HistoryRequest();
-				histReq.setSender(localUser.getUsername());  // Sender = aktueller Benutzer
-				histReq.setReceiver(null);                   // Global chat
-				histReq.setChatRoomId("main");               // Standard chat room für globale Nachrichten
-				outPacketQueue.put(histReq);
-			} catch (InterruptedException e) {
-				System.err.println("Fehler beim Senden von HistoryRequest: " + e.getMessage());
-			}
+			openGlobalChat();
 		}
 		if (onLoginResult != null) {
 			onLoginResult.accept(response);
@@ -1032,10 +1036,7 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 		}
 
 		private boolean canShowContextMenu(Message message) {
-			// Für alle gelöschte Nachrichten: kein Menü mehr nötig
-			if (message instanceof TextMessage tm) return !tm.isDeleted();
-			if (message instanceof FileMessage fm) return !fm.isDeleted();
-			return false;
+			return message instanceof TextMessage || message instanceof FileMessage;
 		}
 
 		private ContextMenu createMessageContextMenu(Message message, boolean isOwn) {
@@ -1050,7 +1051,10 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 
 			menu.getItems().add(deleteForMeItem);
 
-			if (isOwn) {
+			boolean isDeleted = (message instanceof TextMessage tm && tm.isDeleted())
+				|| (message instanceof FileMessage fm && fm.isDeleted());
+
+			if (isOwn && !isDeleted) {
 				MenuItem deleteForAllItem = new MenuItem("Für alle löschen");
 				deleteForAllItem.setOnAction(event -> Controller.this.deleteMessage(message));
 				menu.getItems().add(deleteForAllItem);
@@ -1173,6 +1177,21 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 		sendPacket(new DeleteMessage(message.getMessageId()));
 	}
 
+	public void disconnect() {
+		if (client != null) client.disconnect();
+	}
+
+	private void showAddMemberDialog(UUID groupId) {
+		TextInputDialog dialog = new TextInputDialog();
+		dialog.setTitle("Mitglied hinzufügen");
+		dialog.setHeaderText("Benutzername eingeben:");
+		Main.themed(dialog).showAndWait().ifPresent(username -> {
+			if (!username.isBlank()) {
+				sendPacket(new AddMemberPacket(groupId, username.trim()));
+			}
+		});
+	}
+
 	//Audio
 	public void stopCall() {
 		if (inCall || pendingCall) {
@@ -1267,13 +1286,14 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 		inCall = false;
 		pendingCall = false;
 		callPeer = null;
-		videoCallButton.getStyleClass().remove("call-active");
-		videoButton.getStyleClass().remove("call-active");
+		if (videoCallButton != null) videoCallButton.getStyleClass().remove("call-active");
+		if (videoButton != null) videoButton.getStyleClass().remove("call-active");
 	}
 
 	// Markiert den zur Anrufart passenden Button rot (call-active) bzw. entfernt die Markierung.
 	private void setCallButtonActive(boolean video, boolean active) {
 		Button button = video ? videoButton : videoCallButton;
+		if (button == null) return;
 		if (active) {
 			if (!button.getStyleClass().contains("call-active")) {
 				button.getStyleClass().add("call-active");
@@ -1416,6 +1436,7 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 			super.updateItem(item, empty);
 			setText(null);
 			setGraphic(null);
+			setContextMenu(null);
 			if (empty || item == null) return;
 
 			Label label = new Label(item.displayName());
@@ -1426,15 +1447,11 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 			box.setPadding(new Insets(6, 10, 6, 10));
 
 			if (item.type() == ChatEntry.Type.GROUP) {
-				Button joinBtn = new Button("ID");
-				joinBtn.setStyle("-fx-font-size: 9;");
-				joinBtn.setOnAction(e -> {
-					Alert alert = new Alert(Alert.AlertType.INFORMATION);
-					alert.setHeaderText("Gruppen-ID");
-					alert.setContentText(item.groupId().toString());
-					Main.themed(alert).show();
-				});
-				box.getChildren().add(joinBtn);
+				ContextMenu ctx = new ContextMenu();
+				MenuItem addMember = new MenuItem("Mitglied hinzufügen");
+				addMember.setOnAction(e -> showAddMemberDialog(item.groupId()));
+				ctx.getItems().add(addMember);
+				setContextMenu(ctx);
 			}
 
 			setGraphic(box);
