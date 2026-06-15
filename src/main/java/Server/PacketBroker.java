@@ -37,7 +37,10 @@ import Util.Network.Notifications.LeaveNotification;
 import Util.Network.Packet;
 import Util.Network.GetUsersRequest;
 import Util.Network.GetUsersResponse;
+import Util.Network.HideChatPacket;
+import Util.Network.HiddenChatsResponse;
 import Util.Network.ReadReceipt;
+import User.Repository.HiddenChatRepository;
 import Util.Network.SocketProxy;
 
 import java.io.IOException;
@@ -68,6 +71,7 @@ public class PacketBroker implements Runnable {
 	private final DeletedForUserRepository deletedForUserRepository;
 	private final GroupManager groupManager;
 	private final JPAUserRepository userRepository;
+	private final HiddenChatRepository hiddenChatRepository;
 
 	/// Queue für Pakete, die an alle verbundenen Clients gesendet werden sollen.
 	private final BlockingQueue<IncomingPacket> broadcastPacketQueue;
@@ -88,6 +92,7 @@ public class PacketBroker implements Runnable {
 		this.deletedForUserRepository = new DeletedForUserRepository();
 		this.groupManager = new GroupManager(new GroupRepository());
 		this.userRepository = new JPAUserRepository();
+		this.hiddenChatRepository = new HiddenChatRepository();
 
 		this.broadcastPacketQueue = new ArrayBlockingQueue<>(MAX_INCOMING_PACKETS);
 		this.clients = new ArrayList<>(MAX_CLIENTS);
@@ -127,6 +132,12 @@ public class PacketBroker implements Runnable {
 									} catch (IllegalArgumentException ignored) {}
 								}
 								sender.tryEnqueuePacket(new RemovedGroupsResponse(removedMap));
+							}
+
+							// Versteckte Chats senden
+							List<String> hiddenRefs = hiddenChatRepository.getHiddenRefs(user.getUsername());
+							if (!hiddenRefs.isEmpty()) {
+								sender.tryEnqueuePacket(new HiddenChatsResponse(hiddenRefs));
 							}
 
 										// Sende dem neu angemeldeten Client die bereits verbundenen Benutzer,
@@ -241,6 +252,11 @@ public class PacketBroker implements Runnable {
 								System.err.println("Fehler beim Laden aller Benutzer: " + e);
 								e.printStackTrace();
 							}
+						}
+					}
+					case HideChatPacket hcp -> {
+						if (sender != null && sender.getUser() != null) {
+							hiddenChatRepository.hide(sender.getUser().getUsername(), hcp.getChatRef());
 						}
 					}
 					case FileMessage file -> {
