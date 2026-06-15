@@ -150,6 +150,8 @@ public class PacketBroker implements Runnable {
 								Thread.currentThread().interrupt();
 								return;
 							}
+							// Alle Clients mit der aktuellen Benutzerliste aktualisieren
+							broadcastUserList();
 						}
 					}
 					case RegisterRequest req -> authHandler.handleRegister(req, sender);
@@ -486,6 +488,19 @@ public class PacketBroker implements Runnable {
 		}
 
 		return broadcastPacketQueue.offer(new IncomingPacket(packet, null));
+	}
+
+	private void broadcastUserList() {
+		try {
+			List<User> simple = userRepository.getAllUsers().stream().map(u -> {
+				User copy = new User(u.getUsername());
+				copy.setDisplayname(u.getDisplayname());
+				return copy;
+			}).collect(Collectors.toList());
+			broadcastToAll(new GetUsersResponse(simple));
+		} catch (Exception e) {
+			System.err.println("Fehler beim Broadcasten der Benutzerliste: " + e.getMessage());
+		}
 	}
 
 	public void shutdown() {
