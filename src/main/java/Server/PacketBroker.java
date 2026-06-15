@@ -257,6 +257,15 @@ public class PacketBroker implements Runnable {
 					case HideChatPacket hcp -> {
 						if (sender != null && sender.getUser() != null) {
 							hiddenChatRepository.hide(sender.getUser().getUsername(), hcp.getChatRef());
+							// Gruppe komplett löschen wenn alle Mitglieder sie entfernt haben
+							try {
+								UUID groupId = UUID.fromString(hcp.getChatRef());
+								if (groupManager.getGroup(groupId) != null && groupManager.allMembersHidden(groupId)) {
+									groupManager.deleteGroup(groupId);
+								}
+							} catch (IllegalArgumentException ignored) {
+								// chatRef ist kein UUID → privater Chat, nichts zu löschen
+							}
 						}
 					}
 					case FileMessage file -> {
