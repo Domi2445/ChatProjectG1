@@ -37,7 +37,10 @@ import Util.Network.Notifications.LeaveNotification;
 import Util.Network.Packet;
 import Util.Network.GetUsersRequest;
 import Util.Network.GetUsersResponse;
+import Util.Network.HideChatPacket;
+import Util.Network.HiddenChatsResponse;
 import Util.Network.ReadReceipt;
+import User.Repository.HiddenChatRepository;
 import Util.Network.SocketProxy;
 
 import java.io.IOException;
@@ -68,6 +71,7 @@ public class PacketBroker implements Runnable {
 	private final DeletedForUserRepository deletedForUserRepository;
 	private final GroupManager groupManager;
 	private final JPAUserRepository userRepository;
+	private final HiddenChatRepository hiddenChatRepository;
 
 	/// Queue für Pakete, die an alle verbundenen Clients gesendet werden sollen.
 	private final BlockingQueue<IncomingPacket> broadcastPacketQueue;
@@ -88,6 +92,7 @@ public class PacketBroker implements Runnable {
 		this.deletedForUserRepository = new DeletedForUserRepository();
 		this.groupManager = new GroupManager(new GroupRepository());
 		this.userRepository = new JPAUserRepository();
+		this.hiddenChatRepository = new HiddenChatRepository();
 
 		this.broadcastPacketQueue = new ArrayBlockingQueue<>(MAX_INCOMING_PACKETS);
 		this.clients = new ArrayList<>(MAX_CLIENTS);
@@ -107,52 +112,15 @@ public class PacketBroker implements Runnable {
 				switch (packet) {
 					case LoginRequest req -> {
 						if (authHandler.handleLogin(req, sender)) {
-							User user = sender.getUser();
-							// register with group manager so this client can create/join groups
-							groupManager.registerClient(sender, user);
-
-							// History direkt nach Login senden
-							chatHistoryHandler.handleHistoryRequest(new HistoryRequest(user.getUsername(), null, "main"), sender);
-
-							// Dem Client die Gruppen schicken, in denen er Mitglied ist (inkl. Broadcast)
-							sender.tryEnqueuePacket(new GroupListResponsePacket(groupManager.getGroupsForClient(sender)));
-							// Dem Client mitteilen aus welchen Gruppen er entfernt wurde (für Lesezugriff)
-							List<String> removedIds = groupManager.getRemovedGroupIdsForUser(user.getUsername());
-							if (!removedIds.isEmpty()) {
-								Map<String, String> removedMap = new java.util.HashMap<>();
-								for (String gid : removedIds) {
-									try {
-										Group g = groupManager.getGroup(UUID.fromString(gid));
-										removedMap.put(gid, g != null ? g.getName() : gid);
-									} catch (IllegalArgumentException ignored) {}
-								}
-								sender.tryEnqueuePacket(new RemovedGroupsResponse(removedMap));
-							}
-
-										// Sende dem neu angemeldeten Client die bereits verbundenen Benutzer,
-										// damit dieser deren Profilbilder direkt laden und cachen kann.
-										synchronized (clients) {
-											for (var existingClient : clients) {
-												if (existingClient == sender) continue;
-												var existingUser = existingClient.getUser();
-												if (existingUser != null) {
-													// versuche, dem neuen Client eine JoinNotification für den existierenden Benutzer zu senden
-													sender.tryEnqueuePacket(new JoinNotification(existingUser));
-												}
-											}
-										}
-
-							try {
-								if (!broadcast(new JoinNotification(user))) {
-									System.err.println("broadcastPacketQueue ist voll, JoinNotification wurde verworfen");
-								}
-							} catch (InterruptedException e) {
-								Thread.currentThread().interrupt();
-								return;
-							}
+							try { setupAfterAuth(sender); } catch (InterruptedException e) { Thread.currentThread().interrupt(); return; }
 						}
 					}
-					case RegisterRequest req -> authHandler.handleRegister(req, sender);
+					case RegisterRequest req -> {
+						authHandler.handleRegister(req, sender);
+						if (sender != null && sender.getUser() != null) {
+							try { setupAfterAuth(sender); } catch (InterruptedException e) { Thread.currentThread().interrupt(); return; }
+						}
+					}
 					// group action packets — only logged in clients can use these
 					case CreateGroupPacket cgp -> {
 						if (sender != null && sender.getUser() != null) {
@@ -238,6 +206,20 @@ public class PacketBroker implements Runnable {
 							} catch (Exception e) {
 								System.err.println("Fehler beim Laden aller Benutzer: " + e);
 								e.printStackTrace();
+							}
+						}
+					}
+					case HideChatPacket hcp -> {
+						if (sender != null && sender.getUser() != null) {
+							hiddenChatRepository.hide(sender.getUser().getUsername(), hcp.getChatRef());
+							// Gruppe komplett löschen wenn alle Mitglieder sie entfernt haben
+							try {
+								UUID groupId = UUID.fromString(hcp.getChatRef());
+								if (groupManager.getGroup(groupId) != null && groupManager.allMembersHidden(groupId)) {
+									groupManager.deleteGroup(groupId);
+								}
+							} catch (IllegalArgumentException ignored) {
+								// chatRef ist kein UUID → privater Chat, nichts zu löschen
 							}
 						}
 					}
@@ -486,6 +468,68 @@ public class PacketBroker implements Runnable {
 		}
 
 		return broadcastPacketQueue.offer(new IncomingPacket(packet, null));
+	}
+
+	private void setupAfterAuth(ClientProxy sender) throws InterruptedException {
+		User user = sender.getUser();
+		groupManager.registerClient(sender, user);
+
+		// Chat-History für globalen Chat senden
+		chatHistoryHandler.handleHistoryRequest(new HistoryRequest(user.getUsername(), null, "main"), sender);
+
+		// Gruppen des Clients senden
+		sender.tryEnqueuePacket(new GroupListResponsePacket(groupManager.getGroupsForClient(sender)));
+
+		// Entfernte Gruppen senden
+		List<String> removedIds = groupManager.getRemovedGroupIdsForUser(user.getUsername());
+		if (!removedIds.isEmpty()) {
+			Map<String, String> removedMap = new java.util.HashMap<>();
+			for (String gid : removedIds) {
+				try {
+					Group g = groupManager.getGroup(UUID.fromString(gid));
+					removedMap.put(gid, g != null ? g.getName() : gid);
+				} catch (IllegalArgumentException ignored) {}
+			}
+			sender.tryEnqueuePacket(new RemovedGroupsResponse(removedMap));
+		}
+
+		// Versteckte Chats senden
+		List<String> hiddenRefs = hiddenChatRepository.getHiddenRefs(user.getUsername());
+		if (!hiddenRefs.isEmpty()) {
+			sender.tryEnqueuePacket(new HiddenChatsResponse(hiddenRefs));
+		}
+
+		// JoinNotifications für alle bereits verbundenen Clients senden
+		synchronized (clients) {
+			for (var existingClient : clients) {
+				if (existingClient == sender) continue;
+				var existingUser = existingClient.getUser();
+				if (existingUser != null) {
+					sender.tryEnqueuePacket(new JoinNotification(existingUser));
+				}
+			}
+		}
+
+		// Allen anderen mitteilen dass ein neuer User da ist
+		if (!broadcast(new JoinNotification(user))) {
+			System.err.println("broadcastPacketQueue ist voll, JoinNotification wurde verworfen");
+		}
+
+		// Benutzerliste bei allen aktualisieren
+		broadcastUserList();
+	}
+
+	private void broadcastUserList() {
+		try {
+			List<User> simple = userRepository.getAllUsers().stream().map(u -> {
+				User copy = new User(u.getUsername());
+				copy.setDisplayname(u.getDisplayname());
+				return copy;
+			}).collect(Collectors.toList());
+			broadcastToAll(new GetUsersResponse(simple));
+		} catch (Exception e) {
+			System.err.println("Fehler beim Broadcasten der Benutzerliste: " + e.getMessage());
+		}
 	}
 
 	public void shutdown() {

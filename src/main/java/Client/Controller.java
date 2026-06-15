@@ -18,6 +18,8 @@ import Util.Network.DeleteForMeMessage;
 import Util.Network.DeleteMessage;
 import Util.Network.GetUsersRequest;
 import Util.Network.GetUsersResponse;
+import Util.Network.HideChatPacket;
+import Util.Network.HiddenChatsResponse;
 import Util.Network.Groups.AddMemberPacket;
 import Util.Network.Groups.GetGroupMembersRequest;
 import Util.Network.Groups.GetGroupMembersResponse;
@@ -114,6 +116,8 @@ public class Controller {
 	private final Map<UUID, String> groupCreatorCache = new HashMap<>();
 	// Gruppen aus denen der User entfernt wurde – nur lesen, nicht schreiben
 	private final Set<UUID> removedGroups = new java.util.HashSet<>();
+	// Chats die der User manuell ausgeblendet hat (chatRef = groupId oder "private:<username>")
+	private final Set<String> hiddenChatRefs = new java.util.HashSet<>();
 	private final Map<String, byte[]> profilePicturesByUsername = new HashMap<>();
 	private final Map<String, String> profilePictureContentTypesByUsername = new HashMap<>();
 	private boolean profilePictureSyncEnabled;
@@ -341,6 +345,13 @@ public class Controller {
 								groupMemberCache.put(resp.getGroupId(), resp.getUsernames());
 								if (resp.getCreatorUsername() != null)
 									groupCreatorCache.put(resp.getGroupId(), resp.getCreatorUsername());
+							});
+							case HiddenChatsResponse resp -> Platform.runLater(() -> {
+								hiddenChatRefs.addAll(resp.getChatRefs());
+								chatList.removeIf(e -> {
+									String ref = chatRefFor(e);
+									return ref != null && hiddenChatRefs.contains(ref);
+								});
 							});
 							case RemovedGroupsResponse resp -> Platform.runLater(() -> {
 								for (Map.Entry<String, String> entry : resp.getRemovedGroups().entrySet()) {
@@ -837,7 +848,17 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 		}
 	}
 
+	private String chatRefFor(ChatEntry e) {
+		return switch (e.type()) {
+			case GROUP -> e.groupId() != null ? e.groupId().toString() : null;
+			case PRIVATE -> e.username() != null ? "private:" + e.username() : null;
+			case GLOBAL -> null;
+		};
+	}
+
 	private void addGroupToChatList(Group group) {
+		String ref = group.getId().toString();
+		if (hiddenChatRefs.contains(ref)) return;
 		for (ChatEntry e : chatList) {
 			if (e.type() == ChatEntry.Type.GROUP && group.getId().equals(e.groupId())) return;
 		}
@@ -845,6 +866,8 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 	}
 
 	private void addPrivateChatToChatList(String username, String displayName) {
+		String ref = "private:" + username;
+		if (hiddenChatRefs.contains(ref)) return;
 		for (ChatEntry e : chatList) {
 			if (e.type() == ChatEntry.Type.PRIVATE && username.equals(e.username())) return;
 		}
@@ -1601,7 +1624,14 @@ case null, default -> System.err.println("Unbekanntes Paket empfangen: " + (pack
 				}
 
 				MenuItem removeChat = new MenuItem("Chat entfernen");
-				removeChat.setOnAction(e -> chatList.remove(item));
+				removeChat.setOnAction(e -> {
+					String ref = chatRefFor(item);
+					if (ref != null) {
+						hiddenChatRefs.add(ref);
+						outPacketQueue.offer(new HideChatPacket(ref));
+					}
+					chatList.remove(item);
+				});
 				ctx.getItems().add(removeChat);
 
 				setContextMenu(ctx);

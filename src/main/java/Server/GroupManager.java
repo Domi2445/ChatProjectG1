@@ -136,6 +136,16 @@ public class GroupManager
 		return result;
 	}
 
+	public void deleteGroup(UUID groupId) {
+		groups.remove(groupId);
+		groupMembers.remove(groupId);
+		groupRepository.deleteGroup(groupId);
+	}
+
+	public boolean allMembersHidden(UUID groupId) {
+		return groupRepository.allMembersHidden(groupId);
+	}
+
 	public List<String> getRemovedGroupIdsForUser(String username)
 	{
 		return groupRepository.getRemovedGroupIdsForUser(username);
