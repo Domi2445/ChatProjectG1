@@ -112,60 +112,15 @@ public class PacketBroker implements Runnable {
 				switch (packet) {
 					case LoginRequest req -> {
 						if (authHandler.handleLogin(req, sender)) {
-							User user = sender.getUser();
-							// register with group manager so this client can create/join groups
-							groupManager.registerClient(sender, user);
-
-							// History direkt nach Login senden
-							chatHistoryHandler.handleHistoryRequest(new HistoryRequest(user.getUsername(), null, "main"), sender);
-
-							// Dem Client die Gruppen schicken, in denen er Mitglied ist (inkl. Broadcast)
-							sender.tryEnqueuePacket(new GroupListResponsePacket(groupManager.getGroupsForClient(sender)));
-							// Dem Client mitteilen aus welchen Gruppen er entfernt wurde (für Lesezugriff)
-							List<String> removedIds = groupManager.getRemovedGroupIdsForUser(user.getUsername());
-							if (!removedIds.isEmpty()) {
-								Map<String, String> removedMap = new java.util.HashMap<>();
-								for (String gid : removedIds) {
-									try {
-										Group g = groupManager.getGroup(UUID.fromString(gid));
-										removedMap.put(gid, g != null ? g.getName() : gid);
-									} catch (IllegalArgumentException ignored) {}
-								}
-								sender.tryEnqueuePacket(new RemovedGroupsResponse(removedMap));
-							}
-
-							// Versteckte Chats senden
-							List<String> hiddenRefs = hiddenChatRepository.getHiddenRefs(user.getUsername());
-							if (!hiddenRefs.isEmpty()) {
-								sender.tryEnqueuePacket(new HiddenChatsResponse(hiddenRefs));
-							}
-
-										// Sende dem neu angemeldeten Client die bereits verbundenen Benutzer,
-										// damit dieser deren Profilbilder direkt laden und cachen kann.
-										synchronized (clients) {
-											for (var existingClient : clients) {
-												if (existingClient == sender) continue;
-												var existingUser = existingClient.getUser();
-												if (existingUser != null) {
-													// versuche, dem neuen Client eine JoinNotification für den existierenden Benutzer zu senden
-													sender.tryEnqueuePacket(new JoinNotification(existingUser));
-												}
-											}
-										}
-
-							try {
-								if (!broadcast(new JoinNotification(user))) {
-									System.err.println("broadcastPacketQueue ist voll, JoinNotification wurde verworfen");
-								}
-							} catch (InterruptedException e) {
-								Thread.currentThread().interrupt();
-								return;
-							}
-							// Alle Clients mit der aktuellen Benutzerliste aktualisieren
-							broadcastUserList();
+							try { setupAfterAuth(sender); } catch (InterruptedException e) { Thread.currentThread().interrupt(); return; }
 						}
 					}
-					case RegisterRequest req -> authHandler.handleRegister(req, sender);
+					case RegisterRequest req -> {
+						authHandler.handleRegister(req, sender);
+						if (sender != null && sender.getUser() != null) {
+							try { setupAfterAuth(sender); } catch (InterruptedException e) { Thread.currentThread().interrupt(); return; }
+						}
+					}
 					// group action packets — only logged in clients can use these
 					case CreateGroupPacket cgp -> {
 						if (sender != null && sender.getUser() != null) {
@@ -513,6 +468,55 @@ public class PacketBroker implements Runnable {
 		}
 
 		return broadcastPacketQueue.offer(new IncomingPacket(packet, null));
+	}
+
+	private void setupAfterAuth(ClientProxy sender) throws InterruptedException {
+		User user = sender.getUser();
+		groupManager.registerClient(sender, user);
+
+		// Chat-History für globalen Chat senden
+		chatHistoryHandler.handleHistoryRequest(new HistoryRequest(user.getUsername(), null, "main"), sender);
+
+		// Gruppen des Clients senden
+		sender.tryEnqueuePacket(new GroupListResponsePacket(groupManager.getGroupsForClient(sender)));
+
+		// Entfernte Gruppen senden
+		List<String> removedIds = groupManager.getRemovedGroupIdsForUser(user.getUsername());
+		if (!removedIds.isEmpty()) {
+			Map<String, String> removedMap = new java.util.HashMap<>();
+			for (String gid : removedIds) {
+				try {
+					Group g = groupManager.getGroup(UUID.fromString(gid));
+					removedMap.put(gid, g != null ? g.getName() : gid);
+				} catch (IllegalArgumentException ignored) {}
+			}
+			sender.tryEnqueuePacket(new RemovedGroupsResponse(removedMap));
+		}
+
+		// Versteckte Chats senden
+		List<String> hiddenRefs = hiddenChatRepository.getHiddenRefs(user.getUsername());
+		if (!hiddenRefs.isEmpty()) {
+			sender.tryEnqueuePacket(new HiddenChatsResponse(hiddenRefs));
+		}
+
+		// JoinNotifications für alle bereits verbundenen Clients senden
+		synchronized (clients) {
+			for (var existingClient : clients) {
+				if (existingClient == sender) continue;
+				var existingUser = existingClient.getUser();
+				if (existingUser != null) {
+					sender.tryEnqueuePacket(new JoinNotification(existingUser));
+				}
+			}
+		}
+
+		// Allen anderen mitteilen dass ein neuer User da ist
+		if (!broadcast(new JoinNotification(user))) {
+			System.err.println("broadcastPacketQueue ist voll, JoinNotification wurde verworfen");
+		}
+
+		// Benutzerliste bei allen aktualisieren
+		broadcastUserList();
 	}
 
 	private void broadcastUserList() {
